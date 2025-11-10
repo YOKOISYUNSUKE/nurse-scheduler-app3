@@ -1,5 +1,5 @@
 // sw.js
-const VERSION = 'v2025-11-10';
+const VERSION = 'v2025-11-10.1';
 const STATIC_CACHE = `static-${VERSION}`;
 const ENTRY_HTML = './index.html'; // ← `!doctype (1).html` のまま使うなら './!doctype (1).html' に変更
 
@@ -17,6 +17,8 @@ const STATIC_ASSETS = [
   './holidayRules.js',
   './nightBand.js',
   './manifest.webmanifest',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
 self.addEventListener('install', (e) => {
