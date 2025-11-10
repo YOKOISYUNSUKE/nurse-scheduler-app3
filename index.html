@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>勤務スケジュールアプリ - UI v1</title>
+  <link rel="stylesheet" href="styles.css?v=20251031">
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0ea5e9" />
+</head>
+
+<body>
+  <!-- ログイン画面 -->
+  <section id="loginView" class="view active">
+    <div class="card login-card">
+      <h1 class="app-title">勤務スケジュール</h1>
+      <form id="loginForm" autocomplete="off">
+        <label class="lbl" for="loginId">ID</label>
+        <input id="loginId" class="txt" type="text" required placeholder="例：admin01"/>
+
+        <label class="lbl" for="loginPw">Password（8文字以上）</label>
+        <input id="loginPw" class="txt" type="password" required minlength="8"
+               placeholder="8文字以上（記号・日本語OK）"/>
+        <button class="btn btn-primary w-100" type="submit">ログイン</button>
+
+        <p id="loginError" class="error" aria-live="polite"></p>
+      </form>
+
+      <div id="loginLoading" class="login-loading hidden" aria-live="polite">
+        <div class="login-loading-inner">
+          <div class="login-loading-icon">🩺</div>
+          <div class="login-loading-text">
+            勤務表を準備中…
+            <span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- アプリ本体 -->
+  <section id="appView" class="view">
+    <header class="topbar">
+      <div class="left">
+        <button id="btnJumpMonth" class="btn btn-ghost" type="button" aria-haspopup="dialog">任意の月に移動</button>
+        <input id="monthPicker" type="month" class="hidden" />
+        <button id="btnPrevDay" class="btn btn-outline" type="button" title="1日戻る">◀ 前日</button>
+        <button id="btnNextDay" class="btn btn-outline" type="button" title="1日進む">翌日 ▶</button>
+        <div class="period">表示範囲：<span id="periodText">----</span>（常に31日表示）</div>
+      </div>
+<div class="right">
+  <button id="btnAttrOpen" class="btn btn-outline" type="button" title="従業員の属性を編集">従業員編集</button>
+  <button id="btnAutoAssign" class="btn btn-primary" type="button">自動割り当て</button>
+  <button id="btnCancel" class="btn btn-outline" type="button">キャンセル</button>
+  <button id="btnFullCancel" class="btn btn-danger" type="button" title="完全キャンセル（全体/1セル）">完全キャンセル</button>
+  <button id="btnExportExcel" class="btn btn-outline" type="button" title="表示中31日をCSVで出力（Excel対応）">Excelダウンロード</button>
+  <button id="btnLogout" class="btn btn-danger" type="button" title="ログアウト時は自動保存">ログアウト</button>
+</div>
+
+
+    </header>
+
+    <div class="toolbar">
+      <div class="tool">
+        <label for="employeeCount">従業員数</label>
+        <select id="employeeCount" class="select"></select>
+      </div>
+
+
+<!-- 追加：日本の祝日を自動取得 -->
+      <div class="tool">
+        <button id="btnHolidayAuto" class="btn btn-outline" type="button"
+                title="日本の祝日を自動で取り込む">祝日自動取得</button>
+      </div>
+
+      <div class="tool">
+        <button id="btnLockRange" class="btn btn-outline" type="button"
+                title="選択範囲を自動割当から保護（上書きしない）">範囲ロック</button>
+        <button id="btnUnlockRange" class="btn btn-outline" type="button"
+                title="選択範囲のロックを解除">範囲ロック解除</button>
+      </div>
+
+      <div class="tool">
+        <span class="hint">モード：</span>
+        <label><input type="radio" name="mode" value="off" checked> 希望休</label>
+
+        <label><input type="radio" name="mode" value="assign"> 割当</label>
+      </div>
+
+      <div class="tool">
+        <span class="hint">特別休暇：</span>
+        <button id="btnLeaveHoliday" class="btn btn-outline" type="button" title="祝日に休んだ人（4週8休では勤務日に数える）">祝</button>
+        <button id="btnLeaveSub"     class="btn btn-outline" type="button" title="代休（4週8休では勤務日に数える）">代</button>
+        <button id="btnLeavePaid"    class="btn btn-outline" type="button" title="有給（4週8休では勤務日に数える）">年</button>
+        <button id="btnLeaveRefresh" class="btn btn-outline" type="button" title="リフレッシュ休暇（4週8休では勤務日に数える）">リ</button>
+        <span class="hint">※ ボタン押下で該当モード → セルクリックで設定/解除（設定中は通常操作で上書き不可）</span>
+      </div>
+
+      <div class="tool hint">※ ヘッダー日付クリック＝祝日トグル / 「希望休」モードではセルクリック＝休トグル / 「割当」モードではセルクリック＝選択マークを配置（同じマークで消去）</div>
+
+      <div id="cloudIndicator" class="cloud-indicator offline" aria-live="polite" title="クラウド同期状態">未接続</div>
+
+    </div>  <!-- ← ここで .toolbar を閉じる -->
+
+    <div id="gridWrap" class="grid-wrap" tabindex="0" aria-label="勤務表（ドラッグで月移動）">
+      <table id="grid" class="grid" aria-describedby="periodText">
+        <!-- JSで描画 -->
+
+      </table>
+    </div>
+
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <style>
+    .cloud-indicator{
+      display:inline-flex; align-items:center; gap:.4rem;
+      font-size:12px; padding:2px 8px; border-radius:9999px; border:1px solid #ddd;
+    }
+    .cloud-indicator::before{ content:""; width:8px; height:8px; border-radius:50%; background:#aaa; }
+    .cloud-indicator.online{ color:#065f46; border-color:#a7f3d0; }
+    .cloud-indicator.online::before{ background:#10b981; }
+    .cloud-indicator.offline{ color:#7f1d1d; border-color:#fecaca; }
+    .cloud-indicator.offline::before{ background:#ef4444; }
+  </style>
+
+  <!-- 属性ダイアログ -->
+  <dialog id="attrDlg" class="attr">
+
+    <header>従業員名・属性の編集</header>
+    <div class="content" id="attrContent"></div>
+    <footer>
+      <button id="attrClose" class="btn btn-outline" type="button">閉じる</button>
+      <button id="attrSave" class="btn btn-accent" type="button">保存</button>
+    </footer>
+  </dialog>
+
+  <dialog id="fullCancelDlg" class="attr">
+    <header>完全キャンセル</header>
+    <div class="content">
+      <p>実行方法を選択してください。</p>
+    </div>
+    <footer>
+      <button id="fullCancelAll"  class="btn btn-danger"  type="button" title="4週間の割当・希望休・特別休暇・ロックをすべて消去">全体</button>
+      <button id="fullCancelCell" class="btn btn-outline" type="button" title="任意の1セルのみ完全消去（クリックで選択）">セル</button>
+      <button id="fullCancelClose" class="btn btn-outline" type="button">閉じる</button>
+    </footer>
+  </dialog>
+
+  <script src="marks.js"></script>
+  <script src="rules.js"></script>
+
+  <script src="holidayRules.js"></script>
+  <script src="assignRules.js"></script>
+  <script src="nightBand.js"></script>
+  <script src="core.dates.js"></script>
+
+  <script>
+    window.REMOTE_ENDPOINT = "https://script.google.com/macros/s/AKfycbyWJ5BrvQK4tTLXxiq0LiVxAKDTY4_rzXnRM0eVh0XJGHHdlWf2gwNCGHYpwsPUvsdx/exec";
+  </script>
+  <script src="gasClient.js"></script>
+  <script src="auth.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
+
