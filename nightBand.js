@@ -45,8 +45,10 @@
     const { star, half } = countNightStatsForEmp(ctx, r, startIdx, endIdx);
     if (mark === '☆' || mark === '★'){
       if (wt === 'night'){
-        if (star >= 10) return -Infinity; // 目標10件に到達したら候補から外す
-        return 100 + (10 - star);          // ☆は10件まで強く優先（8ではなく10を目指す）
+        // ★修正：個別の夜勤ノルマを参照（未設定なら10）
+        const quota = ctx.getEmpAttr(r)?.nightQuota || 10;
+        if (star >= quota) return -Infinity; // 目標に到達したら候補から外す
+        return 100 + (quota - star);         // ノルマまで強く優先
       }
       if (wt === 'two'){
         if (star >= 4) return -Infinity;
@@ -177,7 +179,9 @@ out = out
       const attr = ctx.getEmpAttr(r) || { workType:'three' };
       if (attr.workType === 'night'){
         const stat = countNightStatsForEmp(ctx, r, startIdx, endIdx); // 既存の☆等カウント関数を想定
-        const need = Math.max(0, 10 - stat.star);
+        // ★修正：個別の夜勤ノルマを参照（未設定なら10）
+        const quota = attr.nightQuota || 10;
+        const need = Math.max(0, quota - stat.star);
         const pot  = _potentialStars(ctx, r, startIdx, endIdx);
         if (need > 0){
           // 見込み不足があるほど強く押し上げる（最小でも+120、完全不足は+400）
@@ -233,7 +237,10 @@ return { r, score: base + riskBoost + fair + pen + aBonus + jitter };
         const wt = (ctx.getEmpAttr(r)?.workType) || 'three';
         const { star, half } = countNightStatsForEmp(ctx, r, startIdx, endIdx);
         if (wt === 'night'){
-          if (star < 8 || star > 10) return false;
+          // ★修正：個別の夜勤ノルマを参照（未設定なら10）
+          const quota = ctx.getEmpAttr(r)?.nightQuota || 10;
+          const minQuota = Math.max(0, quota - 2); // 下限はノルマ-2
+          if (star < minQuota || star > quota) return false;
         } else if (wt === 'two'){
           if (star < 4) return false;
         } else { // three

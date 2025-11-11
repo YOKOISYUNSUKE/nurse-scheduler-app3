@@ -816,7 +816,9 @@ function autoAssignRange(startDayIdx, endDayIdx){
     if ((State.employeesAttr[r]?.workType) !== 'night') continue;
     // 現在の☆件数
     const now = countLast28Days(r, State.windowDates[State.range4wStart+27]).star;
-    let need = Math.max(0, 10 - now);
+    // ★修正：個別の夜勤ノルマを参照（未設定なら10）
+    const quota = State.employeesAttr[r]?.nightQuota || 10;
+    let need = Math.max(0, quota - now);
     if (need === 0) continue;
 
     // 左から右へスイープし、ペアが成立するところにだけ追加
@@ -2698,7 +2700,36 @@ function buildAttrDialog(){
       selWt.appendChild(o);
     });
 
-    // 追加：並び替え＆削除ボタン列
+  
+    // ★追加：夜勤ノルマ入力欄（夜勤専従のみ表示）
+    const quotaWrap = document.createElement('div');
+    quotaWrap.className = 'quota-wrap';
+    quotaWrap.style.display = (State.employeesAttr[i]?.workType||'three') === 'night' ? 'flex' : 'none';
+    quotaWrap.style.alignItems = 'center';
+    quotaWrap.style.gap = '4px';
+
+    const quotaLabel = document.createElement('span');
+    quotaLabel.textContent = '☆ノルマ:';
+    quotaLabel.style.fontSize = '0.9em';
+
+    const quotaInput = document.createElement('input');
+    quotaInput.type = 'number';
+    quotaInput.className = 'quota-input';
+    quotaInput.style.width = '50px';
+    quotaInput.min = '0';
+    quotaInput.max = '15';
+    quotaInput.value = State.employeesAttr[i]?.nightQuota || 10;
+    quotaInput.title = '夜勤専従の4週間あたりの☆の目標回数';
+
+    quotaWrap.appendChild(quotaLabel);
+    quotaWrap.appendChild(quotaInput);
+
+    // 勤務形態変更時にノルマ入力欄の表示/非表示を切り替え
+    selWt.addEventListener('change', ()=>{
+      quotaWrap.style.display = selWt.value === 'night' ? 'flex' : 'none';
+    });
+
+  // 追加：並び替え＆削除ボタン列
     const ctrls = document.createElement('div');
     ctrls.className = 'ctrls';
 
@@ -2729,6 +2760,7 @@ function buildAttrDialog(){
     row.appendChild(name);
     row.appendChild(selLv);
     row.appendChild(selWt);
+    row.appendChild(quotaWrap); // ★追加
     row.appendChild(ctrls);
     attrContent.appendChild(row);
   }
@@ -2742,9 +2774,16 @@ function readAttrDialogToState(){
     const i = Number(row.dataset.idx);
     const [selLv, selWt] = row.querySelectorAll('select');
     const nameInput = row.querySelector('input[data-role="name"]');
+    const quotaInput = row.querySelector('.quota-input'); // ★追加
     const nm = (nameInput?.value || '').trim();
     State.employees[i] = nm || `職員${pad2(i+1)}`;
-    State.employeesAttr[i] = { level: selLv.value, workType: selWt.value };
+    // ★修正：夜勤ノルマを追加
+    const nightQuota = quotaInput ? parseInt(quotaInput.value, 10) : undefined;
+    State.employeesAttr[i] = { 
+      level: selLv.value, 
+      workType: selWt.value,
+      nightQuota: (selWt.value === 'night' && Number.isInteger(nightQuota)) ? nightQuota : undefined
+    };
   });
 }
 
