@@ -484,39 +484,61 @@ const res = window.Rules.applyAfterAssign({
 // （_reorderByWorkType は削除）
 
 
-// 指定マーク列で不足数を埋める（preferA=trueのときAを先頭優先）
-function fillWith(dayIdx, deficit, marks, preferA){
-  let placed = 0;
-  for(const mark of marks){
-    if (deficit <= 0) break;
-    let cand = candidatesFor(dayIdx, mark);
-    if (preferA){
-      const a = [], non = [];
-      cand.forEach(r => ((State.employeesAttr[r]?.level)==='A' ? a : non).push(r));
-      cand = a.concat(non); // NightBand の並びに A 最優先を上書き
-    }
-
-
-
-
-    for(const r of cand){
+  // 指定マーク列で不足数を埋める（☆/★は夜専を最優先、その内側でA先頭）
+  function fillWith(dayIdx, deficit, marks, preferA){
+    let placed = 0;
+    for (const mark of marks){
       if (deficit <= 0) break;
+      let cand = candidatesFor(dayIdx, mark);
 
-      if (tryPlace(dayIdx, r, mark)){
-        placed++; deficit--;
-        if (preferA && (State.employeesAttr[r]?.level)==='A') preferA = false;
-        continue;
+      // ☆/★は NightBand の夜勤優先を尊重し、night→others の二段構成に分解
+      if (mark === '☆' || mark === '★'){
+        const night = [], others = [];
+        cand.forEach(r => (((State.employeesAttr[r]?.workType)||'three') === 'night' ? night : others).push(r));
+
+// グループ内だけ A 先頭を適用（Aが1名入ったらpreferAは解除：既存仕様）
+const applyAHead = (arr) => {
+  if (!preferA) return arr;
+  const a = [], non = [];
+  arr.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? a : non).push(r));
+  return a.concat(non);
+};
+
+// ★修正：preferAがtrueの場合、グループ間でもA優先を適用
+if (preferA){
+  const nightA = [], nightNon = [], othersA = [], othersNon = [];
+  night.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? nightA : nightNon).push(r));
+  others.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? othersA : othersNon).push(r));
+  // A属性を全て先頭に(night A → others A → night非A → others非A)
+  cand = nightA.concat(othersA, nightNon, othersNon);
+} else {
+  cand = applyAHead(night).concat(applyAHead(others));
+}
+      } else if (preferA){
+        const a = [], non = [];
+        cand.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? a : non).push(r));
+        cand = a.concat(non);
       }
 
-      // ★が置けず、前日に同一者の☆が無いのが理由なら自動補完
-      if (mark === '★' && placePrevStar(dayIdx, r)){
-        placed++; deficit--;
-        if (preferA && (State.employeesAttr[r]?.level)==='A') preferA = false;
+      for (const r of cand){
+        if (deficit <= 0) break;
+
+        if (tryPlace(dayIdx, r, mark)){
+          placed++; deficit--;
+          if (preferA && (State.employeesAttr[r]?.level)==='A') preferA = false;
+          continue;
+        }
+
+        // ★が置けず、前日に同一者の☆が無いのが理由なら自動補完
+        if (mark === '★' && placePrevStar(dayIdx, r)){
+          placed++; deficit--;
+          if (preferA && (State.employeesAttr[r]?.level)==='A') preferA = false;
+        }
       }
     }
+    return placed;
   }
-  return placed;
-}
+
 
 // === ここから挿入：★のための前日☆自動補完 ===
 function placePrevStar(dayIdx, r){
@@ -611,9 +633,12 @@ function fillDayShift(dayIdx){
           // ★追加：土日祝の上限（〇≤6）を厳守
           const dt = State.windowDates[d];
           if (isWeekendOrHoliday(dt)) {
-            const { day } = countDayStats(d); // 当日の〇数を取得
-            if (day >= 6) continue;          // すでに6なら追加しない（5→6は許容）
+            const { day } = countDayStats(d);
+            const capWkHol = (window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY))
+              ? window.Counts.DAY_TARGET_WEEKEND_HOLIDAY : 6;
+            if (day >= capWkHol) continue;   // 目標値までに限定
           }
+
 
           // 置けるか事前チェック（勤務形態・同日組合せ）
           const empAttr = State.employeesAttr[r] || { level:'B', workType:'three' };
@@ -651,9 +676,12 @@ function isWeekendOrHoliday(dt){
 // 追加：表示中31日ウィンドウの年をまとめて取得→祝日APIから取り込み
 function targetDayForIndex(dayIdx){
   const dt = State.windowDates[dayIdx];
-  // 自動割当の目標は土日祝＝6名（ただし検証は5 or 6を許容）
+  if (window.Counts && typeof window.Counts.getDayTarget === 'function'){
+    return window.Counts.getDayTarget(dt, (ds)=> State.holidaySet.has(ds));
+  }
   return isWeekendOrHoliday(dt) ? 6 : 10;
 }
+
 
 
 
@@ -731,16 +759,19 @@ function autoAssignRange(startDayIdx, endDayIdx){
     for(let d=startDayIdx; d<=endDayIdx; d++){
       let { nf, ns, hasANf, hasANs } = countDayStats(d);
 
-      if (nf < 3){
+      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
+      const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+
+      if (nf < FIXED_NF){
         const before = nf;
-        fillWith(d, 3 - nf, ['☆','◆'], !hasANf); // 夜勤専従や不足者を優先
+        fillWith(d, FIXED_NF - nf, ['☆','◆'], !hasANf);
         nf = countDayStats(d).nf;
         if (nf !== before) changed = true;
       }
 
-      if (ns < 3){
+        if (ns < FIXED_NS){
         const before = ns;
-        fillWith(d, 3 - ns, ['★','●'], !hasANs); // ☆→★の連鎖も活用
+        fillWith(d, FIXED_NS - ns, ['★','●'], !hasANs);// ☆→★の連鎖も活用
         ns = countDayStats(d).ns;
         if (ns !== before) changed = true;
       }
@@ -748,17 +779,19 @@ function autoAssignRange(startDayIdx, endDayIdx){
     if (!changed) break;
   }
 
-// 夜勤ノルマがまだ不足している場合、夜勤のみを再度押し込む（A強優先）
-if (!nightQuotasOK(startDayIdx, endDayIdx)){
-  for(let d=startDayIdx; d<=endDayIdx; d++){
-    let { nf, ns } = countDayStats(d);
-    if (nf < 3) fillWith(d, 3 - nf, ['☆','◆'], true);
-    if (ns < 3) fillWith(d, 3 - ns, ['★','●'], true);
+  // 夜勤ノルマがまだ不足している場合、夜勤のみを再度押し込む（A強優先）
+  if (!nightQuotasOK(startDayIdx, endDayIdx)){
+    for(let d=startDayIdx; d<=endDayIdx; d++){
+      let { nf, ns } = countDayStats(d);
+      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
+      const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+      if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], true);
+      if (ns < FIXED_NS) fillWith(d, FIXED_NS - ns, ['★','●'], true);
+    }
   }
-}
+  // ★新規：夜勤専従ごとに☆が10件に到達するまで増やす最終パス
+  (function ensureNightToTen(){
 
-// ★新規：夜勤専従ごとに☆が10件に到達するまで増やす最終パス
-(function ensureNightToTen(){
   // 置ける日を“前日空き＆翌日空き”で走査し、tryPlaceで☆→★を連鎖付与
   for (let r = 0; r < State.employeeCount; r++){
     if ((State.employeesAttr[r]?.workType) !== 'night') continue;
@@ -778,10 +811,94 @@ if (!nightQuotasOK(startDayIdx, endDayIdx)){
   }
 })();
 
+  // ★追加：NF/NSにA最低1人を強制するポストパス（帯が充足済みでも実施）
+  (function enforceANightBands(){
+    for (let d = startDayIdx; d <= endDayIdx; d++){
+      let { hasANf, hasANs } = countDayStats(d);
+      if (hasANf && hasANs) continue;
+      const ds = dateStr(State.windowDates[d]);
+      const prevDs = (d > 0) ? dateStr(State.windowDates[d-1]) : null;
+      const nextDs = (d+1 < State.windowDates.length) ? dateStr(State.windowDates[d+1]) : null;
+      const getLv = (i)=> (State.employeesAttr[i]?.level) || 'B';
+
+      const nonArows = (marks)=>{
+        const rows = [];
+        for (let r = 0; r < State.employeeCount; r++){
+          const mk = getAssign(r, ds);
+          if (!mk) continue;
+          if (marks.includes(mk) && getLv(r) !== 'A'){
+            if (!isLocked(r, ds)) rows.push(r);
+          }
+        }
+        return rows;
+      };
+
+      const findAFor = (mark)=>{
+        const cand = candidatesFor(d, mark).filter(r => getLv(r) === 'A');
+        for (const r of cand){
+          if (tryPlace(d, r, mark)) return r;
+          if (mark === '★' && placePrevStar(d, r)) return r;
+        }
+        return null;
+      };
+
+      // NF（☆/◆）にAがいない → ◆優先、無理なら☆（翌日の★も同期）
+      if (!hasANf){
+        let placed = false;
+        for (const r of nonArows(['◆'])){
+          const keep = '◆';
+          clearAssign(r, ds);
+          const rA = findAFor('◆');
+          if (rA !== null){ placed = true; break; }
+          setAssign(r, ds, keep);
+        }
+        if (!placed){
+          for (const r of nonArows(['☆'])){
+            if (nextDs && isLocked(r, nextDs)) continue;
+            const hadNext = nextDs && getAssign(r, nextDs) === '★';
+            clearAssign(r, ds);
+            if (hadNext) clearAssign(r, nextDs);
+            const rA = findAFor('☆');
+            if (rA !== null){ placed = true; break; }
+            setAssign(r, ds, '☆');
+            if (hadNext) setAssign(r, nextDs, '★');
+          }
+        }
+      }
+
+      // NS（★/●）にAがいない → ●優先、無理なら★を空けてA優先で投入
+      ({ hasANf, hasANs } = countDayStats(d));
+      if (!hasANs){
+        let placed2 = false;
+        for (const r of nonArows(['●'])){
+          const keep = '●';
+          clearAssign(r, ds);
+          const rA = findAFor('●');
+          if (rA !== null){ placed2 = true; break; }
+          setAssign(r, ds, keep);
+        }
+        if (!placed2){
+          for (const r of nonArows(['★'])){
+            if (isLocked(r, ds)) continue;
+            const hadPrev = prevDs && getAssign(r, prevDs) === '☆';
+            if (hadPrev && isLocked(r, prevDs)) continue;
+            clearAssign(r, ds);
+            if (hadPrev) clearAssign(r, prevDs);
+            fillWith(d, 1, ['★'], true); // A優先（必要なら前日の☆を自動補完）
+            const after = countDayStats(d);
+            if (after.hasANs){ placed2 = true; break; }
+            setAssign(r, ds, '★');
+            if (hadPrev) setAssign(r, prevDs, '☆');
+          }
+        }
+      }
+    }
+  })();
 
   // フェーズ2：『〇』のターゲット（固定があれば最優先）を満たす
   for(let d=startDayIdx; d<=endDayIdx; d++){
     let { day, hasADay } = countDayStats(d);
+
     const target = targetDayForIndex(d); // 追加：固定≡n / それ以外 5 or 10
 
     if (!hasADay){
@@ -795,9 +912,11 @@ if (!nightQuotasOK(startDayIdx, endDayIdx)){
       ({ day } = countDayStats(d));
     }
 
-    // 追加：土日祝は『〇』の上限≦6に丸める（過剰分を削減）
-    if (isWeekendOrHoliday(State.windowDates[d]) && day > 6){
-      reduceDayShiftTo(d, 6);
+    // 追加：土日祝は『〇』の上限≦設定目標に丸める（過剰分を削減）
+    const capWkHol = (window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY))
+      ? window.Counts.DAY_TARGET_WEEKEND_HOLIDAY : 6;
+    if (isWeekendOrHoliday(State.windowDates[d]) && day > capWkHol){
+      reduceDayShiftTo(d, capWkHol);
     }
   }
 
@@ -939,7 +1058,71 @@ function applyHolidayLeaveFlags(startDayIdx, endDayIdx){
       }
     }
   }
+
+  // 追加：前4週間で未振り分けの『代』を、今回の4週間に後追い付与（祝日勤務→8週間以内）
+  applyBackfillSubstituteFromPastHolidays(startDayIdx, endDayIdx);
 }
+/**
+ * 前の4週間に発生した「平日の祝日勤務」で、祝日勤務日から8週間以内に『代』が未付与の分を、
+ * 今回の4週間（startDayIdx..endDayIdx）に後追いで振り分ける。
+ * - 付与先は「非祝日」かつ「未割当」かつ「希望休・他の特別休暇なし」の最も早い日
+ * - 8週間（56日）を超える場合は付与しない
+ */
+function applyBackfillSubstituteFromPastHolidays(startDayIdx, endDayIdx){
+  const startDate = State.windowDates[startDayIdx];
+  const endDate   = State.windowDates[endDayIdx];
+  const fromDate  = addDays(startDate, -28); // 前の4週間のみ探索
+
+  const store = readDatesStore();
+  const holMap = (store && store.holidays) || {};
+
+  // ウィンドウ判定と、祝日フラグの全期間参照
+  function isHolidayDsGlobal(ds){
+    return _inWindow(ds) ? State.holidaySet.has(ds) : !!holMap[ds];
+  }
+
+  for (let r = 0; r < State.employeeCount; r++){
+    for (let dt = new Date(fromDate); dt < startDate; dt = addDays(dt, 1)){
+      const ds = dateStr(dt);
+      if (!isHolidayDsGlobal(ds)) continue;
+
+      // 土日祝（週末）の祝日は『代』付与対象外（従来仕様に合わせる）
+      const w = dt.getDay();
+      if (w === 0 || w === 6) continue;
+
+      // 「祝日勤務」＝ その日に何かしらの勤務マークがある
+      const mk = globalGetAssign(r, ds);
+      if (!mk) continue;
+
+      // 既に祝日勤務から56日以内に『代』が1つでもあればスキップ
+      const leaveObj = (store.leave && store.leave[r]) || {};
+      let hasSub = false;
+      for (let i = 1; i <= 56; i++){
+        const ds2 = dateStr(addDays(dt, i));
+        if (leaveObj[ds2] === '代'){ hasSub = true; break; }
+      }
+      if (hasSub) continue;
+
+      // 後追い付与先：今回の4週間の範囲かつ、祝日勤務日から56日以内の最も早い非祝日・未割当・休でない日
+      const deadline = addDays(dt, 56);
+      for (let d = startDayIdx; d <= endDayIdx; d++){
+        const cur = State.windowDates[d];
+        if (cur > deadline) break;
+
+        const sds = dateStr(cur);
+        if (isHolidayDsGlobal(sds)) continue;       // 非祝日
+        if (hasOffByDate(r, sds)) continue;         // 希望休を尊重
+        if (getLeaveType(r, sds)) continue;         // 既存の特別休暇を尊重
+        if (getAssign(r, sds)) continue;            // 未割当に限定
+
+        // 夜勤専従は setLeaveType 側で拒否される（従来仕様を踏襲）
+        const ok = setLeaveType(r, sds, '代');
+        if (ok) break; // 1件付与したら次の祝日勤務へ
+      }
+    }
+  }
+}
+
 
 
 function findSubstituteDayFor(r, holidayDayIdx, startDayIdx, endDayIdx){
@@ -983,7 +1166,7 @@ function findSubstituteDayFor(r, holidayDayIdx, startDayIdx, endDayIdx){
   e.type==='NF'                 ? '（☆＋◆）' :
   e.type==='NS'                 ? '（★＋●）' :
   e.type==='DAY_MIN'            ? '〇' :
-  e.type==='DAY_WKD_5_6'        ? '〇（土日祝は5 or 6）' :
+  e.type==='DAY_WKD_ALLOWED'    ? '〇（土日祝の許容数）' :
   e.type==='DAY_EQ'             ? '〇（固定）' :
   e.type==='A_DAY'              ? '〇のA' :
   e.type==='A_NF'               ? '（☆＋◆）のA' :

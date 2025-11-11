@@ -71,6 +71,26 @@ function precheckPlace(p){
     }
   }
 
+  // ★新規：夜勤専従の連続ペア≦2（「☆★☆★☆★」禁止）
+  if (p.mark === '☆' && wt === 'night'){
+    const d1 = d - 1, d2 = d - 2, d3 = d - 3, d4 = d - 4;
+    if (d4 >= 0){
+      const ds1 = dateStr(p.dates[d1]);
+      const ds2 = dateStr(p.dates[d2]);
+      const ds3 = dateStr(p.dates[d3]);
+      const ds4 = dateStr(p.dates[d4]);
+      const mk1 = p.getAssign(p.rowIndex, ds1);
+      const mk2 = p.getAssign(p.rowIndex, ds2);
+      const mk3 = p.getAssign(p.rowIndex, ds3);
+      const mk4 = p.getAssign(p.rowIndex, ds4);
+      const twoPairsRightBefore = (mk4==='☆' && mk3==='★' && mk2==='☆' && mk1==='★');
+      if (twoPairsRightBefore){
+        return { ok:false, message:'夜勤専従は「☆★」の連続は2回までです（☆★☆★☆★は禁止）' };
+      }
+    }
+  }
+
+
 // ★単独禁止：前日に同一職員の「☆」が無い場合は不可
    if (p.mark === '★'){
     const prev = d - 1;
@@ -224,10 +244,11 @@ function precheckPlace(p){
     }
 
 
-    // 当日：NF側（☆+◆）は3名「まで」
+// 当日：NF側（☆+◆）は設定の固定値「まで」
     if (p.mark==='☆' || p.mark==='◆'){
+      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
       const c = countForDay(d, p.dates, p.employeeCount, p.getAssign, {rowIndex:p.rowIndex, mark:p.mark});
-      if (c.nf > 3) return { ok:false, message:'当日の（☆＋◆）は3名までです' };
+      if (c.nf > FIXED_NF) return { ok:false, message:`当日の（☆＋◆）は${FIXED_NF}名までです` };
     }
 
     // ★追加：夜勤帯で「A・C・夜勤専従」の同席禁止（NF帯）
@@ -272,7 +293,8 @@ if (p.mark==='☆'){
           if (mk==='☆' || mk==='◆') nf++;
           if (mk==='★' || mk==='●') ns++;
         }
-        if (ns > 3) return { ok:false, message:'翌日の（★＋●）が3名を超えます' };
+        const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+        if (ns > FIXED_NS) return { ok:false, message:`翌日の（★＋●）が${FIXED_NS}名を超えます` };
       }
 
 
@@ -431,33 +453,40 @@ if (p.mark==='☆'){
       // その日の総数（〇, NF, NS）
       const cnt = countForDay(d, p.dates, p.employeeCount, p.getAssign);
 
-      // 夜勤必須：NF=3, NS=3（絶対条件）
-      if (cnt.nf !== 3) errors.push({ dayIndex:d, type:'NF', expected:3, actual:cnt.nf });
-      if (cnt.ns !== 3) errors.push({ dayIndex:d, type:'NS', expected:3, actual:cnt.ns });
+      // 夜勤帯の固定値（絶対条件）：設定値に置換
+      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
+      const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+      if (cnt.nf !== FIXED_NF) errors.push({ dayIndex:d, type:'NF', expected:FIXED_NF, actual:cnt.nf });
+      if (cnt.ns !== FIXED_NS) errors.push({ dayIndex:d, type:'NS', expected:FIXED_NS, actual:cnt.ns });
 
-      // 追加：『〇』人数の固定がある場合はそれを最優先（“ちょうど一致”）
+      // 追加：『〇』人数（固定＝未使用）→ 平日：最低値 / 土日祝：許容リスト
       const fx = (typeof p.getFixedDayCount === 'function') ? p.getFixedDayCount(ds) : null;
       if (Number.isInteger(fx)) {
         if (cnt.day !== fx) {
           errors.push({ dayIndex:d, type:'DAY_EQ', expected: fx, actual: cnt.day });
         }
       } else {
-        // 土日祝は「〇＝5 または 6」のみ許可（絶対条件）
         const isWkEndOrHol = ((dt.getDay() === 0 || dt.getDay() === 6) || (p.isHoliday && p.isHoliday(ds)));
         if (isWkEndOrHol){
-          if (!(cnt.day === 5 || cnt.day === 6)){
-            errors.push({ dayIndex:d, type:'DAY_WKD_5_6', expected:'5 or 6', actual:cnt.day });
+          const allowed = (window.Counts && Array.isArray(window.Counts.DAY_ALLOWED_WEEKEND_HOLIDAY))
+            ? window.Counts.DAY_ALLOWED_WEEKEND_HOLIDAY
+            : [5,6];
+          if (!allowed.includes(cnt.day)){
+            errors.push({ dayIndex:d, type:'DAY_WKD_ALLOWED', expected: allowed.join(' or '), actual:cnt.day });
           }
         } else {
-          // 平日は従来通り『〇』下限（既定＝10）
-          const minDay = (window.HolidayRules && typeof window.HolidayRules.minDayFor === 'function')
-            ? window.HolidayRules.minDayFor(dt, p.isHoliday)
-            : 10;
+          const minDay =
+            (window.Counts && Number.isInteger(window.Counts.DAY_MIN_WEEKDAY))
+              ? window.Counts.DAY_MIN_WEEKDAY
+              : ((window.HolidayRules && typeof window.HolidayRules.minDayFor === 'function')
+                  ? window.HolidayRules.minDayFor(dt, p.isHoliday)
+                  : 10);
           if (cnt.day < minDay) {
-            errors.push({ dayIndex:d, type:'DAY_MIN', expected:`>=${minDay}`, actual:cnt.day });
+            errors.push({ dayIndex:d, type:'DAY_MIN', expected:`>=${minDay}`, actual: cnt.day });
           }
         }
       }
+
 
 
 
@@ -632,16 +661,40 @@ if (p.mark==='☆'){
         const dsN = dateStr(p.dates[d+1]);
         const mk  = p.getAssign(r, ds);
         const mkN = p.getAssign(r, dsN);
-        if (mk === '☆' && mkN === '★'){
-          if (lastEnd != null && (d - lastEnd) < idxDiffMin){
-            // 実際の“間”の日数＝(d - lastEnd - 1)
-            errors.push({ rowIndex:r, dayIndex:d, type:'PAIR_GAP_GE3', expected:`>=${pairGapMinDays}`, actual:(d - lastEnd - 1) });
-          }
-          lastEnd = d + 1;
+      if (mk === '☆' && mkN === '★'){
+        if (lastEnd != null && (d - lastEnd) < idxDiffMin){
+          // 実際の“間”の日数＝(d - lastEnd - 1)
+          errors.push({ rowIndex:r, dayIndex:d, type:'PAIR_GAP_GE3', expected:`>=${pairGapMinDays}`, actual:(d - lastEnd - 1) });
         }
+        lastEnd = d + 1;
       }
     }
-    // ★新規：「☆★」の次の2日は休（希望休 or 未割当）必須
+  }
+
+  // ★新規：夜勤専従の連続ペア≦2（「☆★☆★☆★」禁止）
+  for (let r = 0; r < p.employeeCount; r++){
+    const wt = (typeof p.getWorkType === 'function') ? (p.getWorkType(r) || 'three') : 'three';
+    if (wt !== 'night') continue;
+    let consec = 0;
+    let lastEnd = null; // 直近ペアの★インデックス
+    for (let d = 0; d < p.dates.length - 1; d++){
+      const ds  = dateStr(p.dates[d]);
+      const dsN = dateStr(p.dates[d+1]);
+      const mk  = p.getAssign(r, ds);
+      const mkN = p.getAssign(r, dsN);
+      if (mk === '☆' && mkN === '★'){
+        // 直前のペア終端（★）の翌日から始まっていれば“連続”
+        consec = (lastEnd != null && d === lastEnd + 1) ? (consec + 1) : 1;
+        if (consec > 2){
+          errors.push({ rowIndex:r, dayIndex:d, type:'NIGHT_CONSEC_PAIR_LE2', expected:'<=2', actual:consec });
+        }
+        lastEnd = d + 1;
+      }
+    }
+  }
+
+  // ★新規：「☆★」の次の2日は休（希望休 or 未割当）必須
+
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 3; d++){
         const ds0 = dateStr(p.dates[d]);

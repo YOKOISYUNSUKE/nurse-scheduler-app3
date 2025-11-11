@@ -105,9 +105,12 @@
 
       <div class="tool hint">※ ヘッダー日付クリック＝祝日トグル / 「希望休」モードではセルクリック＝休トグル / 「割当」モードではセルクリック＝選択マークを配置（同じマークで消去）</div>
 
-      <div id="cloudIndicator" class="cloud-indicator offline" aria-live="polite" title="クラウド同期状態">未接続</div>
+<div id="cloudIndicator" class="cloud-indicator" title="クラウド同期状態">未接続</div>
 
-    </div>  <!-- ← ここで .toolbar を閉じる -->
+<button id="btnCountsOpen" class="btn btn-outline" type="button" title="日勤・夜勤の人数設定">人数設定</button>
+
+</div>  <!-- ← ここで .toolbar を閉じる -->
+
 
     <div id="gridWrap" class="grid-wrap" tabindex="0" aria-label="勤務表（ドラッグで月移動）">
       <table id="grid" class="grid" aria-describedby="periodText">
@@ -152,16 +155,53 @@
       <button id="fullCancelAll"  class="btn btn-danger"  type="button" title="4週間の割当・希望休・特別休暇・ロックをすべて消去">全体</button>
       <button id="fullCancelCell" class="btn btn-outline" type="button" title="任意の1セルのみ完全消去（クリックで選択）">セル</button>
       <button id="fullCancelClose" class="btn btn-outline" type="button">閉じる</button>
+   </footer>
+  </dialog>
+
+
+ <dialog id="countsDlg" class="attr">
+  <header>人数設定</header>
+  <div class="content">
+    <div class="row">
+      <label>平日の日勤（最低）</label>
+      <input id="cfgDayMin" type="number" class="txt" min="0" step="1">
+    </div>
+    <div class="row">
+      <label>土日祝の日勤（許容リスト）</label>
+      <input id="cfgDayAllowed" type="text" class="txt" placeholder="5,6">
+    </div>
+    <div class="row">
+      <label>平日の日勤（目標）</label>
+      <input id="cfgDayTarget" type="number" class="txt" min="0" step="1">
+    </div>
+    <div class="row">
+      <label>土日祝の日勤（目標）</label>
+      <input id="cfgDayTargetWkHol" type="number" class="txt" min="0" step="1">
+    </div>
+    <div class="row">
+      <label>NF（☆＋◆）固定人数</label>
+      <input id="cfgFixedNF" type="number" class="txt" min="0" step="1">
+    </div>
+    <div class="row">
+      <label>NS（★＋●）固定人数</label>
+      <input id="cfgFixedNS" type="number" class="txt" min="0" step="1">
+    </div>
+  </div>
+  <footer>
+    <button id="countsClose" class="btn btn-outline" type="button">閉じる</button>
+    <button id="countsSave"  class="btn btn-accent"  type="button">保存</button>
+
     </footer>
   </dialog>
 
   <script src="marks.js"></script>
+  <script src="counts.config.js"></script>
   <script src="rules.js"></script>
-
   <script src="holidayRules.js"></script>
   <script src="assignRules.js"></script>
   <script src="nightBand.js"></script>
   <script src="core.dates.js"></script>
+
 
   <script>
     window.REMOTE_ENDPOINT = "https://script.google.com/macros/s/AKfycbyWJ5BrvQK4tTLXxiq0LiVxAKDTY4_rzXnRM0eVh0XJGHHdlWf2gwNCGHYpwsPUvsdx/exec";

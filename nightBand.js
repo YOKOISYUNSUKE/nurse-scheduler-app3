@@ -203,9 +203,12 @@ out = out
     const FAIR_W = 1.0; // 必要に応じて調整可
     const fair = isWH(dayIdx) ? (- whCount28(r) * FAIR_W) : 0;
 
-    const pen  = acNightPenalty(ctx, dayIdx, mark, r);
-    const jitter = (_rand() - 0.5) * _randAmp;   // ← 振れ幅を可変に
-    return { r, score: base + riskBoost + fair + pen + jitter };
+const pen  = acNightPenalty(ctx, dayIdx, mark, r);
+const jitter = (_rand() - 0.5) * _randAmp;
+// ★追加：A属性にボーナスを付与（各帯に必須のため優先度を上げる）
+const attr = ctx.getEmpAttr(r) || { level:'B', workType:'three' };
+const aBonus = (attr.level === 'A') ? 50 : 0;
+return { r, score: base + riskBoost + fair + pen + aBonus + jitter };
 
   })
   .filter(x => x.score !== -Infinity)
