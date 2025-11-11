@@ -200,7 +200,8 @@ out = out
       }
       return c;
     };
-    const FAIR_W = 1.0; // 必要に応じて調整可
+    // ★修正：土日祈日公平化の重みを強化（Aボーナスと同程度）
+    const FAIR_W = 5.0;
     const fair = isWH(dayIdx) ? (- whCount28(r) * FAIR_W) : 0;
 
 const pen  = acNightPenalty(ctx, dayIdx, mark, r);
@@ -219,11 +220,8 @@ return { r, score: base + riskBoost + fair + pen + aBonus + jitter };
     // 勤務形態の優先度は維持（夜勤専従をグループ先頭のまま）
     out = _orderByWorkType(ctx, out, mark);
 
-    // 公平ローテ：☆/★は除外（夜勤専従を最優先のままにする）
-    if (!(mark==='☆' || mark==='★')) {
-      const rot = dayIdx % Math.max(1, ctx.employeeCount);
-      out = out.slice(rot).concat(out.slice(0, rot));
-    }
+    // ★削除：公平ローテは土日祈日公平化と競合するため削除
+    // （スコアソートで公平性が確保される）
 
     return out;
   }

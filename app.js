@@ -588,6 +588,27 @@ function fillDayShift(dayIdx){
     const ok = window.AssignRules?.canAssign?.({ empAttr, mark:'〇' }) || { ok:true };
     if (ok.ok) cand.push(r);
   }
+
+  // ★追加：土日祈日の場合、直近4週間の土日祈日勤務が少ない人を優先
+  const dt = State.windowDates[dayIdx];
+  const isWH = isWeekendOrHoliday(dt);
+  if (isWH){
+    const startIdx = State.range4wStart;
+    const endIdx = State.range4wStart + 27;
+    const whCount = (r)=>{
+      let c=0;
+      for(let i=startIdx; i<=endIdx && i<State.windowDates.length; i++){
+        const dt2 = State.windowDates[i];
+        if (!isWeekendOrHoliday(dt2)) continue;
+        const ds2 = dateStr(dt2);
+        const mk2 = getAssign(r, ds2);
+        if (mk2==='〇' || mk2==='☆' || mk2==='★' || mk2==='◆' || mk2==='●') c++;
+      }
+      return c;
+    };
+    // 勤務回数が少ない順にソート
+    cand.sort((a, b) => whCount(a) - whCount(b));
+  }
   return (need)=>{
     let placed=0;
 
@@ -661,8 +682,6 @@ function fillDayShift(dayIdx){
   }
 
 
-
-// 土日祝判定（HolidayRules を優先使用）
 function isWeekendOrHoliday(dt){
   if (window.HolidayRules && typeof window.HolidayRules.minDayFor === 'function'){
     // minDayFor が 5 なら祝日/週末扱い
