@@ -57,8 +57,8 @@
 <div class="right">
   <button id="btnAttrOpen" class="btn btn-outline" type="button" title="従業員の属性を編集">従業員編集</button>
   <button id="btnAutoAssign" class="btn btn-primary" type="button">自動割り当て</button>
-  <button id="btnCancel" class="btn btn-outline" type="button">キャンセル</button>
-  <button id="btnFullCancel" class="btn btn-danger" type="button" title="完全キャンセル（全体/1セル）">完全キャンセル</button>
+  <button id="btnCancel" class="btn btn-outline" type="button">クリア</button>
+  <button id="btnFullCancelAll" class="btn btn-danger" type="button" title="4週間の割当・希望休・特別休暇・ロックをすべて消去">完全クリア（全体）</button>
   <button id="btnExportExcel" class="btn btn-outline" type="button" title="表示中31日をCSVで出力（Excel対応）">Excelダウンロード</button>
   <button id="btnLogout" class="btn btn-danger" type="button" title="ログアウト時は自動保存">ログアウト</button>
 <button id="installBtn" style="display:none;">インストール</button>
@@ -90,8 +90,8 @@
       <div class="tool">
         <span class="hint">モード：</span>
         <label><input type="radio" name="mode" value="off" checked> 希望休</label>
-
         <label><input type="radio" name="mode" value="assign"> 割当</label>
+        <label><input type="radio" name="mode" value="cellCancel"> セルキャンセル</label>
       </div>
 
       <div class="tool">
@@ -146,17 +146,7 @@
     </footer>
   </dialog>
 
-  <dialog id="fullCancelDlg" class="attr">
-    <header>完全キャンセル</header>
-    <div class="content">
-      <p>実行方法を選択してください。</p>
-    </div>
-    <footer>
-      <button id="fullCancelAll"  class="btn btn-danger"  type="button" title="4週間の割当・希望休・特別休暇・ロックをすべて消去">全体</button>
-      <button id="fullCancelCell" class="btn btn-outline" type="button" title="任意の1セルのみ完全消去（クリックで選択）">セル</button>
-      <button id="fullCancelClose" class="btn btn-outline" type="button">閉じる</button>
-   </footer>
-  </dialog>
+
 
 
  <dialog id="countsDlg" class="attr">
@@ -211,5 +201,4 @@
   <script src="app.js"></script>
 </body>
 </html>
-
 

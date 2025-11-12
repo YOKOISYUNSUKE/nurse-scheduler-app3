@@ -1,5 +1,5 @@
 // sw.js
-const VERSION = 'v2025-11-11.3';
+const VERSION = 'v2025-11-12.1';
 const STATIC_CACHE = `static-${VERSION}`;
 const ENTRY_HTML = './index.html'; // ← `!doctype (1).html` のまま使うなら './!doctype (1).html' に変更
 
@@ -38,6 +38,15 @@ self.addEventListener('activate', (e) => {
       .then(() => self.clients.claim())
   );
 });
+
+// ★追加：ログイン時の強制更新に対応（SKIP_WAITING命令を受け取る）
+self.addEventListener('message', (e) => {
+  if (e?.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
