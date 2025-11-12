@@ -1365,7 +1365,7 @@ if (btnFullCancelAll) btnFullCancelAll.addEventListener('click', ()=>{
     btnLogout.addEventListener('click', ()=>{
       // ログアウト時は自動保存
       saveWindow();
-      // 追加：保存後にクラウドへも送信
+      // 追加：保存後にクラウドへも送信（非同期で実行）
       pushToRemote();
 
       try{ sessionStorage.removeItem('sched:loggedIn'); }catch(_){}
@@ -1493,8 +1493,8 @@ async function pushToRemote(){
     const meta  = readMeta();
     const dates = readDatesStore();
     for (const ck of keys){
-      remotePut(`${ck}:meta`,  meta);
-      remotePut(`${ck}:dates`, dates);
+      await remotePut(`${ck}:meta`,  meta);      // ← awaitを追加
+      await remotePut(`${ck}:dates`, dates);     // ← awaitを追加
     }
   }catch(_){}
 }
@@ -1804,7 +1804,7 @@ ensureEmployees();
     }
 
     // セルキャンセルモードを維持（モードを戻さない）
-    showToast('1セルをキャンセルしました（モード継続中）');
+    showToast('1セルをクリアしました（モード継続中）');
   }
 
 
