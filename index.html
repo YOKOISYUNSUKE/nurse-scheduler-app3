@@ -176,6 +176,35 @@
       <label>NS（★＋●）固定人数</label>
       <input id="cfgFixedNS" type="number" class="txt" min="0" step="1">
     </div>
+
+    <!-- ★追加：日付ごとの夜勤帯人数調整 -->
+    <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+    <h3 style="margin-bottom: 10px;">日付ごとの夜勤帯人数調整</h3>
+    <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+      特定の日付の夜勤帯人数を個別に設定できます。未設定の日は上記の固定人数が適用されます。
+    </p>
+    <div class="row">
+      <label>日付</label>
+      <input id="cfgDateSpecific" type="date" class="txt">
+    </div>
+    <div class="row">
+      <label>NF（☆＋◆）人数</label>
+      <input id="cfgDateNF" type="number" class="txt" min="0" step="1" placeholder="未設定">
+    </div>
+    <div class="row">
+      <label>NS（★＋●）人数</label>
+      <input id="cfgDateNS" type="number" class="txt" min="0" step="1" placeholder="未設定">
+    </div>
+    <div class="row">
+      <button id="btnAddDateCount" class="btn btn-primary" type="button">日付別設定を追加</button>
+      <button id="btnRemoveDateCount" class="btn btn-outline" type="button">選択日の設定を削除</button>
+    </div>
+
+    <!-- 設定済み日付一覧 -->
+    <div id="dateCountsList" style="margin-top: 15px; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
+      <p style="color: #999; font-size: 0.9em;">設定済みの日付はここに表示されます</p>
+    </div>
+
   </div>
   <footer>
     <button id="countsClose" class="btn btn-outline" type="button">閉じる</button>
@@ -201,4 +230,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-

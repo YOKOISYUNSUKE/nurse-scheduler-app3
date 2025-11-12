@@ -797,8 +797,12 @@ function autoAssignRange(startDayIdx, endDayIdx){
     for(let d=startDayIdx; d<=endDayIdx; d++){
       let { nf, ns, hasANf, hasANs } = countDayStats(d);
 
-      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
-      const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+      // ★修正：日付ごとの設定を優先、未設定なら既存の固定値を使用
+      const ds = dateStr(State.windowDates[d]);
+      const FIXED_NF = (window.Counts?.getDateSpecificNF?.(ds)) ?? 
+                       ((window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3);
+      const FIXED_NS = (window.Counts?.getDateSpecificNS?.(ds)) ?? 
+                       ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
 
       if (nf < FIXED_NF){
         const before = nf;
@@ -821,8 +825,12 @@ function autoAssignRange(startDayIdx, endDayIdx){
   if (!nightQuotasOK(startDayIdx, endDayIdx)){
     for(let d=startDayIdx; d<=endDayIdx; d++){
       let { nf, ns } = countDayStats(d);
-      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
-      const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+      // ★修正：日付ごとの設定を優先、未設定なら既存の固定値を使用
+      const ds = dateStr(State.windowDates[d]);
+      const FIXED_NF = (window.Counts?.getDateSpecificNF?.(ds)) ?? 
+                       ((window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3);
+      const FIXED_NS = (window.Counts?.getDateSpecificNS?.(ds)) ?? 
+                       ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
       if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], true);
       if (ns < FIXED_NS) fillWith(d, FIXED_NS - ns, ['★','●'], true);
     }
@@ -2990,4 +2998,3 @@ window.addEventListener('online',  () => { if (window.GAS) GAS.setCloudStatus('o
 window.addEventListener('offline', () => { if (window.GAS) GAS.setCloudStatus('offline'); });
 
 })();
-
