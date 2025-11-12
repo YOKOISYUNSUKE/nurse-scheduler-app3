@@ -132,31 +132,22 @@
   // ★追加：手動割り当てはルール無視で通す（canAssign / precheckPlace / applyAfterAssign をスキップ）
   const IGNORE_RULES_ON_MANUAL = true;
 
-  // ★追加：ユーザー別localStorageキーとクラウドキー群
-  function storageKey(k){
-    const uid = sessionStorage.getItem('sched:userId') || 'user';
-    return `sched:${uid}:${k}`;
-  }
-  function cloudKeys(){
-    const keys = [];
-    const main = sessionStorage.getItem('sched:cloudKey');
-    const sha  = sessionStorage.getItem('sched:cloudKeySha');
-    const b64  = sessionStorage.getItem('sched:cloudKeyCompat');
-    [main, sha, b64].forEach(v => { if (v && !keys.includes(v)) keys.push(v); });
-    return keys;
-  }
+  // ★storage.jsのStorage関数を使用
+  const { storageKey, cloudKeys } = window.Storage;
 
 
 
   const { pad2, dateStr, addDays, isToday } = (window.App && App.Dates) || {};
 
-  // 自動割当の上書き保護（ロック）管理
-  function lockKey(r, ds){ return `${r}|${ds}`; }
-  function isLocked(r, ds){ return State.lockedCells.has(lockKey(r, ds)); }
-  function setLocked(r, ds, on){
-    const k = lockKey(r, ds);
-    if (on) State.lockedCells.add(k);
-    else    State.lockedCells.delete(k);
+  // ★storage.jsのStorage関数を使用（ラッパー関数で State.lockedCells を注入）
+  const lockKey = window.Storage.lockKey;
+  
+  function isLocked(r, ds){ 
+    return window.Storage.isLocked(r, ds, State.lockedCells); 
+  }
+  
+  function setLocked(r, ds, on){ 
+    return window.Storage.setLocked(r, ds, on, State.lockedCells); 
   }
 
 
@@ -177,33 +168,34 @@
 
 
   // === 履歴参照ユーティリティ（ローリング4週間検証用） ===
-
-  let _winDateSet = null;
-  let _storeCache = null;
-  function _ensureWinDateSet(){
-    _winDateSet = new Set(State.windowDates.map(dateStr));
+  // ★storage.jsのStorage関数を使用（ラッパー関数で State accessor を注入）
+  
+  // ウィンドウ日付セットの初期化ラッパー
+  function _ensureWinDateSetLocal(){
+    window.Storage._ensureWinDateSet(State.windowDates, dateStr);
   }
-  function _inWindow(ds){ if(!_winDateSet) _ensureWinDateSet(); return _winDateSet.has(ds); }
-  function _store(){ if(!_storeCache) _storeCache = readDatesStore(); return _storeCache; }
-
-  // 窓外はローカル保存の全期間ストアから読む（窓内はState優先）
-  function globalGetAssign(r, ds){
-    if (_inWindow(ds)) return getAssign(r, ds);
-    const st = _store();
-    let mk = st.assign?.[r]?.[ds];
-    if (window.normalizeMark) mk = window.normalizeMark(mk);
-    return mk;
+  
+  // グローバル割当取得のラッパー
+  function globalGetAssignLocal(r, ds){
+    return window.Storage.globalGetAssign(r, ds, getAssign);
   }
-  function globalHasOffByDate(r, ds){
-    if (_inWindow(ds)) return hasOffByDate(r, ds);
-    const st = _store();
-    return !!(st.off?.[r]?.[ds]);
+  
+  // グローバル希望休確認のラッパー
+  function globalHasOffByDateLocal(r, ds){
+    return window.Storage.globalHasOffByDate(r, ds, hasOffByDate);
   }
-  function globalHasLeave(r, ds){
-    if (_inWindow(ds)) return !!getLeaveType(r, ds);
-    const st = _store();
-    return !!(st.leave?.[r]?.[ds]);
+  
+  // グローバル特別休暇確認のラッパー
+  function globalHasLeaveLocal(r, ds){
+    return window.Storage.globalHasLeave(r, ds, getLeaveType);
   }
+  
+  // エイリアスを設定（既存コードとの互換性のため）
+  const _ensureWinDateSet = _ensureWinDateSetLocal;
+  const globalGetAssign = globalGetAssignLocal;
+  const globalHasOffByDate = globalHasOffByDateLocal;
+  const globalHasLeave = globalHasLeaveLocal;
+  const clearCache = window.Storage.clearCache;
 
 
   // 指定日の「直近28日（当日を含む）」集計
@@ -239,7 +231,7 @@
   // ★ローリング4週間（過去を含む）検証：違反があればエラーメッセージ文字列を返す
   function validateRollingFourWeeksWithHistory(startIdx, endIdx){
 
-    _ensureWinDateSet(); _storeCache = null; // 最新窓を反映
+    _ensureWinDateSet(); clearCache(); // 最新窓を反映
     for (let r=0; r<State.employeeCount; r++){
       const wt = (State.employeesAttr[r]?.workType) || 'three';
       const name = State.employees[r] || `職員${String(r+1).padStart(2,'0')}`;
@@ -1433,122 +1425,26 @@ attrClose.addEventListener('click', ()=> attrDlg.close());
 
 
 // 接続層は gasClient.js に委譲（薄いラッパ）
+// ★storage.jsのStorage関数を使用
 function setCloudStatus(state, message){ if (window.GAS) GAS.setCloudStatus(state, message); }
-async function remoteGet(k){ return (window.GAS ? GAS.get(k) : null); }
-async function remotePut(k, data){ return (window.GAS ? GAS.put(k, data) : null); }
+async function remoteGet(k){ return window.Storage.remoteGet(k); }
+async function remotePut(k, data){ return window.Storage.remotePut(k, data); }
 async function testRemoteConnection(){ return (window.GAS ? GAS.testConnection() : { success:false, message:'gasClient未読込' }); }
-
-
-
-
-
-// 追加：ログイン直後にクラウド→ローカルへ取り込み
-async function syncFromRemote(){
-  const keys = cloudKeys(); 
-  if (!keys.length) {
-    console.warn('Cloud keys not found. Skipping remote sync.');
-    return;
-  }
-  
-  console.log('Syncing from remote with keys:', keys);
-  let metaBest = null, datesBest = null;
-
-  for (const ck of keys){
-    console.log('Fetching data for key:', ck);
-    const m = await remoteGet(`${ck}:meta`);
-    const d = await remoteGet(`${ck}:dates`);
-    
-    if (m) {
-      console.log('Meta data received:', Object.keys(m));
-    }
-    if (d) {
-      console.log('Dates data received:', Object.keys(d));
-    }
-    
-    // どちらか取れた時点で採用（先勝ち）。次鍵により良いものがあれば上書き。
-    if (m && !metaBest)  metaBest  = m;
-    if (d){
-      const score = (obj)=> {
-        try{
-          const asg = obj?.assign || {};
-          return Object.values(asg).reduce((s,day)=> s + Object.keys(day||{}).length, 0);
-        }catch(_){ return 0; }
-      };
-      if (!datesBest || score(d) > score(datesBest)) datesBest = d;
-    }
-  }
-  
-  if (metaBest) {
-    localStorage.setItem(storageKey('meta'),  JSON.stringify(metaBest));
-    console.log('Meta data synced to local storage');
-  }
-  if (datesBest) {
-    localStorage.setItem(storageKey('dates'), JSON.stringify(datesBest));
-    console.log('Dates data synced to local storage');
-  }
-  
-  if (!metaBest && !datesBest) {
-    console.log('No remote data found. Using local data only.');
-  }
-}
-
-
-
-// 追加：保存のたびにクラウドへ送信（失敗は無視）
-async function pushToRemote(){
-  const keys = cloudKeys(); if(!keys.length) return;
-  try{
-    const meta  = readMeta();
-    const dates = readDatesStore();
-    for (const ck of keys){
-      await remotePut(`${ck}:meta`,  meta);      // ← awaitを追加
-      await remotePut(`${ck}:dates`, dates);     // ← awaitを追加
-    }
-  }catch(_){}
-}
+async function syncFromRemote(){ return window.Storage.syncFromRemote(); }
+async function pushToRemote(){ return window.Storage.pushToRemote(); }
 
 
 
 
   // ---- 永続化（メタ／日付データ） ----
-
-  function readMeta(){
-  try{ return JSON.parse(localStorage.getItem(storageKey('meta'))||'{}'); }catch{ return {}; }
-  }
-  function writeMeta(meta){
-    localStorage.setItem(storageKey('meta'), JSON.stringify(meta));
-  }
+  // ★storage.jsのStorage関数を使用
+  const readMeta = window.Storage.readMeta;
+  const writeMeta = window.Storage.writeMeta;
+  const readDatesStore = window.Storage.readDatesStore;
+  const writeDatesStore = window.Storage.writeDatesStore;
+  
   function saveMetaOnly(){
-    const meta = readMeta();
-    meta.employeeCount = State.employeeCount;
-    meta.employees     = State.employees;
-    meta.employeesAttr = State.employeesAttr; // ← 追加：属性も保存
-    meta.range4wStart  = State.range4wStart;
-    writeMeta(meta);
-    // 追加：クラウドへ非同期送信（失敗は無視）
-    pushToRemote();
-  }
-
-
-  function readDatesStore(){
-    try{
-      const d = JSON.parse(localStorage.getItem(storageKey('dates'))||'{}');
-      return {
-        holidays: d.holidays || {},
-        off: d.off || {},
-        leave: d.leave || {},
-        assign: d.assign || {},
-        lock: d.lock || {}
-      };
-    }catch{
-      return { holidays:{}, off:{}, leave:{}, assign:{}, lock:{} };
-    }
-  }
-  function writeDatesStore(store){
-    localStorage.setItem(storageKey('dates'), JSON.stringify(store));
-
-    // 追加：クラウドへ非同期送信（失敗は無視）
-    pushToRemote();
+    window.Storage.saveMetaOnly(State);
   }
 
 
@@ -1572,158 +1468,19 @@ async function pushToRemote(){
   }
 
   function loadWindow(anchorDate){
-    State.anchor = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
-    State.windowDates = buildWindowDates(State.anchor);
+    // ★storage.jsのStorage.loadWindowを使用
+    window.Storage.loadWindow(State, anchorDate, buildWindowDates, dateStr, pad2, ensureEmployees, snapshot);
 
- // メタ（従業員・スライダ位置・属性）
-  const meta = readMeta();
-  if (Array.isArray(meta.employees) && meta.employees.length){
-   // 保存されたメタをそのまま復元
-   State.employees = meta.employees.slice();
-   // 属性長が合わない・未定義の場合は安全に補完
-   if (Array.isArray(meta.employeesAttr) && meta.employeesAttr.length === State.employees.length){
-    State.employeesAttr = meta.employeesAttr.slice();
-   } else {
-     State.employeesAttr = State.employees.map(()=> ({ level:'B', workType:'three' }));
-   }
-   // employeeCount は保存値があれば優先、なければ配列長
-  State.employeeCount = Number.isInteger(meta.employeeCount) ? meta.employeeCount :              State.employees.length;
-  State.range4wStart  = meta.range4wStart ?? State.range4wStart;
-
-  // 従業員数の下限は設けない（削除を正しく反映）
-
-} else {
-  // 新規ユーザー：デフォルト（20名）で初期化
-  State.employees     = Array.from({length: State.employeeCount}, (_,i)=> `職員${pad2(i+1)}`);
-  State.employeesAttr = Array.from({length: State.employeeCount}, ()=> ({ level:'B', workType:'three' }));
-}
-ensureEmployees();
-
-
-    // 日付ストアから現在ウィンドウ分だけ読み込む
-    const store = readDatesStore();
-    State.holidaySet = new Set();
-    for(const d of State.windowDates){
-      const ds = dateStr(d);
-      if(store.holidays[ds]) State.holidaySet.add(ds);
-    }
-    // 希望休
-    State.offRequests = new Map();
-    for(let i=0;i<State.employeeCount;i++){
-      const rec = store.off[i];
-      if(!rec) continue;
-      const set = new Set();
-      for(const d of State.windowDates){
-        const ds = dateStr(d);
-        if(rec[ds]) set.add(ds);
-      }
-      if(set.size) State.offRequests.set(i, set);
-    }
-    // 割当
-    State.assignments = new Map();
-    for(let i=0;i<State.employeeCount;i++){
-      const rec = store.assign[i];
-      if(!rec) continue;
-      const map = new Map();
-      for(const d of State.windowDates){
-        const ds = dateStr(d);
-        const mkRaw = rec[ds];
-        const mk = window.normalizeMark ? window.normalizeMark(mkRaw) : mkRaw;
-        if (mk) map.set(ds, mk);
-      }
-      if(map.size) State.assignments.set(i, map);
-    }
-
-    // 特別休暇
-    State.leaveRequests = new Map();
-    if (store.leave){
-      for (let i=0;i<State.employeeCount;i++){
-        const recLv = store.leave[i];
-        if (!recLv) continue;
-        const mp = new Map();
-        for (const d of State.windowDates){
-          const ds = dateStr(d);
-          const code = recLv[ds];
-          if (code) mp.set(ds, code);
-        }
-        if (mp.size) State.leaveRequests.set(i, mp);
-      }
-    }
-
-
-    // ロック（上書き保護）
-    State.lockedCells = new Set();
-    if (store.lock){
-      for (let i=0; i<State.employeeCount; i++){
-        const rec = store.lock[i];
-        if (!rec) continue;
-        for (const d of State.windowDates){
-          const ds = dateStr(d);
-          if (rec[ds]) State.lockedCells.add(lockKey(i, ds));
-        }
-      }
-    }
-
-    // コントロール同期
+    // コントロール同期（UI部分のみapp.jsに残す）
     employeeCountSel.value = String(State.employeeCount);
 
     if (range4w) range4w.value = String(State.range4wStart);
-    State.lastSaved = snapshot();
   }
 
 
   function saveWindow(){
-    // メタ情報は別途保存
-    saveMetaOnly();
-
-    // 既存ストアを読み込み（窓外のデータは維持）
-    const store = readDatesStore();
-    if (!store.holidays) store.holidays = {};
-    if (!store.off)      store.off      = {};
-    if (!store.assign)   store.assign   = {};
-    if (!store.lock)     store.lock     = {};
-    if (!store.leave)    store.leave    = {};  // ← 追加
-
-    // 祝日を反映（表示中31日分だけを同期）
-    for (const d of State.windowDates){
-      const ds = dateStr(d);
-      if (State.holidaySet.has(ds)) store.holidays[ds] = 1;
-      else                          delete store.holidays[ds];
-    }
-
-    // 希望休・割当・ロックを反映（表示中31日分）
-    for (let r = 0; r < State.employeeCount; r++){
-      const offObj  = store.off[r]    || (store.off[r]    = {});
-      const asgObj  = store.assign[r] || (store.assign[r] = {});
-      const lockObj = store.lock[r]   || (store.lock[r]   = {});
-
-      for (const d of State.windowDates){
-        const ds = dateStr(d);
-
-        // 希望休
-        if (hasOffByDate(r, ds)) offObj[ds] = 1;
-        else                     delete offObj[ds];
-
-        // 特別休暇
-        const lv = getLeaveType(r, ds);
-        const leaveObj = store.leave[r] || (store.leave[r] = {});
-        if (lv) leaveObj[ds] = lv; else delete leaveObj[ds];
-
-        // 割当（未割当は削除）
-        const mk = getAssign(r, ds);
-        if (mk) asgObj[ds] = mk;
-        else    delete asgObj[ds];
-
-        // ロック（未ロックは削除）
-        if (isLocked(r, ds)) lockObj[ds] = 1;
-        else                 delete lockObj[ds];
-
-      }
-    }
-
-    // 書き戻し＆スナップショット更新
-    writeDatesStore(store);
-    State.lastSaved = snapshot();
+    // ★storage.jsのStorage.saveWindowを使用
+    window.Storage.saveWindow(State, dateStr, hasOffByDate, getLeaveType, getAssign, snapshot);
   }
 
   // 指定4週間（range4wStart〜+27）を、希望休日だけ残して「未割当」に戻す
