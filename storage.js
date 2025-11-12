@@ -5,6 +5,7 @@
  * ストレージモジュール
  * app.jsから抽出したローカルストレージとクラウド同期の管理機能を提供
  */
+;(function(global) {
 
 // ===== localStorage & クラウド同期の管理 =====
 
@@ -500,3 +501,5 @@ window.Storage = {
   saveWindow,
   saveMetaOnly
 };
+
+})(window);
