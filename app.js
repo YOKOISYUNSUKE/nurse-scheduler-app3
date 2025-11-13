@@ -292,92 +292,16 @@ document.addEventListener('auth:logged-in', async (ev)=>{
     const loginLoading = document.getElementById('loginLoading');
     if (loginLoading) loginLoading.classList.add('hidden');
 
-    initControls();
+    // ボタンハンドラーを初期化（buttonHandlers.jsから）
+    if (typeof window.initButtonHandlers === 'function') {
+      window.initButtonHandlers();
+    }
     loadWindow(State.anchor);
     renderAll();
   }
 
 
-  // ---- コントロール初期化 ----
-function initControls(){
-  // 従業員数 1〜60（削除で人数を減らせるよう下限撤廃）
-  const maxOpt = Math.max(60, State.employeeCount);
-  employeeCountSel.innerHTML = Array.from({length:maxOpt}, (_,i)=>{
-    const v = i + 1; return `<option value="${v}">${v}</option>`;
-  }).join('');
-  // 既存メタがあればそれを、なければデフォルト値のまま
-  employeeCountSel.value = String(State.employeeCount);
-  employeeCountSel.disabled = false;
-  const empTool = employeeCountSel.closest('.tool');
-  if (empTool) empTool.style.display = ''; // 表示
-  // 変更を反映
-  employeeCountSel.addEventListener('change', ()=>{
-    State.employeeCount = parseInt(employeeCountSel.value,10);
-    ensureEmployees();
-    renderGrid();
-    saveMetaOnly();
-  });
-
-    btnJumpMonth.addEventListener('click', ()=> monthPicker.showPicker ? monthPicker.showPicker() : monthPicker.click());
-    monthPicker.addEventListener('change', ()=>{
-      const [y,m] = monthPicker.value.split('-').map(Number);
-      if(!y || !m) return;
-      switchAnchor(new Date(y, m-1, 1)); // 月初にジャンプ → ドラッグで微調整
-    });
-
-    btnPrevDay.addEventListener('click', ()=> shiftDays(-1)); // 1日戻る
-    btnNextDay.addEventListener('click', ()=> shiftDays(+1)); // 1日進む
-    if (btnHolidayAuto) btnHolidayAuto.addEventListener('click', autoLoadJapanHolidays);
-    if (btnExportExcel) btnExportExcel.addEventListener('click', exportExcelCsv);
-    if (btnUndo) btnUndo.disabled = true; // ★初期は無効化
-
-    // 範囲ロック/解除：開始セル→終了セルの順にクリック
-    if (btnLockRange) btnLockRange.addEventListener('click', ()=>{
-      State.lockMode = 'lock'; State.lockStart = null;
-      showToast('範囲ロック：開始セルをクリックしてください');
-    });
-    if (btnUnlockRange) btnUnlockRange.addEventListener('click', ()=>{
-      State.lockMode = 'unlock'; State.lockStart = null;
-      showToast('範囲ロック解除：開始セルをクリックしてください');
-    });
-
-
-    // 自動割り当てボタン：毎回ちがうパターンを生成
-    btnAutoAssign.addEventListener('click', ()=>{
-      const start = State.range4wStart;
-      const end   = State.range4wStart + 27;
-
-      // アンドゥ用バックアップを確保
-      UndoBuf = makeCancelBackup();
-
-      // いったん4週間ぶんをクリア（希望休は維持）＋「祝/代」を一括消去（ロックは保持）
-      cancelChanges(true, true);
-
-    // 乱数シード更新（クリック毎に変化）
-    if (window.NightBand && typeof NightBand.setSeed === 'function') {
-      NightBand.setSeed(((Date.now() ^ Math.floor(Math.random()*1e9)) >>> 0));
-    }
-    // ランダム性の強度（例：1.50に上げる。必要に応じて 0.49〜2.0 程度で調整）
-    if (window.NightBand && typeof NightBand.setRandAmp === 'function') {
-      NightBand.setRandAmp(1.8);
-    }
-
-    // 再自動割当（別パターン）
-    autoAssignRange(start, end);
-
-
-      // 祝日自動付与（休→祝 / 祝日勤務者に代休を自動設定）
-      applyHolidayLeaveFlags(start, end);
-
-      renderGrid();
-      paintRange4w();
-
-      const s = State.windowDates[start], e = State.windowDates[end];
-      showToast(`4週間の自動割り当て完了：${s.getMonth()+1}/${s.getDate()}〜${e.getMonth()+1}/${e.getDate()}（別パターン／保存は別）`);
-
-      // 直前状態に戻せるようアンドゥを有効化
-      if (btnUndo) btnUndo.disabled = false;
-    });
+  // ---- コントロール初期化はbuttonHandlers.jsに移動 ----
 
 
 // === ここから追記：自動割り当て本体 ===
@@ -1161,247 +1085,63 @@ function findSubstituteDayFor(r, holidayDayIdx, startDayIdx, endDayIdx){
 }
 // === ここまで挿入 ===
 
-// 土日祝判定（HolidayRules を優先使用）
-    if (btnSave) btnSave.addEventListener('click', ()=>{
-
-      if (window.AssignRules && typeof window.AssignRules.validateWindow === 'function'){
-        const res = window.AssignRules.validateWindow({
-          dates: State.windowDates,
-
-          employeeCount: State.employeeCount,
-          getAssign: getAssign,
-          isHoliday: (ds)=> State.holidaySet.has(ds),
-          getLevel:  (r)=> (State.employeesAttr[r]?.level)||'B',
-          hasOffByDate: (r, ds)=> hasOffByDate(r, ds),
-          getWorkType: (r)=> (State.employeesAttr[r]?.workType) || 'three',
-          // 固定機能廃止：常に未指定（null）
-          getFixedDayCount: (_ds)=> null
-        });
-
-
-        if (!res.ok){
-          const e = res.errors[0];
-          const dt = State.windowDates[e.dayIndex];
-          const md = (dt.getMonth()+1)+'/'+dt.getDate();
-          const label =
-  e.type==='NF'                 ? '（☆＋◆）' :
-  e.type==='NS'                 ? '（★＋●）' :
-  e.type==='DAY_MIN'            ? '〇' :
-  e.type==='DAY_WKD_ALLOWED'    ? '〇（土日祝の許容数）' :
-  e.type==='DAY_EQ'             ? '〇（固定）' :
-  e.type==='A_DAY'              ? '〇のA' :
-  e.type==='A_NF'               ? '（☆＋◆）のA' :
-  e.type==='A_NS'               ? '（★＋●）のA' :
-  e.type==='WT_DAY_ONLY'        ? '日勤専従の勤務形態違反' :
-  e.type==='WT_NIGHT_ONLY'      ? '夜勤専従の勤務形態違反' :
-  e.type==='DAY_STREAK_GT5'     ? '〇連続' :
-  e.type==='DAY_REST_AFTER5'    ? '「〇×5」の直後休' :
-  e.type==='SEQ_NF_DAY'         ? '「◆→〇」禁止' :
-  e.type==='SEQ_NF_NS'          ? '「◆→●」禁止' :
-  e.type==='SEQ_NS_NF_MAX2'     ? '「●→◆」上限' :
-  e.type==='SEQ_NS_NF_GAP'      ? '「●→◆」間隔' :
-  e.type==='PAIR_GAP_GE3'       ? '「☆★」間隔' :
-  e.type==='SEQ_STAR_AFTER_REST2'? '「☆★」後の休休' :   // ★追加
-  e.type==='OFF_SINGLE_STREAK_GT2' ? '単一休み連続' :
-  e.type==='WORK_STREAK_GT5'    ? '休間隔（6連勤禁止）' :
-  e.type==='RENKYU_GAP_LEQ13'   ? '連休間の間隔' :
-  e.type==='RENKYU_MIN2'        ? '連休（2日以上）回数' :
-  e.type==='BAND_AC_NIGHT'      ? `夜勤帯A+C+夜専の同席${e.band==='NS'?'（NS）':'（NF）'}` :
-                                  '〇';
-
-          const expect =
-            e.type==='DAY_MIN' ? String(e.expected) :
-            (e.expected ?? '');
-          showToast(`${md} の ${label} が未充足：${e.actual}${expect?` / ${expect}`:''}`);
-          return; // 保存中止
-        }
-      }
-
-      // ===== 追加ルール：4週間の休日（休＋未割り当）＝ 境界補正後の必要日数以上 =====
-      {
-        const start = State.range4wStart;
-        const end   = State.range4wStart + 27; // 28日間
-        for (let r = 0; r < State.employeeCount; r++){
-          let off = 0;
-          for (let d = start; d <= end; d++){
-            const ds = dateStr(State.windowDates[d]);
-            const mk = getAssign(r, ds);
-            const hasLv = !!getLeaveType(r, ds);
-            if ((hasOffByDate(r, ds) || !mk) && !hasLv) off++; // 特別休暇は休日に含めない
-          }
-          const needOff = (function(){
-            const sDt = State.windowDates[start];
-            const eDt = State.windowDates[end];
-            return requiredOffFor28(r, sDt, eDt);
-          })();
-
-          if (off < needOff){
-            const name = State.employees[r] || `職員${String(r+1).padStart(2,'0')}`;
-            showToast(`${name} の4週間の休日が不足：${off}/${needOff}（希望休・未割当ベース。特別休暇は勤務扱い）`);
-            return; // 保存中止
-          }
-        }
-      }
-
-// ===== 新ルール：勤務形態ごとの夜勤数チェック =====
-{
+// ★追加：保存時の4週間休日検証ロジック（buttonHandlers.jsから呼び出し）
+function validateFourWeeksOff(){
   const start = State.range4wStart;
-  const end   = State.range4wStart + 27; // 28日間
+  const end   = State.range4wStart + 27;
   for (let r = 0; r < State.employeeCount; r++){
-    const wt = (State.employeesAttr[r]?.workType) || 'three';
-    let starCount = 0;  // ☆の数（＝☆★ペア数）
-    let half = 0;       // ◆＋●カウント
+    let off = 0;
     for (let d = start; d <= end; d++){
       const ds = dateStr(State.windowDates[d]);
       const mk = getAssign(r, ds);
-      if (mk === '☆') starCount++;          // 正しくカウントのみ
+      const hasLv = !!getLeaveType(r, ds);
+      if ((hasOffByDate(r, ds) || !mk) && !hasLv) off++;
+    }
+    const needOff = (function(){
+      const sDt = State.windowDates[start];
+      const eDt = State.windowDates[end];
+      return requiredOffFor28(r, sDt, eDt);
+    })();
+
+    if (off < needOff){
+      const name = State.employees[r] || `職員${String(r+1).padStart(2,'0')}`;
+      return `${name} の4週間の休日が不足：${off}/${needOff}（希望休・未割当ベース。特別休暇は勤務扱い）`;
+    }
+  }
+
+  // 夜勤数チェック
+  for (let r = 0; r < State.employeeCount; r++){
+    const wt = (State.employeesAttr[r]?.workType) || 'three';
+    let starCount = 0;
+    let half = 0;
+    for (let d = start; d <= end; d++){
+      const ds = dateStr(State.windowDates[d]);
+      const mk = getAssign(r, ds);
+      if (mk === '☆') starCount++;
       if (mk === '◆' || mk === '●') half++;
     }
 
     const name = State.employees[r] || `職員${String(r+1).padStart(2,'0')}`;
     if (wt === 'night'){
       if (starCount < 8 || starCount > 10){
-
-        showToast(`${name}（夜勤専従）の「☆」が${starCount}件です（許容8〜10）。`);
-        return; // 保存中止
+        return `${name}（夜勤専従）の「☆」が${starCount}件です（許容8〜10）。`;
       }
     } else if (wt === 'two'){
       if (starCount !== 4){
-        showToast(`${name}（二部制）の「☆」は4件必要：${starCount}/4`);
-        return; // 保存中止
+        return `${name}（二部制）の「☆」は4件必要：${starCount}/4`;
       }
     } else if (wt === 'three'){
       if (half < 8 || half > 10){
-        showToast(`${name}（三部制）の（◆＋●）は8〜10件を許容（原則10件を目指す）：${half}/8〜10`);
-        return; // 保存中止
+        return `${name}（三部制）の（◆＋●）は8〜10件を許容（原則10件を目指す）：${half}/8〜10`;
       }
     }
   }
+
+  return null; // OK
 }
 
-// ★新規：どこの4週間をみても成立（過去分を含むローリング28日検証）
-{
-  const start = State.range4wStart;
-  const end   = State.range4wStart + 27;
-  const err = validateRollingFourWeeksWithHistory(start, end);
-  if (err){ showToast(err); return; } // 保存中止
-}
+// ボタンハンドラーはbuttonHandlers.jsに移動
 
-    saveWindow(); 
-    showToast('保存しました'); 
-   });
-
-    // 指定4週間を、希望休日だけ残して未割当にする（確認ダイアログ＋アンドゥ対応）
-    btnCancel.addEventListener('click', ()=>{
-
-      const sIdx = State.range4wStart;
-      const eIdx = sIdx + 27;
-      const s = State.windowDates[sIdx], e = State.windowDates[eIdx];
-      const msg = `開始：${s.getMonth()+1}/${s.getDate()} 〜 終了：${e.getMonth()+1}/${e.getDate()}\n` +
-                  `の28日間で、希望休を除き割り当てを未割当に戻します。\n` +
-                  `※ ロック済みセルは保持し、「祝」「代」は消去します。よろしいですか？`;
-      if (!confirm(msg)) return;
-
-      UndoBuf = makeCancelBackup();
-
-      // ロック尊重 + 祝/代 クリア
-      cancelChanges(true, true);
-      showToast('指定4週間をクリア：「割当」消去／「祝・代」消去／ロック保持（希望休は維持）');
-
-      if (btnUndo) btnUndo.disabled = false;
-    });
-
-    // ★変更：完全キャンセル（クリック二択ダイアログ）
-if (btnFullCancel) btnFullCancel.addEventListener('click', ()=>{
-  if (!fullCancelDlg) return;
-  if (typeof fullCancelDlg.showModal === 'function') fullCancelDlg.showModal();
-  else fullCancelDlg.show();
-});
-
-// ダイアログ内ボタンの結線
-if (fullCancelAllBtn) fullCancelAllBtn.addEventListener('click', ()=>{
-  completeCancelAll();
-  if (fullCancelDlg) fullCancelDlg.close();
-});
-if (fullCancelCellBtn) fullCancelCellBtn.addEventListener('click', ()=>{
-  State.fullCancelCellMode = true;
-  showToast('完全キャンセル（1セル）：対象セルをクリック（Escで解除）');
-  if (fullCancelDlg) fullCancelDlg.close();
-});
-if (fullCancelCloseBtn) fullCancelCloseBtn.addEventListener('click', ()=>{
-  if (fullCancelDlg) fullCancelDlg.close();
-});
-
-
-
-    // ★追加：Escで1セル完全キャンセルを終了
-    document.addEventListener('keydown', (e)=>{
-      if (e.key === 'Escape' && State.fullCancelCellMode){
-        State.fullCancelCellMode = false;
-        showToast('完全キャンセル（1セル）を終了しました');
-      }
-    });
-
-
-
-    // ★追加：アンドゥ（直前の4週間クリアを1回だけ元に戻す）
-    if (btnUndo) btnUndo.addEventListener('click', ()=>{
-      const ok = undoCancelRange();
-      if (ok) {
-        showToast('元に戻しました（必要なら保存してください）');
-      }
-    });
-
-    btnLogout.addEventListener('click', ()=>{
-      // ログアウト時は自動保存
-      saveWindow();
-      // 追加：保存後にクラウドへも送信
-      pushToRemote();
-
-      try{ sessionStorage.removeItem('sched:loggedIn'); }catch(_){}
-      try{ sessionStorage.removeItem('sched:userId'); }catch(_){}
-      appView.classList.remove('active');
-      loginView.classList.add('active');
-      loginForm.reset();
-      showToast('保存してログアウトしました');
-    });
-
-
-    // 左右ドラッグで日単位スクロール
-    dragDayNavigation(gridWrap);
-
-    // モード
-    modeRadios.forEach(r=> r.addEventListener('change', ()=>{
-      State.mode = modeRadios.find(x=>x.checked).value;
-      State.leaveMode = null; // 特別休暇モード解除
-      showToast(State.mode==='off' ? '希望休モード' : '割当モード');
-    }));
-
-    // 特別休暇ボタン：押すとモード切替（再押しで解除）
-    function bindLeaveBtn(btn, code){
-      if (!btn) return;
-      btn.addEventListener('click', ()=>{
-        State.leaveMode = (State.leaveMode===code ? null : code);
-        const label = State.leaveMode ? `${State.leaveMode}モード` : '特別休暇モード解除';
-        showToast(label);
-      });
-    }
-    bindLeaveBtn(btnLeaveHoliday, '祝');
-    bindLeaveBtn(btnLeaveSub,     '代');
-    bindLeaveBtn(btnLeavePaid,    '年');
-    bindLeaveBtn(btnLeaveRefresh, 'リ');
-
-    // 従業員編集ダイアログ
-if (btnAttrOpen) btnAttrOpen.addEventListener('click', openAttrDialog);
-attrSave.addEventListener('click', ()=>{
-  readAttrDialogToState();
-  saveMetaOnly();   // ← 保存ボタンによりローカル保存
-  renderGrid();
-  attrDlg.close();
-  showToast('従業員属性を保存しました');
-});
-attrClose.addEventListener('click', ()=> attrDlg.close());
-  }
 
 /* 重複していた storageKey / cloudKeys の後段定義は削除（先頭側を正とする） */
 
@@ -2935,7 +2675,33 @@ function deleteEmployee(idx){
   };
   const WorkOrder = ['two','three','day','night'];
 
-
+  // ====== グローバルスコープへの公開（buttonHandlers.jsで使用） ======
+  window.State = State;
+  window.showToast = showToast;
+  window.ensureEmployees = ensureEmployees;
+  window.renderGrid = renderGrid;
+  window.saveMetaOnly = saveMetaOnly;
+  window.switchAnchor = switchAnchor;
+  window.shiftDays = shiftDays;
+  window.autoLoadJapanHolidays = autoLoadJapanHolidays;
+  window.exportExcelCsv = exportExcelCsv;
+  window.makeCancelBackup = makeCancelBackup;
+  window.cancelChanges = cancelChanges;
+  window.autoAssignRange = autoAssignRange;
+  window.applyHolidayLeaveFlags = applyHolidayLeaveFlags;
+  window.paintRange4w = paintRange4w;
+  window.undoCancelRange = undoCancelRange;
+  window.saveWindow = saveWindow;
+  window.pushToRemote = pushToRemote;
+  window.dragDayNavigation = dragDayNavigation;
+  window.openAttrDialog = openAttrDialog;
+  window.readAttrDialogToState = readAttrDialogToState;
+  window.completeCancelAll = completeCancelAll;
+  window.validateFourWeeksOff = validateFourWeeksOff;
+  window.validateRollingFourWeeksWithHistory = validateRollingFourWeeksWithHistory;
+  window.getAssign = getAssign;
+  window.hasOffByDate = hasOffByDate;
+  window.dateStr = dateStr;
 
 
 })();
