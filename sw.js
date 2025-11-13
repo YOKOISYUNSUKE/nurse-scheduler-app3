@@ -1,5 +1,5 @@
 // sw.js
-const VERSION = 'v2025-11-13.0';
+const VERSION = 'v2025-11-13.1';
 const STATIC_CACHE = `static-${VERSION}`;
 const ENTRY_HTML = './index.html'; // ← `!doctype (1).html` のまま使うなら './!doctype (1).html' に変更
 
@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
   ENTRY_HTML,
   './styles.css?v=20251031',
   './app.js',
+  './pwa.js',
   './auth.js',
   './gasClient.js',
   './core.dates.js',
@@ -20,6 +21,7 @@ const STATIC_ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
+
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
