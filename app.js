@@ -16,7 +16,7 @@
   const periodText   = $('#periodText');
   const btnAutoAssign= $('#btnAutoAssign');
   const btnCancel    = $('#btnCancel');
-  const btnFullCancelAll = $('#btnFullCancelAll'); // ★完全キャンセル（全体）
+  const btnFullCancel= $('#btnFullCancel'); // ★追加：完全キャンセル
   const btnUndo      = $('#btnUndo');       // ★追加：アンドゥ
   const btnSave      = $('#btnSave');
   const btnExportExcel = $('#btnExportExcel');
@@ -28,7 +28,11 @@
   const btnLockRange   = $('#btnLockRange');
   const btnUnlockRange = $('#btnUnlockRange');
 
-
+  // 完全キャンセル用ダイアログ要素
+  const fullCancelDlg      = $('#fullCancelDlg');
+  const fullCancelAllBtn   = $('#fullCancelAll');
+  const fullCancelCellBtn  = $('#fullCancelCell');
+  const fullCancelCloseBtn = $('#fullCancelClose');
 
   // 特別休暇ボタン
   const btnLeaveHoliday = $('#btnLeaveHoliday');
@@ -48,49 +52,26 @@
 
   const modeRadios = $$('input[name="mode"]');
   // auth.js からのログイン完了通知（クラウド→ローカル同期を先に）
-  document.addEventListener('auth:logged-in', async (ev)=>{
-    State.userId = (ev?.detail?.userId) || 'user';
-
-    // ★追加：ログイン時に最新SWへ即時アップグレード
-    if ('serviceWorker' in navigator) {
-      try {
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (reg) {
-          let reloaded = false;
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (reloaded) return;
-            reloaded = true;
-            location.reload(); // 新SWが制御を握ったら一度だけリロード
-          });
-          await reg.update(); // 新しいSWがあれば取得
-          const sw = reg.waiting || reg.installing;
-          if (sw && typeof sw.postMessage === 'function') {
-            sw.postMessage({ type: 'SKIP_WAITING' });
-          }
-        }
-      } catch (e) {
-        console.warn('SW update on login failed:', e);
-      }
-    }
-
-    // 接続テストを実行
-    const testResult = await testRemoteConnection();
-    if (!testResult.success) {
-      console.warn('Cloud connection test failed:', testResult.message);
-      // ユーザーに通知（オプション）
-      // showToast(testResult.message);
-    }
-
-    // クラウドからデータを同期
-    try {
-      await syncFromRemote();
-    } catch(error) {
-      console.error('Sync from remote failed:', error);
-    }
-
-    enterApp();
-  });
-
+document.addEventListener('auth:logged-in', async (ev)=>{
+  State.userId = (ev?.detail?.userId) || 'user';
+  
+  // 接続テストを実行
+  const testResult = await testRemoteConnection();
+  if (!testResult.success) {
+    console.warn('Cloud connection test failed:', testResult.message);
+    // ユーザーに通知（オプション）
+    // showToast(testResult.message);
+  }
+  
+  // クラウドからデータを同期
+  try { 
+    await syncFromRemote(); 
+  } catch(error) {
+    console.error('Sync from remote failed:', error);
+  }
+  
+  enterApp();
+});
 
 
 
@@ -111,13 +92,13 @@
     assignments: new Map(),     // Map<empIndex, Map<dateStr, mark>>
     range4wStart: 0,            // 0..3（31-28=3）
     lastSaved: null,            // スナップショット
-    mode: 'off',                // 'off' | 'assign' | 'cellCancel'
+    mode: 'off',                // 'off' | 'assign'
     leaveMode: null,            // null | '祝'|'代'|'年'|'リ'
     manualOverride: false,      // 手動割当（上書き）トグル
     lockedCells: new Set(),     // Set<"row|YYYY-MM-DD">：自動割当の上書き対象外
     lockMode: null,             // 'lock' | 'unlock' | null（範囲選択モード）
     lockStart: null,            // { r, d }（開始セル）
-    fullCancelCellMode: false,  // ★セルキャンセルモード
+    fullCancelCellMode: false,  // ★追加：完全キャンセル（1セル）モード
 
   };
 
@@ -797,12 +778,8 @@ function autoAssignRange(startDayIdx, endDayIdx){
     for(let d=startDayIdx; d<=endDayIdx; d++){
       let { nf, ns, hasANf, hasANs } = countDayStats(d);
 
-      // ★修正：日付ごとの設定を優先、未設定なら既存の固定値を使用
-      const ds = dateStr(State.windowDates[d]);
-      const FIXED_NF = (window.Counts?.getDateSpecificNF?.(ds)) ?? 
-                       ((window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3);
-      const FIXED_NS = (window.Counts?.getDateSpecificNS?.(ds)) ?? 
-                       ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
+      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
+      const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
 
       if (nf < FIXED_NF){
         const before = nf;
@@ -825,12 +802,8 @@ function autoAssignRange(startDayIdx, endDayIdx){
   if (!nightQuotasOK(startDayIdx, endDayIdx)){
     for(let d=startDayIdx; d<=endDayIdx; d++){
       let { nf, ns } = countDayStats(d);
-      // ★修正：日付ごとの設定を優先、未設定なら既存の固定値を使用
-      const ds = dateStr(State.windowDates[d]);
-      const FIXED_NF = (window.Counts?.getDateSpecificNF?.(ds)) ?? 
-                       ((window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3);
-      const FIXED_NS = (window.Counts?.getDateSpecificNS?.(ds)) ?? 
-                       ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
+      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
+      const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
       if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], true);
       if (ns < FIXED_NS) fillWith(d, FIXED_NS - ns, ['★','●'], true);
     }
@@ -1338,25 +1311,34 @@ function findSubstituteDayFor(r, holidayDayIdx, startDayIdx, endDayIdx){
       if (btnUndo) btnUndo.disabled = false;
     });
 
-    // ★完全キャンセル（全体）
-if (btnFullCancelAll) btnFullCancelAll.addEventListener('click', ()=>{
-  if (confirm('4週間の割当・希望休・特別休暇・ロックをすべて消去します。よろしいですか？')) {
-    completeCancelAll();
-  }
+    // ★変更：完全キャンセル（クリック二択ダイアログ）
+if (btnFullCancel) btnFullCancel.addEventListener('click', ()=>{
+  if (!fullCancelDlg) return;
+  if (typeof fullCancelDlg.showModal === 'function') fullCancelDlg.showModal();
+  else fullCancelDlg.show();
+});
+
+// ダイアログ内ボタンの結線
+if (fullCancelAllBtn) fullCancelAllBtn.addEventListener('click', ()=>{
+  completeCancelAll();
+  if (fullCancelDlg) fullCancelDlg.close();
+});
+if (fullCancelCellBtn) fullCancelCellBtn.addEventListener('click', ()=>{
+  State.fullCancelCellMode = true;
+  showToast('完全キャンセル（1セル）：対象セルをクリック（Escで解除）');
+  if (fullCancelDlg) fullCancelDlg.close();
+});
+if (fullCancelCloseBtn) fullCancelCloseBtn.addEventListener('click', ()=>{
+  if (fullCancelDlg) fullCancelDlg.close();
 });
 
 
 
-
-    // ★追加:Escでセルキャンセルを終了
+    // ★追加：Escで1セル完全キャンセルを終了
     document.addEventListener('keydown', (e)=>{
       if (e.key === 'Escape' && State.fullCancelCellMode){
         State.fullCancelCellMode = false;
-        State.mode = 'off';
-        // ラジオボタンを希望休に戻す
-        const offRadio = modeRadios.find(r => r.value === 'off');
-        if (offRadio) offRadio.checked = true;
-        showToast('セルキャンセルを終了しました');
+        showToast('完全キャンセル（1セル）を終了しました');
       }
     });
 
@@ -1373,7 +1355,7 @@ if (btnFullCancelAll) btnFullCancelAll.addEventListener('click', ()=>{
     btnLogout.addEventListener('click', ()=>{
       // ログアウト時は自動保存
       saveWindow();
-      // 追加：保存後にクラウドへも送信（非同期で実行）
+      // 追加：保存後にクラウドへも送信
       pushToRemote();
 
       try{ sessionStorage.removeItem('sched:loggedIn'); }catch(_){}
@@ -1392,15 +1374,7 @@ if (btnFullCancelAll) btnFullCancelAll.addEventListener('click', ()=>{
     modeRadios.forEach(r=> r.addEventListener('change', ()=>{
       State.mode = modeRadios.find(x=>x.checked).value;
       State.leaveMode = null; // 特別休暇モード解除
-      
-      // セルキャンセルモードの制御
-      if (State.mode === 'cellCancel') {
-        State.fullCancelCellMode = true;
-        showToast('セルキャンセルモード:対象セルをクリック');
-      } else {
-        State.fullCancelCellMode = false;
-        showToast(State.mode==='off' ? '希望休モード' : '割当モード');
-      }
+      showToast(State.mode==='off' ? '希望休モード' : '割当モード');
     }));
 
     // 特別休暇ボタン：押すとモード切替（再押しで解除）
@@ -1501,8 +1475,8 @@ async function pushToRemote(){
     const meta  = readMeta();
     const dates = readDatesStore();
     for (const ck of keys){
-      await remotePut(`${ck}:meta`,  meta);      // ← awaitを追加
-      await remotePut(`${ck}:dates`, dates);     // ← awaitを追加
+      remotePut(`${ck}:meta`,  meta);
+      remotePut(`${ck}:dates`, dates);
     }
   }catch(_){}
 }
@@ -1770,7 +1744,7 @@ ensureEmployees();
       if (s && s.size===0) State.offRequests.delete(r);
     }
     renderGrid();
-    showToast('4週間を完全クリアしました');
+    showToast('4週間を完全キャンセルしました');
     // 完全キャンセルはアンドゥ対象外（仕様）
     if (btnUndo) btnUndo.disabled = true;
   }
@@ -1811,8 +1785,8 @@ ensureEmployees();
       }
     }
 
-    // セルキャンセルモードを維持（モードを戻さない）
-    showToast('1セルをクリアしました（モード継続中）');
+    State.fullCancelCellMode = false;
+    showToast('1セルを完全キャンセルしました');
   }
 
 
@@ -2091,7 +2065,7 @@ function updateRange4wLabel(){
         }
 
         td.addEventListener('click', () => {
-          // ★セルキャンセルモード優先
+          // ★追加：完全キャンセル（1セル）モード優先
           if (State.fullCancelCellMode){
             completeCancelOneCell(r, d, td);
             return;
@@ -2998,3 +2972,4 @@ window.addEventListener('online',  () => { if (window.GAS) GAS.setCloudStatus('o
 window.addEventListener('offline', () => { if (window.GAS) GAS.setCloudStatus('offline'); });
 
 })();
+
