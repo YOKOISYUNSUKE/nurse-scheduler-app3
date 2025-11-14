@@ -1,3 +1,18 @@
+// ====== グローバルAPI公開（auto-assign.js / employee-dialog.js 用） ======
+window.SchedulerState = null; // 後で State を代入
+window.getAssign = null;
+window.setAssign = null;
+window.clearAssign = null;
+window.hasOffByDate = null;
+window.getLeaveType = null;
+window.setLeaveType = null;
+window.clearLeaveType = null;
+window.isLocked = null;
+window.setLocked = null;
+window.renderGrid = null;
+window.showToast = null;
+window.saveMetaOnly = null;
+window.updateFooterCounts = null;
 
 // ====== UIロジック：連続31日ウィンドウ & 日単位スクロール対応 ======
 (function(){
@@ -101,7 +116,8 @@ document.addEventListener('auth:logged-in', async (ev)=>{
     fullCancelCellMode: false,  // ★追加：完全キャンセル（1セル）モード
 
   };
-
+ // ★追加：グローバル公開
+  window.SchedulerState = State;
 
   // ---- 起動 ----
   // ★ 自動ログインはIIFE全体の初期化完了後に再試行（描画準備が整ってから）
@@ -134,12 +150,13 @@ document.addEventListener('auth:logged-in', async (ev)=>{
   // 自動割当の上書き保護（ロック）管理
   function lockKey(r, ds){ return `${r}|${ds}`; }
   function isLocked(r, ds){ return State.lockedCells.has(lockKey(r, ds)); }
+window.isLocked = isLocked; // ★追加
   function setLocked(r, ds, on){
     const k = lockKey(r, ds);
     if (on) State.lockedCells.add(k);
     else    State.lockedCells.delete(k);
   }
-
+window.setLocked = setLocked; // ★追加
 
   // NightBand に渡す文脈
   function nbCtx(){
@@ -270,7 +287,7 @@ document.addEventListener('auth:logged-in', async (ev)=>{
     toast.classList.add('show');
     setTimeout(()=> toast.classList.remove('show'), 1600);
   }
-
+ window.showToast = showToast; // ★追加
   function addRipple(e){
     const btn = e.currentTarget;
     const r = document.createElement('span');
@@ -318,1090 +335,29 @@ function initControls(){
     saveMetaOnly();
   });
 
-    btnJumpMonth.addEventListener('click', ()=> monthPicker.showPicker ? monthPicker.showPicker() : monthPicker.click());
-    monthPicker.addEventListener('change', ()=>{
-      const [y,m] = monthPicker.value.split('-').map(Number);
-      if(!y || !m) return;
-      switchAnchor(new Date(y, m-1, 1)); // 月初にジャンプ → ドラッグで微調整
-    });
-
-    btnPrevDay.addEventListener('click', ()=> shiftDays(-1)); // 1日戻る
-    btnNextDay.addEventListener('click', ()=> shiftDays(+1)); // 1日進む
-    if (btnHolidayAuto) btnHolidayAuto.addEventListener('click', autoLoadJapanHolidays);
-    if (btnExportExcel) btnExportExcel.addEventListener('click', exportExcelCsv);
-    if (btnUndo) btnUndo.disabled = true; // ★初期は無効化
-
-    // 範囲ロック/解除：開始セル→終了セルの順にクリック
-    if (btnLockRange) btnLockRange.addEventListener('click', ()=>{
-      State.lockMode = 'lock'; State.lockStart = null;
-      showToast('範囲ロック：開始セルをクリックしてください');
-    });
-    if (btnUnlockRange) btnUnlockRange.addEventListener('click', ()=>{
-      State.lockMode = 'unlock'; State.lockStart = null;
-      showToast('範囲ロック解除：開始セルをクリックしてください');
-    });
-
-
-    // 自動割り当てボタン：毎回ちがうパターンを生成
-    btnAutoAssign.addEventListener('click', ()=>{
-      const start = State.range4wStart;
-      const end   = State.range4wStart + 27;
-
-      // アンドゥ用バックアップを確保
-      UndoBuf = makeCancelBackup();
-
-      // いったん4週間ぶんをクリア（希望休は維持）＋「祝/代」を一括消去（ロックは保持）
-      cancelChanges(true, true);
-
-    // 乱数シード更新（クリック毎に変化）
-    if (window.NightBand && typeof NightBand.setSeed === 'function') {
-      NightBand.setSeed(((Date.now() ^ Math.floor(Math.random()*1e9)) >>> 0));
-    }
-    // ランダム性の強度（例：1.50に上げる。必要に応じて 0.49〜2.0 程度で調整）
-    if (window.NightBand && typeof NightBand.setRandAmp === 'function') {
-      NightBand.setRandAmp(1.8);
-    }
-
-    // 再自動割当（別パターン）
-    autoAssignRange(start, end);
-
-
-      // 祝日自動付与（休→祝 / 祝日勤務者に代休を自動設定）
-      applyHolidayLeaveFlags(start, end);
-
-      renderGrid();
-      paintRange4w();
-
-      const s = State.windowDates[start], e = State.windowDates[end];
-      showToast(`4週間の自動割り当て完了：${s.getMonth()+1}/${s.getDate()}〜${e.getMonth()+1}/${e.getDate()}（別パターン／保存は別）`);
-
-      // 直前状態に戻せるようアンドゥを有効化
-      if (btnUndo) btnUndo.disabled = false;
-    });
-
-
-// === ここから追記：自動割り当て本体 ===
-
-
-
-
-// ある日の集計は NightBand に委譲
-function countDayStats(dayIdx){
-  return (window.NightBand && NightBand.countDayStats)
-    ? NightBand.countDayStats(nbCtx(), dayIdx)
-    : { day:0, nf:0, ns:0, hasADay:false, hasANf:false, hasANs:false };
-}
-
-// 候補従業員は NightBand に委譲
-function candidatesFor(dayIdx, mark){
-  let out = (window.NightBand && NightBand.candidatesFor)
-    ? NightBand.candidatesFor(nbCtx(), dayIdx, mark)
-    : [];
-
-  const ds = dateStr(State.windowDates[dayIdx]);
-  // ロックセルは候補から除外。☆は翌日の★も必要なので翌日がロックなら除外
-  out = out.filter(r=>{
-    if (isLocked(r, ds)) return false;
-    if (mark === '☆'){
-      const n = dayIdx + 1;
-      if (n >= State.windowDates.length) return false;
-      const nds = dateStr(State.windowDates[n]);
-      if (isLocked(r, nds)) return false;
-
-      // ★追加：逆順抑止（夜専を除く）— 前日が「★」なら候補から外す
-      const p = dayIdx - 1;
-      if (p >= 0){
-        const pds = dateStr(State.windowDates[p]);
-        const wt  = (State.employeesAttr[r]?.workType) || 'three';
-        if (wt !== 'night' && getAssign(r, pds) === '★') return false;
-      }
-    }
-    return true;
-  });
-
-
-  // NightBand 側で勤務形態優先/公平ローテ済み。フィルタのみ適用して返す。
-  return out;
-}
-
-function tryPlace(dayIdx, r, mark){
-  const ds = dateStr(State.windowDates[dayIdx]);
-  if (isLocked(r, ds)) return false;
-  if (mark === '☆'){
-    const n = dayIdx + 1;
-    if (n >= State.windowDates.length) return false;
-    const nds = dateStr(State.windowDates[n]);
-    if (isLocked(r, nds)) return false; // 翌日の★位置がロックなら不可
+  // ボタンイベントハンドラーは buttonHandlers.js で初期化
+  if (window.ButtonHandlers && typeof window.ButtonHandlers.init === 'function') {
+    window.ButtonHandlers.init();
   }
 
-  const pre = window.AssignRules?.precheckPlace?.({
-    rowIndex:r, dayIndex:dayIdx, mark,
-
-    dates:State.windowDates, employeeCount:State.employeeCount,
-    getAssign, hasOffByDate:(i,ds)=>isRestByDate(i, ds),
-
-    getWorkType: (i)=> (State.employeesAttr[i]?.workType) || 'three',
-    getLevel:   (i)=> (State.employeesAttr[i]?.level)    || 'B'
-  }) || { ok:true };
-  if (!pre.ok) return false;
-
-  // ここで「祝/代」ならクリアしてから上書き（自動割当のみ）
-  clearSoftLeaveIfAny(r, ds);
-
-  setAssign(r, ds, mark);
-  // ☆は翌日の★を自動付与（既存ルールに委ね）
-  if (mark === '☆' && window.Rules?.applyAfterAssign){
-
-const res = window.Rules.applyAfterAssign({
-  rowIndex:r, dayIndex:dayIdx, mark,
-  getAssign, setAssign, clearAssign, hasOffByDate,
-  // ★ 追加：次日の「祝/代」も消せるように渡す
-  getLeaveType, clearLeaveType,
-  // 夜専判定のため勤務形態を渡す
-  getWorkType: (i)=> (State.employeesAttr[i]?.workType) || 'three',
-  gridEl:null, dates:State.windowDates
-});
-
-
-    if (!res.ok){
-      clearAssign(r, ds);
-      return false;
-    } else {
-      // ★追加：28日目☆の翌日★は自動ロック（自動割当）
-      const nextIdx = dayIdx + 1;
-      if (dayIdx === State.range4wStart + 27 && nextIdx < State.windowDates.length){
-        const nds = dateStr(State.windowDates[nextIdx]);
-        setLocked(r, nds, true);
-        const nextCell = grid.querySelector(`td[data-row="${r}"][data-day="${nextIdx}"]`);
-        if (nextCell) nextCell.classList.add('locked');
-      }
-    }
-  }
-  return true;
-}
-
-
-// （_reorderByWorkType は削除）
-
-
-  // 指定マーク列で不足数を埋める（☆/★は夜専を最優先、その内側でA先頭）
-  function fillWith(dayIdx, deficit, marks, preferA){
-    let placed = 0;
-    for (const mark of marks){
-      if (deficit <= 0) break;
-      let cand = candidatesFor(dayIdx, mark);
-
-      // ☆/★は NightBand の夜勤優先を尊重し、night→others の二段構成に分解
-      if (mark === '☆' || mark === '★'){
-        const night = [], others = [];
-        cand.forEach(r => (((State.employeesAttr[r]?.workType)||'three') === 'night' ? night : others).push(r));
-
-// グループ内だけ A 先頭を適用（Aが1名入ったらpreferAは解除：既存仕様）
-const applyAHead = (arr) => {
-  if (!preferA) return arr;
-  const a = [], non = [];
-  arr.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? a : non).push(r));
-  return a.concat(non);
-};
-
-// ★修正：preferAがtrueの場合、グループ間でもA優先を適用
-if (preferA){
-  const nightA = [], nightNon = [], othersA = [], othersNon = [];
-  night.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? nightA : nightNon).push(r));
-  others.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? othersA : othersNon).push(r));
-  // A属性を全て先頭に(night A → others A → night非A → others非A)
-  cand = nightA.concat(othersA, nightNon, othersNon);
-} else {
-  cand = applyAHead(night).concat(applyAHead(others));
-}
-      } else if (preferA){
-        const a = [], non = [];
-        cand.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? a : non).push(r));
-        cand = a.concat(non);
-      }
-
-      for (const r of cand){
-        if (deficit <= 0) break;
-
-        if (tryPlace(dayIdx, r, mark)){
-          placed++; deficit--;
-          if (preferA && (State.employeesAttr[r]?.level)==='A') preferA = false;
-          continue;
-        }
-
-        // ★が置けず、前日に同一者の☆が無いのが理由なら自動補完
-        if (mark === '★' && placePrevStar(dayIdx, r)){
-          placed++; deficit--;
-          if (preferA && (State.employeesAttr[r]?.level)==='A') preferA = false;
-        }
-      }
-    }
-    return placed;
+  // ★追加：セル操作の初期化
+  if (window.CellOperations && typeof window.CellOperations.init === 'function') {
+    window.CellOperations.init();
   }
 
-
-// === ここから挿入：★のための前日☆自動補完 ===
-function placePrevStar(dayIdx, r){
-  const prevIdx = dayIdx - 1;
-  if (prevIdx < 0) return false;
-
-  const dsPrev = dateStr(State.windowDates[prevIdx]);
-  // 希望休や既割当・ロックの禁止
-  if (isRestByDate(r, dsPrev)) return false;
-  if (isLocked(r, dsPrev)) return false;
-
-  if (getAssign(r, dsPrev))    return false;
-
-  // 勤務形態 OK?
-  const empAttr = State.employeesAttr[r] || { level:'B', workType:'three' };
-  const ok1 = window.AssignRules?.canAssign?.({ empAttr, mark:'☆' }) || { ok:true };
-  if (!ok1.ok) return false;
-
-  // その日の組合せや翌日NS過剰（☆→★）まで事前チェック
-  const pre = window.AssignRules?.precheckPlace?.({
-    rowIndex:r, dayIndex:prevIdx, mark:'☆',
-    dates:State.windowDates, employeeCount:State.employeeCount,
-    getAssign, hasOffByDate:(i,ds)=>hasOffByDate(i, ds),
-    getWorkType: (i)=> (State.employeesAttr[i]?.workType) || 'three',
-    getLevel:   (i)=> (State.employeesAttr[i]?.level)    || 'B'
-  }) || { ok:true };
-  if (!pre.ok) return false;
-
-  // 前日に☆を置く（連鎖で当日に★が付く）
-  if (tryPlace(prevIdx, r, '☆')){
-    const dsToday = dateStr(State.windowDates[dayIdx]);
-    return getAssign(r, dsToday) === '★';
-  }
-  return false;
-}
-
-// 日勤（〇）を最低10にする
-function fillDayShift(dayIdx){
-  const ds = dateStr(State.windowDates[dayIdx]);
-  // 〇を置ける候補（two/three/day かつ空き・希望休なし）※ロックは除外
-  const cand = [];
-  for(let r=0; r<State.employeeCount; r++){
-    if (getAssign(r, ds)) continue;
-    if (isRestByDate(r, ds)) continue;
-    if (isLocked(r, ds)) continue;
-    const empAttr = State.employeesAttr[r] || { level:'B', workType:'three' };
-    const ok = window.AssignRules?.canAssign?.({ empAttr, mark:'〇' }) || { ok:true };
-    if (ok.ok) cand.push(r);
-  }
-
-  // ★追加：土日祈日の場合、直近4週間の土日祈日勤務が少ない人を優先
-  const dt = State.windowDates[dayIdx];
-  const isWH = isWeekendOrHoliday(dt);
-  if (isWH){
-    const startIdx = State.range4wStart;
-    const endIdx = State.range4wStart + 27;
-    const whCount = (r)=>{
-      let c=0;
-      for(let i=startIdx; i<=endIdx && i<State.windowDates.length; i++){
-        const dt2 = State.windowDates[i];
-        if (!isWeekendOrHoliday(dt2)) continue;
-        const ds2 = dateStr(dt2);
-        const mk2 = getAssign(r, ds2);
-        if (mk2==='〇' || mk2==='☆' || mk2==='★' || mk2==='◆' || mk2==='●') c++;
-      }
-      return c;
-    };
-    // 勤務回数が少ない順にソート
-    cand.sort((a, b) => whCount(a) - whCount(b));
-  }
-  return (need)=>{
-    let placed=0;
-
-    for(const r of cand){
-      if (placed>=need) break;
-      if (tryPlace(dayIdx, r, '〇')) placed++;
-    }
-    return placed;
-  };
-}
-
-  // 追加：4週間の休日数（休＋未割り当）を8日に近づける（「〇」を増やすのみ）
-  function normalizeOffToEight(startDayIdx, endDayIdx){
-    // 各職員について、境界補正後の必要休日日数を上回る分だけ『〇』で縮減
-    for(let r=0; r<State.employeeCount; r++){
-      // 休＋未割り当のカウント
-      let off=0;
-      const blanks = []; // 候補：空白セル（日付インデックス）
-      for(let d=startDayIdx; d<=endDayIdx; d++){
-        const ds = dateStr(State.windowDates[d]);
-        const mk = getAssign(r, ds);
-        const hasLv = !!getLeaveType(r, ds);
-        if (hasOffByDate(r, ds)){
-          off++; // 希望休は休日
-        } else if (!mk && !hasLv){
-          off++; blanks.push(d); // 未割当のみ（特別休暇は勤務扱いとして除外）
-        }
-      }
-
-      // 〈追加〉この4週に必要な休日日数（★始まり/☆終わり 補正）
-      const needOff = (function(){
-        const sDt = State.windowDates[startDayIdx];
-        const eDt = State.windowDates[endDayIdx];
-        return requiredOffFor28(r, sDt, eDt);
-      })();
-
-      if (off > needOff){
-        let need = off - needOff; // これだけ『〇』で埋めれば要件に到達
-        for(const d of blanks){
-
-          if (need<=0) break;
-
-          // ★追加：土日祝の上限（〇≤6）を厳守
-          const dt = State.windowDates[d];
-          if (isWeekendOrHoliday(dt)) {
-            const { day } = countDayStats(d);
-            const capWkHol = (window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY))
-              ? window.Counts.DAY_TARGET_WEEKEND_HOLIDAY : 6;
-            if (day >= capWkHol) continue;   // 目標値までに限定
-          }
-
-
-          // 置けるか事前チェック（勤務形態・同日組合せ）
-          const empAttr = State.employeesAttr[r] || { level:'B', workType:'three' };
-          const ok1 = window.AssignRules?.canAssign?.({ empAttr, mark:'〇' }) || { ok:true };
-          if (!ok1.ok) continue;
-          // 希望休はすでに除外済み。precheckPlaceで日内制約を確認してから割当
-          const pre = window.AssignRules?.precheckPlace?.({
-            rowIndex:r, dayIndex:d, mark:'〇',
-            dates:State.windowDates, employeeCount:State.employeeCount,
-            getAssign, hasOffByDate:(i,ds)=>hasOffByDate(i, ds)
-          }) || { ok:true };
-          if (!pre.ok) continue;
-          if (tryPlace(d, r, '〇')){
-            need--;
-          }
-        }
-        // 希望休が多すぎる等でneed>0が残る場合はここでは触れず、保存時検証に任せる
-      }
-    }
-  }
-
-
-function isWeekendOrHoliday(dt){
-  if (window.HolidayRules && typeof window.HolidayRules.minDayFor === 'function'){
-    // minDayFor が 5 なら祝日/週末扱い
-    const md = window.HolidayRules.minDayFor(dt, (ds)=> State.holidaySet.has(ds));
-    return md === 5;
-  }
-  const w = dt.getDay();
-  const ds = dateStr(dt);
-  return (w===0 || w===6) || State.holidaySet.has(ds);
-}
-// 追加：表示中31日ウィンドウの年をまとめて取得→祝日APIから取り込み
-function targetDayForIndex(dayIdx){
-  const dt = State.windowDates[dayIdx];
-  if (window.Counts && typeof window.Counts.getDayTarget === 'function'){
-    return window.Counts.getDayTarget(dt, (ds)=> State.holidaySet.has(ds));
-  }
-  return isWeekendOrHoliday(dt) ? 6 : 10;
-}
-
-
-
-
-// 追加：固定に合わせて『〇』を削減（Aが唯一のAなら残す）
-function reduceDayShiftTo(dayIdx, target){
-  const ds = dateStr(State.windowDates[dayIdx]);
-  // 現在『〇』の従業員を列挙（非A→Aの順で削る）
-  const dayRows = [];
-  let hasA = false;
-  for(let r=0;r<State.employeeCount;r++){
-    if (getAssign(r, ds) === '〇'){
-      const isA = (State.employeesAttr[r]?.level) === 'A';
-      dayRows.push({ r, isA });
-      if (isA) hasA = true;
-    }
-  }
-  let day = dayRows.length;
-  const nonA = dayRows.filter(x=>!x.isA).map(x=>x.r);
-  const onlyA = dayRows.filter(x=>x.isA).map(x=>x.r);
-
-  for(const r of nonA){
-    if (day <= target) break;
-    clearAssign(r, ds);
-    day--;
-  }
-  // Aが居る日は最低1人のAを維持
-  for(const r of onlyA){
-    if (day <= target) break;
-    if (hasA && onlyA.length === 1) break; // 最後のAは残す
-    clearAssign(r, ds);
-    day--;
-  }
-  if (typeof updateFooterCounts==='function') updateFooterCounts();
-}
-
-
-
-// 祝日APIから現在の31日ウィンドウの年をまとめて取得して反映
-async function autoLoadJapanHolidays(){
-  try{
-    if (!window.HolidayRules || typeof window.HolidayRules.fetchJapanHolidays !== 'function'){
-      showToast('祝日API機能が読み込まれていません');
-      return;
-    }
-    const years = [...new Set(State.windowDates.map(d => d.getFullYear()))];
-    const hol = await window.HolidayRules.fetchJapanHolidays(years);
-    let count = 0;
-    for (const d of State.windowDates){
-      const ds = dateStr(d);
-      if (hol.has(ds)){
-        if (!State.holidaySet.has(ds)) count++;
-        State.holidaySet.add(ds);
-      }
-    }
-    renderGrid(); // ヘッダ・セルに祝日表示（赤帯）が反映される
-    showToast(`祝日を反映しました：${count}日`);
-  }catch(e){
-    console.error(e);
-    showToast('祝日の取得に失敗しました（ネットワークやCORSをご確認ください）');
-  }
-}
-
-// === 追加：4週間の夜勤ノルマ（勤務形態別）充足判定 ===
-function nightQuotasOK(startIdx, endIdx){
-  return (window.NightBand && NightBand.nightQuotasOK)
-    ? NightBand.nightQuotasOK(nbCtx(), startIdx, endIdx)
-    : true;
-}
-
-function autoAssignRange(startDayIdx, endDayIdx){
-  // フェーズ1：夜勤帯（☆/◆/★/●）を最優先で充足
-  //             → 3回までスイープしてNF=3 / NS=3を満たす（A不足帯はA優先）
-  for (let sweep=0; sweep<3; sweep++){
-    let changed = false;
-    for(let d=startDayIdx; d<=endDayIdx; d++){
-      let { nf, ns, hasANf, hasANs } = countDayStats(d);
-
-      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
-      const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
-
-      if (nf < FIXED_NF){
-        const before = nf;
-        fillWith(d, FIXED_NF - nf, ['☆','◆'], !hasANf);
-        nf = countDayStats(d).nf;
-        if (nf !== before) changed = true;
-      }
-
-        if (ns < FIXED_NS){
-        const before = ns;
-        fillWith(d, FIXED_NS - ns, ['★','●'], !hasANs);// ☆→★の連鎖も活用
-        ns = countDayStats(d).ns;
-        if (ns !== before) changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-
-  // 夜勤ノルマがまだ不足している場合、夜勤のみを再度押し込む（A強優先）
-  if (!nightQuotasOK(startDayIdx, endDayIdx)){
-    for(let d=startDayIdx; d<=endDayIdx; d++){
-      let { nf, ns } = countDayStats(d);
-      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
-      const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
-      if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], true);
-      if (ns < FIXED_NS) fillWith(d, FIXED_NS - ns, ['★','●'], true);
-    }
-  }
-  // ★新規：夜勤専従ごとに☆が10件に到達するまで増やす最終パス
-  (function ensureNightToTen(){
-
-  // 置ける日を“前日空き＆翌日空き”で走査し、tryPlaceで☆→★を連鎖付与
-  for (let r = 0; r < State.employeeCount; r++){
-    if ((State.employeesAttr[r]?.workType) !== 'night') continue;
-    // 現在の☆件数
-    const now = countLast28Days(r, State.windowDates[State.range4wStart+27]).star;
-    // ★修正：個別の夜勤ノルマを参照（未設定なら10）
-    const quota = State.employeesAttr[r]?.nightQuota || 10;
-    let need = Math.max(0, quota - now);
-    if (need === 0) continue;
-
-    // 左から右へスイープし、ペアが成立するところにだけ追加
-    for (let d = startDayIdx; d <= endDayIdx - 1 && need > 0; d++){
-      const ds = dateStr(State.windowDates[d]);
-      const dsNext = dateStr(State.windowDates[d+1]);
-      if (getAssign(r, ds) || getAssign(r, dsNext)) continue;
-      if (isRestByDate(r, ds) || isRestByDate(r, dsNext)) continue;
-      if (tryPlace(d, r, '☆')) need--;
-    }
-  }
-})();
-
-  // ★追加：NF/NSにA最低1人を強制するポストパス（帯が充足済みでも実施）
-  (function enforceANightBands(){
-    for (let d = startDayIdx; d <= endDayIdx; d++){
-      let { hasANf, hasANs } = countDayStats(d);
-      if (hasANf && hasANs) continue;
-      const ds = dateStr(State.windowDates[d]);
-      const prevDs = (d > 0) ? dateStr(State.windowDates[d-1]) : null;
-      const nextDs = (d+1 < State.windowDates.length) ? dateStr(State.windowDates[d+1]) : null;
-      const getLv = (i)=> (State.employeesAttr[i]?.level) || 'B';
-
-      const nonArows = (marks)=>{
-        const rows = [];
-        for (let r = 0; r < State.employeeCount; r++){
-          const mk = getAssign(r, ds);
-          if (!mk) continue;
-          if (marks.includes(mk) && getLv(r) !== 'A'){
-            if (!isLocked(r, ds)) rows.push(r);
-          }
-        }
-        return rows;
-      };
-
-      const findAFor = (mark)=>{
-        const cand = candidatesFor(d, mark).filter(r => getLv(r) === 'A');
-        for (const r of cand){
-          if (tryPlace(d, r, mark)) return r;
-          if (mark === '★' && placePrevStar(d, r)) return r;
-        }
-        return null;
-      };
-
-      // NF（☆/◆）にAがいない → ◆優先、無理なら☆（翌日の★も同期）
-      if (!hasANf){
-        let placed = false;
-        for (const r of nonArows(['◆'])){
-          const keep = '◆';
-          clearAssign(r, ds);
-          const rA = findAFor('◆');
-          if (rA !== null){ placed = true; break; }
-          setAssign(r, ds, keep);
-        }
-        if (!placed){
-          for (const r of nonArows(['☆'])){
-            if (nextDs && isLocked(r, nextDs)) continue;
-            const hadNext = nextDs && getAssign(r, nextDs) === '★';
-            clearAssign(r, ds);
-            if (hadNext) clearAssign(r, nextDs);
-            const rA = findAFor('☆');
-            if (rA !== null){ placed = true; break; }
-            setAssign(r, ds, '☆');
-            if (hadNext) setAssign(r, nextDs, '★');
-          }
-        }
-      }
-
-      // NS（★/●）にAがいない → ●優先、無理なら★を空けてA優先で投入
-      ({ hasANf, hasANs } = countDayStats(d));
-      if (!hasANs){
-        let placed2 = false;
-        for (const r of nonArows(['●'])){
-          const keep = '●';
-          clearAssign(r, ds);
-          const rA = findAFor('●');
-          if (rA !== null){ placed2 = true; break; }
-          setAssign(r, ds, keep);
-        }
-        if (!placed2){
-          for (const r of nonArows(['★'])){
-            if (isLocked(r, ds)) continue;
-            const hadPrev = prevDs && getAssign(r, prevDs) === '☆';
-            if (hadPrev && isLocked(r, prevDs)) continue;
-            clearAssign(r, ds);
-            if (hadPrev) clearAssign(r, prevDs);
-            fillWith(d, 1, ['★'], true); // A優先（必要なら前日の☆を自動補完）
-            const after = countDayStats(d);
-            if (after.hasANs){ placed2 = true; break; }
-            setAssign(r, ds, '★');
-            if (hadPrev) setAssign(r, prevDs, '☆');
-          }
-        }
-      }
-    }
-  })();
-
-  // フェーズ2：『〇』のターゲット（固定があれば最優先）を満たす
-  for(let d=startDayIdx; d<=endDayIdx; d++){
-    let { day, hasADay } = countDayStats(d);
-
-    const target = targetDayForIndex(d); // 追加：固定≡n / それ以外 5 or 10
-
-    if (!hasADay){
-      // まずAの〇を1つ確保（可能なら）
-      fillWith(d, 1, ['〇'], true);
-      ({ day, hasADay } = countDayStats(d));
-    }
-    if (day < target){
-      const pushDay = fillDayShift(d);
-      pushDay(target - day);
-      ({ day } = countDayStats(d));
-    }
-
-    // 追加：土日祝は『〇』の上限≦設定目標に丸める（過剰分を削減）
-    const capWkHol = (window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY))
-      ? window.Counts.DAY_TARGET_WEEKEND_HOLIDAY : 6;
-    if (isWeekendOrHoliday(State.windowDates[d]) && day > capWkHol){
-      reduceDayShiftTo(d, capWkHol);
-    }
-  }
-
-
-
-
-
-  // フェーズ3：4週間の休日（休＋未割当）を8日に収束（希望休は尊重）
-  if (typeof normalizeOffToEight === 'function'){
-    normalizeOffToEight(startDayIdx, endDayIdx);
-  }
-
-  // ★フェーズ3b：連休（2日以上）を月2回以上に整形（〇→休へ、他職員の〇で補填）
-  if (typeof ensureRenkyuMin2 === 'function'){
-    ensureRenkyuMin2(startDayIdx, endDayIdx);
-  }
-}
-
-
-// ★新規：連休（2日以上）を各職員で月2回以上に整形（〇→休に変換し、他職員の〇で補填）
-function ensureRenkyuMin2(startDayIdx, endDayIdx){
-  const isOffAt = (r, idx)=>{
-    const ds = dateStr(State.windowDates[idx]);
-    const mk = getAssign(r, ds);
-    return hasOffByDate(r, ds) || !mk;
-  };
-  const countBlocks = (r)=>{
-    const blocks = [];
-    let i = startDayIdx;
-    while (i <= endDayIdx){
-      if (!isOffAt(r, i)) { i++; continue; }
-      let s = i, len = 0;
-      while (i <= endDayIdx && isOffAt(r, i)) { len++; i++; }
-      if (len >= 2) blocks.push([s, i-1]);
-    }
-    return blocks;
-  };
-  const clearAndBackfill = (r, dayIdx)=>{
-    const ds = dateStr(State.windowDates[dayIdx]);
-    if (getAssign(r, ds) !== '〇') return false;
-    if (isLocked(r, ds)) return false; // 保護セルは変更しない
-    // その職員の「〇」を休化（未割当にする）
-    clearAssign(r, ds);
-
-
-    // 日勤下限とAカバーを維持
-    let { day, hasADay } = countDayStats(dayIdx);
-    const minDay = isWeekendOrHoliday(State.windowDates[dayIdx]) ? 5 : 10;
-    if (day < minDay || !hasADay){
-      const need = Math.max(1, minDay - day);
-      // AがいなければA優先で補填
-      fillWith(dayIdx, need, ['〇'], !hasADay);
-      ({ day, hasADay } = countDayStats(dayIdx));
-      if (day < minDay || !hasADay){
-        // 補填失敗 → 元に戻す
-        setAssign(r, ds, '〇');
-        return false;
-      }
-    }
-    return true;
-  };
-  const tryExpandSingle = (r)=>{
-    let i = startDayIdx;
-    while (i <= endDayIdx){
-      if (!isOffAt(r, i)) { i++; continue; }
-      let s = i, len = 0;
-      while (i <= endDayIdx && isOffAt(r, i)) { len++; i++; }
-      if (len === 1){
-        const left = s - 1, right = s + 1;
-        const order = [];
-        if (left  >= startDayIdx) order.push(left);
-        if (right <= endDayIdx)   order.push(right);
-        for (const d of order){
-          const ds = dateStr(State.windowDates[d]);
-          if (getAssign(r, ds) === '〇'){
-            if (clearAndBackfill(r, d)) return true;
-          }
-        }
-      }
-    }
-    return false;
-  };
-  const tryMakeFromDoubleDay = (r)=>{
-    for (let d = startDayIdx; d < endDayIdx; d++){
-      const ds1 = dateStr(State.windowDates[d]);
-      const ds2 = dateStr(State.windowDates[d+1]);
-      if (isOffAt(r, d) || isOffAt(r, d+1)) continue;
-      if (getAssign(r, ds1) === '〇' && getAssign(r, ds2) === '〇'){
-        if (clearAndBackfill(r, d) && clearAndBackfill(r, d+1)) return true;
-        // 2日目で失敗した場合は1日目を戻す
-        if (!isOffAt(r, d)) setAssign(r, ds1, '〇');
-      }
-    }
-    return false;
-  };
-
-  for (let r = 0; r < State.employeeCount; r++){
-    let attempts = 0;
-    while (countBlocks(r).length < 2 && attempts < 50){
-      if (tryExpandSingle(r))         { attempts++; continue; }
-      if (tryMakeFromDoubleDay(r))    { attempts++; continue; }
-      break; // これ以上拡充できない
-    }
-  }
-}
-
-// === ここから挿入：祝日「祝」/ 代休「代」の自動付与 ===
-function applyHolidayLeaveFlags(startDayIdx, endDayIdx){
-  for (let d = startDayIdx; d <= endDayIdx; d++){
-    const dt = State.windowDates[d];
-    const ds = dateStr(dt);
-    if (!State.holidaySet.has(ds)) continue; // 祝日のみ対象
-
-    for (let r = 0; r < State.employeeCount; r++){
-      const wt = (State.employeesAttr[r]?.workType) || 'three';
-      if (wt === 'night') continue;           // 夜勤専従は「祝」「代」を付与しない
-      if (getLeaveType(r, ds)) continue;      // 既存の特別休暇は尊重
-      const mk  = getAssign(r, ds);
-      const off = hasOffByDate(r, ds);
-
-      if (!mk){
-        // 「祝」は土日は付与しない（たとえその日が祝日でも土日ならスキップ）
-        const w = dt.getDay();
-        if (w !== 0 && w !== 6){
-          setLeaveType(r, ds, '祝');
-        }
-      } else {
-        // 祝日勤務（ただし土日祝日の場合は代休なし：振替休日が月曜に来る前提）
-        const w = dt.getDay();
-        if (w === 0 || w === 6){
-          continue; // 土日祝日の勤務でも「代」は付与しない
-        }
-        // 平日の祝日勤務のみ → 最寄りの非祝日に『代』
-        const subIdx = findSubstituteDayFor(r, d, startDayIdx, endDayIdx);
-        if (subIdx != null){
-          const sds = dateStr(State.windowDates[subIdx]);
-          if (!getLeaveType(r, sds)) setLeaveType(r, sds, '代');
-        }
-      }
-    }
-  }
-
-  // 追加：前4週間で未振り分けの『代』を、今回の4週間に後追い付与（祝日勤務→8週間以内）
-  applyBackfillSubstituteFromPastHolidays(startDayIdx, endDayIdx);
-}
-/**
- * 前の4週間に発生した「平日の祝日勤務」で、祝日勤務日から8週間以内に『代』が未付与の分を、
- * 今回の4週間（startDayIdx..endDayIdx）に後追いで振り分ける。
- * - 付与先は「非祝日」かつ「未割当」かつ「希望休・他の特別休暇なし」の最も早い日
- * - 8週間（56日）を超える場合は付与しない
- */
-function applyBackfillSubstituteFromPastHolidays(startDayIdx, endDayIdx){
-  const startDate = State.windowDates[startDayIdx];
-  const endDate   = State.windowDates[endDayIdx];
-  const fromDate  = addDays(startDate, -28); // 前の4週間のみ探索
-
-  const store = readDatesStore();
-  const holMap = (store && store.holidays) || {};
-
-  // ウィンドウ判定と、祝日フラグの全期間参照
-  function isHolidayDsGlobal(ds){
-    return _inWindow(ds) ? State.holidaySet.has(ds) : !!holMap[ds];
-  }
-
-  for (let r = 0; r < State.employeeCount; r++){
-    for (let dt = new Date(fromDate); dt < startDate; dt = addDays(dt, 1)){
-      const ds = dateStr(dt);
-      if (!isHolidayDsGlobal(ds)) continue;
-
-      // 土日祝（週末）の祝日は『代』付与対象外（従来仕様に合わせる）
-      const w = dt.getDay();
-      if (w === 0 || w === 6) continue;
-
-      // 「祝日勤務」＝ その日に何かしらの勤務マークがある
-      const mk = globalGetAssign(r, ds);
-      if (!mk) continue;
-
-      // 既に祝日勤務から56日以内に『代』が1つでもあればスキップ
-      const leaveObj = (store.leave && store.leave[r]) || {};
-      let hasSub = false;
-      for (let i = 1; i <= 56; i++){
-        const ds2 = dateStr(addDays(dt, i));
-        if (leaveObj[ds2] === '代'){ hasSub = true; break; }
-      }
-      if (hasSub) continue;
-
-      // 後追い付与先：今回の4週間の範囲かつ、祝日勤務日から56日以内の最も早い非祝日・未割当・休でない日
-      const deadline = addDays(dt, 56);
-      for (let d = startDayIdx; d <= endDayIdx; d++){
-        const cur = State.windowDates[d];
-        if (cur > deadline) break;
-
-        const sds = dateStr(cur);
-        if (isHolidayDsGlobal(sds)) continue;       // 非祝日
-        if (hasOffByDate(r, sds)) continue;         // 希望休を尊重
-        if (getLeaveType(r, sds)) continue;         // 既存の特別休暇を尊重
-        if (getAssign(r, sds)) continue;            // 未割当に限定
-
-        // 夜勤専従は setLeaveType 側で拒否される（従来仕様を踏襲）
-        const ok = setLeaveType(r, sds, '代');
-        if (ok) break; // 1件付与したら次の祝日勤務へ
-      }
-    }
-  }
-}
-
-
-
-function findSubstituteDayFor(r, holidayDayIdx, startDayIdx, endDayIdx){
-  const ok = (idx)=>{
-    const ds = dateStr(State.windowDates[idx]);
-    if (State.holidaySet.has(ds)) return false; // 代休は非祝日に限定
-    if (hasOffByDate(r, ds)) return false;      // 希望休は尊重
-    if (getLeaveType(r, ds)) return false;      // 既存の特別休暇は尊重
-    if (getAssign(r, ds))    return false;      // 未割当のみ対象
-    return true;
-  };
-  for (let i = holidayDayIdx + 1; i <= endDayIdx; i++){ if (ok(i)) return i; }
-  for (let i = holidayDayIdx - 1; i >= startDayIdx; i--){ if (ok(i)) return i; }
-  return null;
-}
-// === ここまで挿入 ===
-
-// 土日祝判定（HolidayRules を優先使用）
-    if (btnSave) btnSave.addEventListener('click', ()=>{
-
-      if (window.AssignRules && typeof window.AssignRules.validateWindow === 'function'){
-        const res = window.AssignRules.validateWindow({
-          dates: State.windowDates,
-
-          employeeCount: State.employeeCount,
-          getAssign: getAssign,
-          isHoliday: (ds)=> State.holidaySet.has(ds),
-          getLevel:  (r)=> (State.employeesAttr[r]?.level)||'B',
-          hasOffByDate: (r, ds)=> hasOffByDate(r, ds),
-          getWorkType: (r)=> (State.employeesAttr[r]?.workType) || 'three',
-          // 固定機能廃止：常に未指定（null）
-          getFixedDayCount: (_ds)=> null
-        });
-
-
-        if (!res.ok){
-          const e = res.errors[0];
-          const dt = State.windowDates[e.dayIndex];
-          const md = (dt.getMonth()+1)+'/'+dt.getDate();
-          const label =
-  e.type==='NF'                 ? '（☆＋◆）' :
-  e.type==='NS'                 ? '（★＋●）' :
-  e.type==='DAY_MIN'            ? '〇' :
-  e.type==='DAY_WKD_ALLOWED'    ? '〇（土日祝の許容数）' :
-  e.type==='DAY_EQ'             ? '〇（固定）' :
-  e.type==='A_DAY'              ? '〇のA' :
-  e.type==='A_NF'               ? '（☆＋◆）のA' :
-  e.type==='A_NS'               ? '（★＋●）のA' :
-  e.type==='WT_DAY_ONLY'        ? '日勤専従の勤務形態違反' :
-  e.type==='WT_NIGHT_ONLY'      ? '夜勤専従の勤務形態違反' :
-  e.type==='DAY_STREAK_GT5'     ? '〇連続' :
-  e.type==='DAY_REST_AFTER5'    ? '「〇×5」の直後休' :
-  e.type==='SEQ_NF_DAY'         ? '「◆→〇」禁止' :
-  e.type==='SEQ_NF_NS'          ? '「◆→●」禁止' :
-  e.type==='SEQ_NS_NF_MAX2'     ? '「●→◆」上限' :
-  e.type==='SEQ_NS_NF_GAP'      ? '「●→◆」間隔' :
-  e.type==='PAIR_GAP_GE3'       ? '「☆★」間隔' :
-  e.type==='SEQ_STAR_AFTER_REST2'? '「☆★」後の休休' :   // ★追加
-  e.type==='OFF_SINGLE_STREAK_GT2' ? '単一休み連続' :
-  e.type==='WORK_STREAK_GT5'    ? '休間隔（6連勤禁止）' :
-  e.type==='RENKYU_GAP_LEQ13'   ? '連休間の間隔' :
-  e.type==='RENKYU_MIN2'        ? '連休（2日以上）回数' :
-  e.type==='BAND_AC_NIGHT'      ? `夜勤帯A+C+夜専の同席${e.band==='NS'?'（NS）':'（NF）'}` :
-                                  '〇';
-
-          const expect =
-            e.type==='DAY_MIN' ? String(e.expected) :
-            (e.expected ?? '');
-          showToast(`${md} の ${label} が未充足：${e.actual}${expect?` / ${expect}`:''}`);
-          return; // 保存中止
-        }
-      }
-
-      // ===== 追加ルール：4週間の休日（休＋未割り当）＝ 境界補正後の必要日数以上 =====
-      {
-        const start = State.range4wStart;
-        const end   = State.range4wStart + 27; // 28日間
-        for (let r = 0; r < State.employeeCount; r++){
-          let off = 0;
-          for (let d = start; d <= end; d++){
-            const ds = dateStr(State.windowDates[d]);
-            const mk = getAssign(r, ds);
-            const hasLv = !!getLeaveType(r, ds);
-            if ((hasOffByDate(r, ds) || !mk) && !hasLv) off++; // 特別休暇は休日に含めない
-          }
-          const needOff = (function(){
-            const sDt = State.windowDates[start];
-            const eDt = State.windowDates[end];
-            return requiredOffFor28(r, sDt, eDt);
-          })();
-
-          if (off < needOff){
-            const name = State.employees[r] || `職員${String(r+1).padStart(2,'0')}`;
-            showToast(`${name} の4週間の休日が不足：${off}/${needOff}（希望休・未割当ベース。特別休暇は勤務扱い）`);
-            return; // 保存中止
-          }
-        }
-      }
-
-// ===== 新ルール：勤務形態ごとの夜勤数チェック =====
-{
-  const start = State.range4wStart;
-  const end   = State.range4wStart + 27; // 28日間
-  for (let r = 0; r < State.employeeCount; r++){
-    const wt = (State.employeesAttr[r]?.workType) || 'three';
-    let starCount = 0;  // ☆の数（＝☆★ペア数）
-    let half = 0;       // ◆＋●カウント
-    for (let d = start; d <= end; d++){
-      const ds = dateStr(State.windowDates[d]);
-      const mk = getAssign(r, ds);
-      if (mk === '☆') starCount++;          // 正しくカウントのみ
-      if (mk === '◆' || mk === '●') half++;
-    }
-
-    const name = State.employees[r] || `職員${String(r+1).padStart(2,'0')}`;
-    if (wt === 'night'){
-      if (starCount < 8 || starCount > 10){
-
-        showToast(`${name}（夜勤専従）の「☆」が${starCount}件です（許容8〜10）。`);
-        return; // 保存中止
-      }
-    } else if (wt === 'two'){
-      if (starCount !== 4){
-        showToast(`${name}（二部制）の「☆」は4件必要：${starCount}/4`);
-        return; // 保存中止
-      }
-    } else if (wt === 'three'){
-      if (half < 8 || half > 10){
-        showToast(`${name}（三部制）の（◆＋●）は8〜10件を許容（原則10件を目指す）：${half}/8〜10`);
-        return; // 保存中止
-      }
-    }
-  }
-}
-
-// ★新規：どこの4週間をみても成立（過去分を含むローリング28日検証）
-{
-  const start = State.range4wStart;
-  const end   = State.range4wStart + 27;
-  const err = validateRollingFourWeeksWithHistory(start, end);
-  if (err){ showToast(err); return; } // 保存中止
-}
-
-    saveWindow(); 
-    showToast('保存しました'); 
-   });
-
-    // 指定4週間を、希望休日だけ残して未割当にする（確認ダイアログ＋アンドゥ対応）
-    btnCancel.addEventListener('click', ()=>{
-
-      const sIdx = State.range4wStart;
-      const eIdx = sIdx + 27;
-      const s = State.windowDates[sIdx], e = State.windowDates[eIdx];
-      const msg = `開始：${s.getMonth()+1}/${s.getDate()} 〜 終了：${e.getMonth()+1}/${e.getDate()}\n` +
-                  `の28日間で、希望休を除き割り当てを未割当に戻します。\n` +
-                  `※ ロック済みセルは保持し、「祝」「代」は消去します。よろしいですか？`;
-      if (!confirm(msg)) return;
-
-      UndoBuf = makeCancelBackup();
-
-      // ロック尊重 + 祝/代 クリア
-      cancelChanges(true, true);
-      showToast('指定4週間をクリア：「割当」消去／「祝・代」消去／ロック保持（希望休は維持）');
-
-      if (btnUndo) btnUndo.disabled = false;
-    });
-
-    // ★変更：完全キャンセル（クリック二択ダイアログ）
-if (btnFullCancel) btnFullCancel.addEventListener('click', ()=>{
-  if (!fullCancelDlg) return;
-  if (typeof fullCancelDlg.showModal === 'function') fullCancelDlg.showModal();
-  else fullCancelDlg.show();
-});
-
-// ダイアログ内ボタンの結線
-if (fullCancelAllBtn) fullCancelAllBtn.addEventListener('click', ()=>{
-  completeCancelAll();
-  if (fullCancelDlg) fullCancelDlg.close();
-});
-if (fullCancelCellBtn) fullCancelCellBtn.addEventListener('click', ()=>{
-  State.fullCancelCellMode = true;
-  showToast('完全キャンセル（1セル）：対象セルをクリック（Escで解除）');
-  if (fullCancelDlg) fullCancelDlg.close();
-});
-if (fullCancelCloseBtn) fullCancelCloseBtn.addEventListener('click', ()=>{
-  if (fullCancelDlg) fullCancelDlg.close();
-});
-
-
-
-    // ★追加：Escで1セル完全キャンセルを終了
-    document.addEventListener('keydown', (e)=>{
-      if (e.key === 'Escape' && State.fullCancelCellMode){
-        State.fullCancelCellMode = false;
-        showToast('完全キャンセル（1セル）を終了しました');
-      }
-    });
-
-
-
-    // ★追加：アンドゥ（直前の4週間クリアを1回だけ元に戻す）
-    if (btnUndo) btnUndo.addEventListener('click', ()=>{
-      const ok = undoCancelRange();
-      if (ok) {
-        showToast('元に戻しました（必要なら保存してください）');
-      }
-    });
-
-    btnLogout.addEventListener('click', ()=>{
-      // ログアウト時は自動保存
-      saveWindow();
-      // 追加：保存後にクラウドへも送信
-      pushToRemote();
-
-      try{ sessionStorage.removeItem('sched:loggedIn'); }catch(_){}
-      try{ sessionStorage.removeItem('sched:userId'); }catch(_){}
-      appView.classList.remove('active');
-      loginView.classList.add('active');
-      loginForm.reset();
-      showToast('保存してログアウトしました');
-    });
-
-
-    // 左右ドラッグで日単位スクロール
+  // ★追加：ドラッグスクロールの初期化
+  if (gridWrap) {
     dragDayNavigation(gridWrap);
+ }
 
-    // モード
-    modeRadios.forEach(r=> r.addEventListener('change', ()=>{
-      State.mode = modeRadios.find(x=>x.checked).value;
-      State.leaveMode = null; // 特別休暇モード解除
-      showToast(State.mode==='off' ? '希望休モード' : '割当モード');
-    }));
-
-    // 特別休暇ボタン：押すとモード切替（再押しで解除）
-    function bindLeaveBtn(btn, code){
-      if (!btn) return;
-      btn.addEventListener('click', ()=>{
-        State.leaveMode = (State.leaveMode===code ? null : code);
-        const label = State.leaveMode ? `${State.leaveMode}モード` : '特別休暇モード解除';
-        showToast(label);
-      });
-    }
-    bindLeaveBtn(btnLeaveHoliday, '祝');
-    bindLeaveBtn(btnLeaveSub,     '代');
-    bindLeaveBtn(btnLeavePaid,    '年');
-    bindLeaveBtn(btnLeaveRefresh, 'リ');
-
-    // 従業員編集ダイアログ
-if (btnAttrOpen) btnAttrOpen.addEventListener('click', openAttrDialog);
-attrSave.addEventListener('click', ()=>{
-  readAttrDialogToState();
-  saveMetaOnly();   // ← 保存ボタンによりローカル保存
-  renderGrid();
-  attrDlg.close();
-  showToast('従業員属性を保存しました');
-});
-attrClose.addEventListener('click', ()=> attrDlg.close());
+  // ★追加：自動割当ロジックの初期化
+  if (window.AutoAssignLogic && typeof window.AutoAssignLogic.init === 'function') {
+    window.AutoAssignLogic.init();
   }
+}
+   
+
+
 
 /* 重複していた storageKey / cloudKeys の後段定義は削除（先頭側を正とする） */
 
@@ -1502,7 +458,7 @@ async function pushToRemote(){
     // 追加：クラウドへ非同期送信（失敗は無視）
     pushToRemote();
   }
-
+window.saveMetaOnly = saveMetaOnly; // ★追加
 
   function readDatesStore(){
     try{
@@ -1920,7 +876,7 @@ ensureEmployees();
       if (tdNs)  tdNs.textContent  = String(c.ns);
     }
   }
-
+window.updateFooterCounts = updateFooterCounts; // ★追加
 
   function updatePeriodText(){
     const s = State.windowDates[0];
@@ -2012,7 +968,7 @@ function updateRange4wLabel(){
       else if (w === 6) th.classList.add('sat'); // 土曜
       if(isToday(dt)) th.classList.add('today');
       if(State.holidaySet.has(dateStr(dt))) th.classList.add('holiday');
-      th.addEventListener('click', ()=> toggleHoliday(d)); // ← 日付クリックで祝日トグル
+      th.addEventListener('click', ()=> window.CellOperations.toggleHoliday(d));
       trh.appendChild(th);
     }
     thead.appendChild(trh);
@@ -2065,7 +1021,7 @@ function updateRange4wLabel(){
         }
 
         td.addEventListener('click', () => {
-          // ★追加：完全キャンセル（1セル）モード優先
+          // 完全キャンセル（1セル）モード優先
           if (State.fullCancelCellMode){
             completeCancelOneCell(r, d, td);
             return;
@@ -2074,24 +1030,21 @@ function updateRange4wLabel(){
           // 範囲ロックモードが有効なら先に処理
           if (maybeHandleRangeLock(r, d)) return;
 
-          // 特別休暇モード（祝/代/年/リ）が有効なとき最優先
+          // cellOperations.js に委譲
           if (State.leaveMode) {
-            toggleLeave(r, d, td);
+            window.CellOperations.toggleLeave(r, d, td);
             return;
           }
 
-
-          // 希望休モード
           if (State.mode === 'off') {
-            toggleOff(r, d, td);
+            window.CellOperations.toggleOff(r, d, td);
             return;
           }
 
-          // 割当モード
-          cycleAssign(r, d, td);
+          window.CellOperations.cycleAssign(r, d, td);
         });
 
-        td.addEventListener('contextmenu', (e) => {
+        td.addEventListener('contextmenu', (e) => {  
           e.preventDefault();
           const nowLocked = isLocked(r, ds);
           setLocked(r, ds, !nowLocked);
@@ -2113,6 +1066,7 @@ function updateRange4wLabel(){
     renderFooterCounts();
     paintRange4w();
   }
+ window.renderGrid = renderGrid; // ★追加
 
 function markToClass(mk){
   if (window.MARK_MAP && window.MARK_MAP[mk]) return window.MARK_MAP[mk].className;
@@ -2208,204 +1162,41 @@ function markToClass(mk){
   }
 
 
-// ---- トグル ----
-// 勤務形態別クリックサイクル
-function cycleOrderFor(r){
-  const wt = (State.employeesAttr[r]?.workType) || 'three';
-  switch (wt){
-    case 'two':   return ['', '〇', '☆', ''];                // 二部制：空→〇→☆(翌日★)→空
-    case 'three': return ['', '〇', '◆', '●', ''];           // 三部制：空→〇→◆→●→空
-    case 'day':   return ['', '〇', '☆', '◆', '●', ''];      // 日勤専従でもお試しで全マーク
-    case 'night': return ['', '☆', ''];                      // 夜勤専従：空→☆(翌日★)→空
-    default:      return ['', '〇', '◆', '●', ''];           // 既定＝三部制相当
-  }
-}
-
-function nextCycleMark(cur, order){
-  const idx = order.indexOf(cur || '');
-  return order[(idx + 1) % order.length];
-}
-
-// ★追加：手動割り当て専用の軽量連鎖「☆→翌日★」
-//  - 希望休は上書きしない
-//  - 既に他マークが入っている場合も上書きしない（★は何もしない）
-function forceNextDayStar(r, dayIdx){
-  const nextIndex = dayIdx + 1;
-  if (nextIndex >= State.windowDates.length) return;
-  const dsNext = dateStr(State.windowDates[nextIndex]);
-  // 希望休には置かない
-  if (hasOffByDate(r, dsNext)) return;
-  const cur = getAssign(r, dsNext);
-  // 既に★なら何もしない／他記号があれば上書きしない
-  if (cur === '★' || (cur && cur !== '')) return;
-
-  setAssign(r, dsNext, '★');
-  const nextCell = grid.querySelector(`td[data-row="${r}"][data-day="${nextIndex}"]`);
-  if (nextCell){
-    nextCell.textContent = '';
-    const sp = document.createElement('span');
-    sp.className = 'mark ' + markToClass('★');
-    sp.textContent = '★';
-    nextCell.appendChild(sp);
-  }
-
-  // ★追加：28日目（4週の最終日）の翌日★は自動ロック
-  if (dayIdx === State.range4wStart + 27){
-    setLocked(r, dsNext, true);
-    const nc = grid.querySelector(`td[data-row="${r}"][data-day="${nextIndex}"]`);
-    if (nc) nc.classList.add('locked');
-  }
-
-  // 合計行を即時更新
-  if (typeof updateFooterCounts === 'function') updateFooterCounts();
-}
-
-// ★追加：前日に「〇」または“休（希望休/特別休暇）”を置いたら、翌日の「★」をロック状態でも強制消去
-function removeNextDayStarIfAny(r, dayIdx){
-  const nextIndex = dayIdx + 1;
-  if (nextIndex >= State.windowDates.length) return;
-  const nds = dateStr(State.windowDates[nextIndex]);
-  if (getAssign(r, nds) === '★'){
-    clearAssign(r, nds);
-    setLocked(r, nds, false); // ロック解除
-    const nextCell = grid.querySelector(`td[data-row="${r}"][data-day="${nextIndex}"]`);
-    if (nextCell){
-      nextCell.classList.remove('locked');
-      nextCell.textContent = '';
-    }
-    if (typeof updateFooterCounts === 'function') updateFooterCounts();
-  }
-}
-function removeNextStarByDs(r, ds){
-  const idx = State.windowDates.findIndex(dt => dateStr(dt) === ds);
-  if (idx >= 0) removeNextDayStarIfAny(r, idx);
-}
-
-function cycleAssign(r, d, td){
-  const ds = dateStr(State.windowDates[d]);
-  // ★追加：ロックセルは手動でも変更不可
-
-  if (isLocked(r, ds)){ showToast('ロック中のセルは変更できません'); return; }
-  const lvHere = getLeaveType(r, ds);
-  if (lvHere && lvHere !== '代'){ showToast('特別休暇のため変更不可（祝/年/リ）'); return; }
-  if (lvHere === '代'){
-    clearLeaveType(r, ds);           // 「代」は固定扱いにしない（上書き許可）
-    td.textContent = '';
-    td.classList.remove('off');
-  }
-
-  // 希望休は上書き不可
-  if (hasOffByDate(r, ds)) { 
-    if (typeof showToast === 'function') showToast('希望休のため割当不可');
-    return; 
-  }
-
-  const current = getAssign(r, ds) || '';
-  const order = cycleOrderFor(r);                  // ← 勤務形態別サイクル
-  const next = nextCycleMark(current, order);
-  const wasNightThrough = (current === '☆');       // ☆からの変更かを保持
-
-  // 反映（空→消去）
-if (next === '') {
-  clearAssign(r, ds);
-  td.textContent = '';
-  // ☆を外したら翌日の★を“解除つきで”消す（ロックも外す）
-  if (wasNightThrough) {
-    removeNextDayStarIfAny(r, d);
-  }
-  updateFooterCounts();
-  return;
-}
-
-
-  // 勤務形態チェック（★手動はスキップ）
-  if (!IGNORE_RULES_ON_MANUAL && window.AssignRules && typeof window.AssignRules.canAssign === 'function') {
-    const empAttr = State.employeesAttr[r] || { level:'B', workType:'three' };
-    const ok1 = window.AssignRules.canAssign({ empAttr, mark: next });
-    if (!ok1.ok){ if (typeof showToast==='function') showToast(ok1.message||'勤務形態に合いません'); return; }
-  }
-  // 日内組合せ・翌日NS過剰チェック（☆の場合の仮★含む）→ ★手動はスキップ
-  if (!IGNORE_RULES_ON_MANUAL && window.AssignRules && typeof window.AssignRules.precheckPlace === 'function') {
-    const ok2 = window.AssignRules.precheckPlace({
-      rowIndex:r, dayIndex:d, mark:next,
-      dates:State.windowDates, employeeCount:State.employeeCount,
-      getAssign, hasOffByDate:(i,ds2)=>hasOffByDate(i, ds2),
-      getWorkType: (i)=> (State.employeesAttr[i]?.workType) || 'three',
-      getLevel:   (i)=> (State.employeesAttr[i]?.level)    || 'B'
-    });
-    if (!ok2.ok){ if (typeof showToast==='function') showToast(ok2.message||'組合せ上限を超えます'); return; }
-  }
-
-  // 当日セル反映
-  setAssign(r, ds, next);
-  td.textContent = '';
-  const span = document.createElement('span');
-  span.className = 'mark ' + markToClass(next);
-  span.textContent = next;
-  td.appendChild(span);
-  updateFooterCounts();
-
-  // ★追加：手動時でも「☆の翌日は★」だけは軽量連鎖で反映
-  if (next === '☆') {
-    forceNextDayStar(r, d);
-  }
-
-  // 連鎖ルール適用（☆なら翌日★）→ ★手動はスキップ
-  if (!IGNORE_RULES_ON_MANUAL && window.Rules && typeof window.Rules.applyAfterAssign === 'function') {
-      const result = window.Rules.applyAfterAssign({
-        rowIndex: r,
-        dayIndex: d,
-        mark: next,
-        getAssign, setAssign, clearAssign, hasOffByDate: (i,ds)=>isRestByDate(i, ds),
-        // 追加（将来互換）：次日の祝/代を消せるように
-        getLeaveType, clearLeaveType,
-
-        gridEl: grid,
-        dates: State.windowDates
-    });
-
-
-    if (!result.ok) {
-      clearAssign(r, ds);
-      td.textContent = '';
-      updateFooterCounts(); 
-      if (typeof showToast === 'function') showToast(result.message || 'ルール違反です');
-      return;
-    } else {
-      updateFooterCounts();
-    }
-  }
-
-
-// ☆を別記号に変更したら翌日の★を“解除つきで”消す（ロックも外す）
-if (wasNightThrough && next !== '☆') {
-  removeNextDayStarIfAny(r, d);
-}
-
-}
-
-
-  function toggleHoliday(dayIdx){
-    const ds = dateStr(State.windowDates[dayIdx]);
-    if(State.holidaySet.has(ds)) State.holidaySet.delete(ds);
-    else State.holidaySet.add(ds);
-    renderGrid();
-  }
 
   function hasOffByDate(empIdx, ds){
     const s = State.offRequests.get(empIdx);
     return s ? s.has(ds) : false;
   }
+  window.hasOffByDate = hasOffByDate; // ★追加
   // 特別休暇の取得/設定
   function getLeaveType(empIdx, ds){
     const m = State.leaveRequests.get(empIdx);
     return m ? m.get(ds) : undefined;
   }
+window.getLeaveType = getLeaveType; // ★追加
 function isWeekendByDs(ds){
   const dt = State.windowDates.find(dt => dateStr(dt) === ds);
   const w  = dt ? dt.getDay() : (new Date(ds)).getDay();
   return w === 0 || w === 6;
 }
+  // ★追加：翌日の★を日付文字列ベースで消去（cellOperations.jsと共通利用）
+  function removeNextStarByDs(r, ds){
+    const idx = State.windowDates.findIndex(dt => dateStr(dt) === ds);
+    if (idx < 0) return;
+    const nextIndex = idx + 1;
+    if (nextIndex >= State.windowDates.length) return;
+    const nds = dateStr(State.windowDates[nextIndex]);
+    if (getAssign(r, nds) === '★'){
+      clearAssign(r, nds);
+      setLocked(r, nds, false);
+      const nextCell = grid.querySelector(`td[data-row="${r}"][data-day="${nextIndex}"]`);
+      if (nextCell){
+        nextCell.classList.remove('locked');
+        nextCell.textContent = '';
+      }
+      if (typeof updateFooterCounts === 'function') updateFooterCounts();
+    }
+  }
 
 function setLeaveType(empIdx, ds, code){
   // 夜勤専従には「祝」「代」を割り当て不可
@@ -2432,13 +1223,13 @@ function setLeaveType(empIdx, ds, code){
   removeNextStarByDs(empIdx, ds);
   return true;
 }
-
+window.setLeaveType = setLeaveType; // ★追加
 
   function clearLeaveType(empIdx, ds){
     const m = State.leaveRequests.get(empIdx);
     if(m){ m.delete(ds); if(m.size===0) State.leaveRequests.delete(empIdx); }
   }
-
+  window.clearLeaveType = clearLeaveType; // ★追加
   // 追加：自動割当で上書き可能な“ソフト休暇”（祝/代）
   function isSoftLeave(code){ return code === '祝' || code === '代'; }
   function clearSoftLeaveIfAny(empIdx, ds){
@@ -2458,121 +1249,13 @@ function setLeaveType(empIdx, ds, code){
     return '';
   }
 
-  // 希望休セルのトグル：renderGrid 外で一度だけ定義
-  function toggleLeave(r, d, td){
-    const ds   = dateStr(State.windowDates[d]);
-    const code = State.leaveMode; // null | '祝'|'代'|'年'|'リ'
-    if (!code && !hasOffByDate(r, ds)) return; // 変更不要
-
-    // モード未選択時は「オフ → クリア」のみ
-    if (!code && hasOffByDate(r, ds)) {
-      clearLeaveType(r, ds);
-      td.textContent = '';
-      td.classList.remove('off');
-      updateFooterCounts(d);
-      showToast('希望休を解除しました');
-      return;
-    }
-
-    // 通常：指定コードでトグル
-    if (hasOffByDate(r, ds)) {
-      // 既存オフ → 指定コードで上書き表示だけ更新
-      clearLeaveType(r, ds);
-    }
-const ok = setLeaveType(r, ds, code);
-if (!ok) return; // たとえば土日の「祝」はここで終了
-
-// DOMを刷新
-td.textContent = '';
-td.classList.add('off');
-const sp = document.createElement('span');
-sp.className = `leave ${leaveClassOf(code)}`;
-sp.textContent = code;
-td.appendChild(sp);
-
-// ★追加：前日が特別休暇になったら翌日の「★」を強制消去
-removeNextDayStarIfAny(r, d);
-
-updateFooterCounts(d);
-showToast('希望休を更新しました');
-
-
-  }
-
-
-
-function toggleOff(r,d,td){
-  const ds = dateStr(State.windowDates[d]);
-  const lvHere = getLeaveType(r, ds);
-  if (lvHere && lvHere !== '代'){ showToast('特別休暇のため変更不可（祝/年/リ）'); return; }
-  if (lvHere === '代'){
-    clearLeaveType(r, ds);           // 「代」は固定扱いにしない（休へ置換可）
-    td.textContent = '';
-    td.classList.remove('off');
-  }
-  let s = State.offRequests.get(r);
-
-
-  if(!s){ s = new Set(); State.offRequests.set(r,s); }
-
-  // 解除は常にOK
-  if(s.has(ds)){
-    s.delete(ds);
-    td.classList.remove('off');
-    td.textContent = '';
-    updateFooterCounts();
-    return;
-  }
-
-  // ここから「休」にする前の事前チェック（単一休み3連続を禁止）
-  const wouldViolate = (()=>{
-    // “その日を休にした”想定で31日窓を評価
-    const isOffAt = (idx)=>{
-      const dsi = dateStr(State.windowDates[idx]);
-      const mk  = getAssign(r, dsi);
-      const off = (hasOffByDate(r, dsi) || dsi === ds); // 当日を強制的に休とみなす
-      return off || !mk;
-    };
-    let consecSingles = 0;
-    let i = 0;
-    while (i < State.windowDates.length){
-      if (!isOffAt(i)) { i++; continue; }
-      let len = 0;
-      while (i < State.windowDates.length && isOffAt(i)) { len++; i++; }
-      if (len === 1){
-        consecSingles++;
-        if (consecSingles > 2) return true;
-      } else {
-        consecSingles = 0;
-      }
-    }
-    return false;
-  })();
-  if (wouldViolate){
-    if (typeof showToast==='function'){
-      showToast('単一休みは連続2回までです（例：〇〇休〇休〇〇休〇→NG）');
-    }
-    return; // 状態は変更しない
-  }
-
-  // 事前検査クリア → 実際に「休」を反映
-  s.add(ds);
-  td.classList.add('off');
-  td.textContent = '休';
-  clearAssign(r, ds); // 希望休にしたら割当は消す
-
-  // ★追加：前日休→翌日の「★」を強制消去（ロック含む）
-  removeNextDayStarIfAny(r, d);
-
-  updateFooterCounts();
-}
-
 
 
   function getAssign(r, ds){
     const m = State.assignments.get(r);
     return m ? m.get(ds) : undefined;
   }
+ window.getAssign = getAssign; // ★追加
 function setAssign(r, ds, mk){
   let m = State.assignments.get(r);
   if(!m){ m = new Map(); State.assignments.set(r,m); }
@@ -2581,12 +1264,12 @@ function setAssign(r, ds, mk){
   // ★追加：当日が「〇」になったら、翌日の「★」（ロック含む）を強制消去
   if (mk === '〇') removeNextStarByDs(r, ds);
 }
-
+window.setAssign = setAssign; // ★追加
   function clearAssign(r, ds){
     const m = State.assignments.get(r);
     if(m){ m.delete(ds); if(m.size===0) State.assignments.delete(r); }
   }
-
+window.clearAssign = clearAssign; // ★追加
 //  isToday は core.dates.js（App.Dates.isToday）へ移動
 
   // ---- アンカー移動 ----
@@ -2935,8 +1618,63 @@ function deleteEmployee(idx){
   };
   const WorkOrder = ['two','three','day','night'];
 
+    // === グローバル公開（buttonHandlers.js / autoAssignLogic.js 用） ===
+  window.switchAnchor = switchAnchor;
+  window.shiftDays = shiftDays;
+  window.paintRange4w = paintRange4w;
+  window.exportExcelCsv = exportExcelCsv;
+  window.cancelChanges = cancelChanges;
+  window.makeCancelBackup = makeCancelBackup;
+  window.undoCancelRange = undoCancelRange;
+  
+  // ★autoAssignLogic.js から参照される関数（委譲）
+  window.autoAssignRange = function(s, e){ 
+    if(window.AutoAssignLogic) return window.AutoAssignLogic.autoAssignRange(s, e); 
+  };
+  window.applyHolidayLeaveFlags = function(s, e){ 
+    if(window.AutoAssignLogic) return window.AutoAssignLogic.applyHolidayLeaveFlags(s, e); 
+  };
+  
+  // ★追加：祝日自動取得関数
+  window.autoLoadJapanHolidays = async function(){
+    try{
+      if (!window.HolidayRules || typeof window.HolidayRules.fetchJapanHolidays !== 'function'){
+        showToast('祝日API機能が読み込まれていません');
+        return;
+      }
+      const years = [...new Set(State.windowDates.map(d => d.getFullYear()))];
+      const hol = await window.HolidayRules.fetchJapanHolidays(years);
+      let count = 0;
+      for (const d of State.windowDates){
+        const ds = dateStr(d);
+        if (hol.has(ds)){
+          if (!State.holidaySet.has(ds)) count++;
+          State.holidaySet.add(ds);
+        }
+      }
+      renderGrid();
+      showToast(`祝日を反映しました：${count}日`);
+    }catch(e){
+      console.error(e);
+      showToast('祝日の取得に失敗しました（ネットワークやCORSをご確認ください）');
+    }
+  };
+  
+  window.completeCancelAll = completeCancelAll;
+  window.completeCancelOneCell = completeCancelOneCell;
+  window.saveWindow = saveWindow;
+  window.pushToRemote = pushToRemote;
+  window.openAttrDialog = openAttrDialog;
+  window.readAttrDialogToState = readAttrDialogToState;
+  window.requiredOffFor28 = requiredOffFor28;
+  window.validateRollingFourWeeksWithHistory = validateRollingFourWeeksWithHistory;
+  window.State = State;
 
-
+  // === グローバル公開（cellOperations.js / autoAssignLogic.js 用） ===
+  window.isRestByDate = isRestByDate;
+  window.markToClass = markToClass;
+  window.leaveClassOf = leaveClassOf;
+  window.readDatesStore = readDatesStore;
+  window.globalGetAssign = globalGetAssign;
 
 })();
-
