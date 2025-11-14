@@ -16,7 +16,7 @@
   let modeRadios;
 
   // app.jsのグローバル変数・関数への参照（window経由）
-  let State, UndoBuf;
+  let State;
   let showToast, switchAnchor, shiftDays, renderGrid, paintRange4w;
   let autoLoadJapanHolidays, exportExcelCsv;
   let cancelChanges, makeCancelBackup, undoCancelRange;
@@ -87,8 +87,8 @@
       dateStr = window.App?.Dates?.dateStr;
       addDays = window.App?.Dates?.addDays;
 
-      // UndoBufはapp.jsで管理されているグローバル変数
-      // window.UndoBuf として参照
+    // UndoBufはapp.jsで管理されているグローバル変数（window.UndoBuf）
+     
 
       // イベントリスナーの登録
       setupMonthNavigation();

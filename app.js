@@ -107,7 +107,7 @@ document.addEventListener('auth:logged-in', async (ev)=>{
     assignments: new Map(),     // Map<empIndex, Map<dateStr, mark>>
     range4wStart: 0,            // 0..3（31-28=3）
     lastSaved: null,            // スナップショット
-    mode: 'off',                // 'off' | 'assign'
+    mode: null,                 // null | 'off' | 'assign'
     leaveMode: null,            // null | '祝'|'代'|'年'|'リ'
     manualOverride: false,      // 手動割当（上書き）トグル
     lockedCells: new Set(),     // Set<"row|YYYY-MM-DD">：自動割当の上書き対象外
@@ -1296,6 +1296,7 @@ window.clearAssign = clearAssign; // ★追加
   // ---- ドラッグで日単位スクロール ----
   function dragDayNavigation(el){
     let down = false, sx = 0, moved = false, downTarget = null;
+    let lastShiftedDays = 0; // ドラッグ中に既に移動した日数を記録
 
     el.addEventListener('pointerdown', (e)=>{
       if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -1303,12 +1304,31 @@ window.clearAssign = clearAssign; // ★追加
       sx = e.clientX;
       moved = false;
       downTarget = e.target;
+      lastShiftedDays = 0; // リセット
       el.setPointerCapture(e.pointerId);
     });
 
     el.addEventListener('pointermove', (e)=>{
       if (!down) return;
-      if (Math.abs(e.clientX - sx) > 6) moved = true;
+      const dx = e.clientX - sx;
+      
+      // 一定以上動いたらmovedフラグを立てる
+      if (Math.abs(dx) > 6) moved = true;
+      
+      // リアルタイムスクロール：一定距離ごとに日付を移動
+      const firstTh = grid.querySelector('thead th[data-day="0"]');
+      const cellW = firstTh ? firstTh.getBoundingClientRect().width : 56;
+      const days = -Math.round(dx / (cellW * 0.7));
+      
+      // 前回の移動から変化があれば日付を変更
+      if (days !== 0 && days !== lastShiftedDays) {
+        const deltaDays = days - lastShiftedDays;
+        shiftDays(deltaDays);
+        lastShiftedDays = days;
+        // 基準点を更新（連続ドラッグに対応）
+        sx = e.clientX;
+        lastShiftedDays = 0;
+      }
     });
 
     el.addEventListener('pointerup', (e)=>{
@@ -1324,14 +1344,10 @@ window.clearAssign = clearAssign; // ★追加
         return;
       }
 
-      const dx = e.clientX - sx;
-      const firstTh = grid.querySelector('thead th[data-day="0"]');
-      const cellW = firstTh ? firstTh.getBoundingClientRect().width : 56;
-      const days = -Math.round(dx / (cellW * 0.7));
-      if (days !== 0) shiftDays(days);
-
+      // pointerup時の追加移動は不要（pointermoveで処理済み）
       down = false;
       downTarget = null;
+      lastShiftedDays = 0;
     });
   }
 
