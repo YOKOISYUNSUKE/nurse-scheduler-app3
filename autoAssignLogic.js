@@ -141,6 +141,16 @@
     return true;
   }
 
+  // ★追加：配列をシャッフルする関数（Fisher-Yatesアルゴリズム）
+  function shuffleArray(arr){
+    const result = [...arr];
+    for (let i = result.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+  }
+
   function fillWith(dayIdx, deficit, marks, preferA){
     let placed = 0;
     for (const mark of marks){
@@ -155,21 +165,27 @@
           if (!preferA) return arr;
           const a = [], non = [];
           arr.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? a : non).push(r));
-          return a.concat(non);
+          // ★追加：A・非Aそれぞれをシャッフル
+          return shuffleArray(a).concat(shuffleArray(non));
         };
 
         if (preferA){
           const nightA = [], nightNon = [], othersA = [], othersNon = [];
           night.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? nightA : nightNon).push(r));
           others.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? othersA : othersNon).push(r));
-          cand = nightA.concat(othersA, nightNon, othersNon);
+          // ★追加：各グループをシャッフル
+          cand = shuffleArray(nightA).concat(shuffleArray(othersA), shuffleArray(nightNon), shuffleArray(othersNon));
         } else {
           cand = applyAHead(night).concat(applyAHead(others));
         }
       } else if (preferA){
         const a = [], non = [];
         cand.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? a : non).push(r));
-        cand = a.concat(non);
+        // ★追加：A・非Aそれぞれをシャッフル
+        cand = shuffleArray(a).concat(shuffleArray(non));
+      } else {
+        // ★追加：preferAがfalseの場合もシャッフル
+        cand = shuffleArray(cand);
       }
 
       for (const r of cand){
@@ -218,10 +234,9 @@
     }
     return false;
   }
-
   function fillDayShift(dayIdx){
     const ds = dateStr(State.windowDates[dayIdx]);
-    const cand = [];
+    let cand = [];  // ★ const から let に変更
     for(let r=0; r<State.employeeCount; r++){
       if (getAssign(r, ds)) continue;
       if (isRestByDate(r, ds)) continue;
@@ -248,6 +263,23 @@
         return c;
       };
       cand.sort((a, b) => whCount(a) - whCount(b));
+      // ★追加：同じカウントの人たちをシャッフル（公平性を保ちつつランダム性向上）
+      let i = 0;
+      while (i < cand.length) {
+        const count = whCount(cand[i]);
+        let j = i;
+        while (j < cand.length && whCount(cand[j]) === count) j++;
+        // i から j-1 までが同じカウント → この範囲をシャッフル
+        const sameCountGroup = cand.slice(i, j);
+        const shuffled = shuffleArray(sameCountGroup);
+        for (let k = 0; k < shuffled.length; k++) {
+          cand[i + k] = shuffled[k];
+        }
+        i = j;
+      }
+    } else {
+      // ★修正：平日の場合は新しい配列を生成して代入
+      cand = shuffleArray(cand);
     }
     return (need)=>{
       let placed=0;
