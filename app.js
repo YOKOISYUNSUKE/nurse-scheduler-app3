@@ -744,7 +744,57 @@ ensureEmployees();
     State.fullCancelCellMode = false;
     showToast('1セルを完全キャンセルしました');
   }
-
+  // ★追加：セルクリア処理（希望休 or 割り当て）
+  function handleClearCell(r, dayIdx, td){
+    const ds = dateStr(State.windowDates[dayIdx]);
+    
+    if (State.clearCellMode === 'off'){
+      // 希望休をクリア
+      const s = State.offRequests.get(r);
+      if (s && s.has(ds)){
+        s.delete(ds);
+        if (s.size === 0) State.offRequests.delete(r);
+        td.classList.remove('off');
+        td.textContent = '';
+        updateFooterCounts();
+        showToast('希望休をクリアしました');
+      } else {
+        showToast('このセルには希望休が設定されていません');
+      }
+    } else if (State.clearCellMode === 'assign'){
+      // 割り当てをクリア
+      const mk = getAssign(r, ds);
+      if (mk){
+        const wasNightThrough = (mk === '☆');
+        clearAssign(r, ds);
+        td.textContent = '';
+        
+        // ☆だった場合は翌日の★も削除
+        if (wasNightThrough){
+          const nextIndex = dayIdx + 1;
+          if (nextIndex < State.windowDates.length){
+            const nds = dateStr(State.windowDates[nextIndex]);
+            if (getAssign(r, nds) === '★'){
+              clearAssign(r, nds);
+              setLocked(r, nds, false);
+              const nextCell = grid.querySelector(`td[data-row="${r}"][data-day="${nextIndex}"]`);
+              if (nextCell){
+                nextCell.classList.remove('locked');
+                nextCell.textContent = '';
+              }
+            }
+          }
+        }
+        
+        updateFooterCounts();
+        showToast('割り当てをクリアしました');
+      } else {
+        showToast('このセルには割り当てがありません');
+      }
+    }
+    
+    State.clearCellMode = null;
+  }
 
 
   // ★追加：直前キャンセルのための一時バッファ
@@ -1021,11 +1071,14 @@ function updateRange4wLabel(){
         }
 
         td.addEventListener('click', () => {
-          // 完全キャンセル（1セル）モード優先
-          if (State.fullCancelCellMode){
-            completeCancelOneCell(r, d, td);
+           // セルクリアモード優先
+         if (State.clearCellMode){
+            handleClearCell(r, d, td);
             return;
           }
+
+
+
 
           // 範囲ロックモードが有効なら先に処理
           if (maybeHandleRangeLock(r, d)) return;

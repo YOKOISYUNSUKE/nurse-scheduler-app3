@@ -42,6 +42,27 @@
   }
   function dateStr(d){ const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 
+// ★新規追加：指定日の夜勤専従カウント（NF帯 or NS帯）
+  function countNightOnlyWorkers(p, dayIndex, band) {
+    const ds = dateStr(p.dates[dayIndex]);
+    let count = 0;
+    
+    for(let r = 0; r < p.employeeCount; r++){
+      const wt = (typeof p.getWorkType === 'function') ? (p.getWorkType(r) || 'three') : 'three';
+      if (wt !== 'night') continue; // 夜勤専従のみカウント
+      
+      let mk = p.getAssign(r, ds);
+      // 仮置きを反映
+      if (r === p.rowIndex) mk = p.mark;
+      
+      if (band === 'NF' && (mk === '☆' || mk === '◆')) count++;
+      if (band === 'NS' && (mk === '★' || mk === '●')) count++;
+    }
+    
+    return count;
+  }
+
+
   // ---- 置く前の「組合せ」上限チェック（過剰防止） ----
   /**
    * @param {Object} p
@@ -59,6 +80,34 @@ function precheckPlace(p){
   const wt = (typeof p.getWorkType === 'function') ? (p.getWorkType(p.rowIndex) || 'three') : 'three';
   const pairGapMinDays = (wt === 'night') ? 0 : 3;
   const idxDiffMin = pairGapMinDays + 1;
+
+// ★新規：同一日の夜勤専従は最大2名まで（NF帯・NS帯それぞれ）
+  if (wt === 'night') {
+    if (p.mark === '☆' || p.mark === '◆') {
+      const currentCount = countNightOnlyWorkers(p, d, 'NF');
+      if (currentCount >= 2) {
+        return { ok: false, message: '同一日のNF帯（☆＋◆）に夜勤専従は最大2名までです' };
+      }
+    }
+    if (p.mark === '★' || p.mark === '●') {
+      const currentCount = countNightOnlyWorkers(p, d, 'NS');
+      if (currentCount >= 2) {
+        return { ok: false, message: '同一日のNS帯（★＋●）に夜勤専従は最大2名までです' };
+      }
+    }
+    // ☆の場合は翌日の★も考慮
+    if (p.mark === '☆' && dsNext) {
+      const nextIndex = d + 1;
+      if (nextIndex < p.dates.length) {
+        const nextCount = countNightOnlyWorkers(p, nextIndex, 'NS');
+        if (nextCount >= 2) {
+          return { ok: false, message: '翌日のNS帯（★＋●）に夜勤専従が既に2名いるため、☆を配置できません' };
+        }
+      }
+    }
+  }
+
+
 
   // ★新規：逆順抑止（夜専を除く）— 前日が「★」なら当日の「☆」は不可
   if (p.mark === '☆' && wt !== 'night'){
@@ -486,25 +535,71 @@ if (p.mark==='☆'){
           }
         }
       }
+// ★新規：同一日の夜勤専従は最大2名まで（NF帯・NS帯それぞれ）
+      const nightOnlyNF = countNightOnlyWorkers({ 
+        dates: p.dates, 
+        employeeCount: p.employeeCount,
+        getAssign: p.getAssign,
+        getWorkType: p.getWorkType
+      }, d, 'NF');
+      
+      const nightOnlyNS = countNightOnlyWorkers({ 
+        dates: p.dates, 
+        employeeCount: p.employeeCount,
+        getAssign: p.getAssign,
+        getWorkType: p.getWorkType
+      }, d, 'NS');
+
+      if (nightOnlyNF > 2) {
+        errors.push({ dayIndex: d, type: 'NIGHT_ONLY_NF_MAX2', expected: '<=2', actual: nightOnlyNF });
+      }
+      if (nightOnlyNS > 2) {
+        errors.push({ dayIndex: d, type: 'NIGHT_ONLY_NS_MAX2', expected: '<=2', actual: nightOnlyNS });
+      }
 
 
 
 
-
-      // 各帯にレベルAが必ず存在（〇帯 / NF帯 / NS帯）
+      // 各帯にレベルAが必ず存在 & 夜勤専従のみの帯を禁止（〇帯 / NF帯 / NS帯）
       let hasADay=false, hasANf=false, hasANs=false;
+      let hasNonNightDay=false, hasNonNightNf=false, hasNonNightNs=false;
+      let countDay=0, countNf=0, countNs=0;
+      
       for (let r=0; r<p.employeeCount; r++){
         const mk = p.getAssign(r, ds);
         const lv = (typeof p.getLevel === 'function') ? p.getLevel(r) : 'B';
+        const wt = (typeof p.getWorkType === 'function') ? p.getWorkType(r) : 'three';
         const isA = (lv === 'A');
+        const isNonNight = (wt !== 'night');
+        
         if (!mk) continue;
-        if (mk === '〇' && isA) hasADay = true;
-        if ((mk === '☆' || mk === '◆') && isA) hasANf = true;
-        if ((mk === '★' || mk === '●') && isA) hasANs = true;
+        
+        if (mk === '〇'){
+          countDay++;
+          if (isA) hasADay = true;
+          if (isNonNight) hasNonNightDay = true;
+        }
+        if (mk === '☆' || mk === '◆'){
+          countNf++;
+          if (isA) hasANf = true;
+          if (isNonNight) hasNonNightNf = true;
+        }
+        if (mk === '★' || mk === '●'){
+          countNs++;
+          if (isA) hasANs = true;
+          if (isNonNight) hasNonNightNs = true;
+        }
       }
-      if (!hasADay) errors.push({ dayIndex:d, type:'A_DAY', expected:'>=1', actual:0 });
-      if (!hasANf)  errors.push({ dayIndex:d, type:'A_NF',  expected:'>=1', actual:0 });
-      if (!hasANs)  errors.push({ dayIndex:d, type:'A_NS',  expected:'>=1', actual:0 });
+      
+      // Aレベル必須チェック（人が配置されている帯のみ）
+      if (countDay > 0 && !hasADay) errors.push({ dayIndex:d, type:'A_DAY', expected:'>=1', actual:0 });
+      if (countNf > 0 && !hasANf)  errors.push({ dayIndex:d, type:'A_NF',  expected:'>=1', actual:0 });
+      if (countNs > 0 && !hasANs)  errors.push({ dayIndex:d, type:'A_NS',  expected:'>=1', actual:0 });
+      
+      // 夜勤専従のみの帯を禁止（各帯に最低1人は非夜勤専従が必要）（人が配置されている帯のみ）
+      if (countDay > 0 && !hasNonNightDay) errors.push({ dayIndex:d, type:'NEED_NON_NIGHT_DAY', expected:'>=1 non-night', actual:0 });
+      if (countNf > 0 && !hasNonNightNf)  errors.push({ dayIndex:d, type:'NEED_NON_NIGHT_NF',  expected:'>=1 non-night', actual:0 });
+      if (countNs > 0 && !hasNonNightNs)  errors.push({ dayIndex:d, type:'NEED_NON_NIGHT_NS',  expected:'>=1 non-night', actual:0 });
     }
 
    // ★追加：帯内の禁止組成「A・C・夜勤専従」の同席（NF/NS）を日ごとに検証

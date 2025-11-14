@@ -10,10 +10,11 @@
   let btnJumpMonth, monthPicker, btnPrevDay, btnNextDay, btnHolidayAuto;
   let btnAutoAssign, btnCancel, btnFullCancel, btnUndo, btnSave;
   let btnExportExcel, btnLogout, btnLockRange, btnUnlockRange;
-  let fullCancelDlg, fullCancelAllBtn, fullCancelCellBtn, fullCancelCloseBtn;
+  let fullCancelDlg, fullCancelAllBtn, fullCancelCloseBtn;
   let btnLeaveHoliday, btnLeaveSub, btnLeavePaid, btnLeaveRefresh;
   let btnAttrOpen, attrDlg, attrSave, attrClose;
   let modeRadios;
+  let btnClearOffCell, btnClearAssignCell;
 
   // app.jsのグローバル変数・関数への参照（window経由）
   let State;
@@ -47,7 +48,6 @@
       
       fullCancelDlg = document.getElementById('fullCancelDlg');
       fullCancelAllBtn = document.getElementById('fullCancelAll');
-      fullCancelCellBtn = document.getElementById('fullCancelCell');
       fullCancelCloseBtn = document.getElementById('fullCancelClose');
       
       btnLeaveHoliday = document.getElementById('btnLeaveHoliday');
@@ -59,7 +59,9 @@
       attrDlg = document.getElementById('attrDlg');
       attrSave = document.getElementById('attrSave');
       attrClose = document.getElementById('attrClose');
-      
+            
+      btnClearOffCell = document.getElementById('btnClearOffCell');
+      btnClearAssignCell = document.getElementById('btnClearAssignCell');
       modeRadios = Array.from(document.querySelectorAll('input[name="mode"]'));
 
       // app.jsのグローバル関数・変数を取得
@@ -103,6 +105,7 @@
       setupModeRadios();
       setupLeaveButtons();
       setupAttrDialog();
+      setupClearCellButtons();
       setupEscapeKey();
     }
   };
@@ -208,41 +211,32 @@
       });
     }
 
-    // 完全キャンセル（ダイアログ表示）
-    if (btnFullCancel) {
-      btnFullCancel.addEventListener('click', () => {
-        if (!fullCancelDlg) return;
-        if (typeof fullCancelDlg.showModal === 'function') {
-          fullCancelDlg.showModal();
-        } else {
-          fullCancelDlg.show();
-        }
-      });
+// 完全クリア（ダイアログ表示）
+if (btnFullCancel) {
+  btnFullCancel.addEventListener('click', () => {
+    if (!fullCancelDlg) return;
+    if (typeof fullCancelDlg.showModal === 'function') {
+      fullCancelDlg.showModal();
+    } else {
+      fullCancelDlg.show();
     }
+  });
+}
 
-    // ダイアログ内ボタン：全体完全キャンセル
-    if (fullCancelAllBtn) {
-      fullCancelAllBtn.addEventListener('click', () => {
-        completeCancelAll();
-        if (fullCancelDlg) fullCancelDlg.close();
-      });
-    }
+// ダイアログ内ボタン：全体完全クリア実行
+if (fullCancelAllBtn) {
+  fullCancelAllBtn.addEventListener('click', () => {
+    completeCancelAll();
+    if (fullCancelDlg) fullCancelDlg.close();
+  });
+}
 
-    // ダイアログ内ボタン：1セル完全キャンセルモード
-    if (fullCancelCellBtn) {
-      fullCancelCellBtn.addEventListener('click', () => {
-        State.fullCancelCellMode = true;
-        showToast('完全キャンセル（1セル）：対象セルをクリック（Escで解除）');
-        if (fullCancelDlg) fullCancelDlg.close();
-      });
-    }
-
-    // ダイアログ内ボタン：閉じる
-    if (fullCancelCloseBtn) {
-      fullCancelCloseBtn.addEventListener('click', () => {
-        if (fullCancelDlg) fullCancelDlg.close();
-      });
-    }
+// ダイアログ内ボタン：閉じる
+if (fullCancelCloseBtn) {
+  fullCancelCloseBtn.addEventListener('click', () => {
+    if (fullCancelDlg) fullCancelDlg.close();
+  });
+}
   }
 
   // === 保存ボタン ===
@@ -276,6 +270,11 @@
             e.type === 'A_DAY' ? '〇のA' :
             e.type === 'A_NF' ? '（☆＋◆）のA' :
             e.type === 'A_NS' ? '（★＋●）のA' :
+            e.type === 'NEED_NON_NIGHT_DAY' ? '〇帯の非夜勤専従' :
+            e.type === 'NEED_NON_NIGHT_NF' ? '（☆＋◆）帯の非夜勤専従' :
+            e.type === 'NEED_NON_NIGHT_NS' ? '（★＋●）帯の非夜勤専従' :
+            e.type === 'NIGHT_ONLY_NF_MAX2' ? 'NF帯の夜勤専従人数' :  // ★追加
+            e.type === 'NIGHT_ONLY_NS_MAX2' ? 'NS帯の夜勤専従人数' :  // ★追加
             e.type === 'WT_DAY_ONLY' ? '日勤専従の勤務形態違反' :
             e.type === 'WT_NIGHT_ONLY' ? '夜勤専従の勤務形態違反' :
             e.type === 'DAY_STREAK_GT5' ? '〇連続' :
@@ -475,6 +474,24 @@
     bindLeaveBtn(btnLeaveRefresh, 'リ');
   }
 
+  // === セルクリアボタン ===
+  function setupClearCellButtons() {
+    // 希望休のセルクリア
+    if (btnClearOffCell) {
+      btnClearOffCell.addEventListener('click', () => {
+        State.clearCellMode = 'off';
+        showToast('希望休クリア：対象セルをクリック（Escで解除）');
+      });
+    }
+
+    // 割り当てのセルクリア
+    if (btnClearAssignCell) {
+      btnClearAssignCell.addEventListener('click', () => {
+        State.clearCellMode = 'assign';
+        showToast('割り当てクリア：対象セルをクリック（Escで解除）');
+      });
+    }
+  }
   // === 従業員編集ダイアログ ===
   function setupAttrDialog() {
     if (btnAttrOpen) {
@@ -501,9 +518,9 @@
   // === Escキー処理 ===
   function setupEscapeKey() {
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && State.fullCancelCellMode) {
-        State.fullCancelCellMode = false;
-        showToast('完全キャンセル（1セル）を終了しました');
+      if (e.key === 'Escape' && State.clearCellMode) {
+        State.clearCellMode = null;
+        showToast('セルクリアモードを終了しました');
       }
     });
   }

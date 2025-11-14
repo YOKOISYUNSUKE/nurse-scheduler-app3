@@ -112,7 +112,12 @@ html, body { height: 100%; }                 /* ビューポート基準を安�
 .btn-outline{ background:#fff; color:var(--text); }
 .btn-danger{ background:var(--danger); border-color:transparent; color:#fff; }
 .btn:focus-visible{ outline:3px solid rgba(37,99,235,.35); outline-offset:2px; }
-
+/* 小さいボタン（セルクリア用） */
+.btn-sm {
+  padding: 2px 8px;
+  font-size: 0.85em;
+  margin-left: 4px;
+}
 /* Ripple（クリック感強化） */
 .btn .ripple{ position:absolute; border-radius:999px; transform:scale(0); opacity:.45; pointer-events:none;
   background:currentColor; mix-blend-mode:multiply; animation:ripple .6s ease-out; }

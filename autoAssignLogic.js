@@ -157,6 +157,32 @@
       if (deficit <= 0) break;
       let cand = candidatesFor(dayIdx, mark);
 
+      if (mark === '☆' || mark === '◆' || mark === '★' || mark === '●') {
+        const ds = dateStr(State.windowDates[dayIdx]);
+        const band = (mark === '☆' || mark === '◆') ? 'NF' : 'NS';
+        
+        // 現在の夜勤専従人数をカウント
+        let nightOnlyCount = 0;
+        for(let r = 0; r < State.employeeCount; r++){
+          const wt = (State.employeesAttr[r]?.workType) || 'three';
+          if (wt !== 'night') continue;
+          
+          const mk = getAssign(r, ds);
+          if (band === 'NF' && (mk === '☆' || mk === '◆')) nightOnlyCount++;
+          if (band === 'NS' && (mk === '★' || mk === '●')) nightOnlyCount++;
+        }
+        
+        // 既に2名いる場合は夜勤専従を候補から除外
+        if (nightOnlyCount >= 2) {
+          cand = cand.filter(r => {
+            const wt = (State.employeesAttr[r]?.workType) || 'three';
+            return wt !== 'night';
+          });
+        }
+      }
+
+
+
       if (mark === '☆' || mark === '★'){
         const night = [], others = [];
         cand.forEach(r => (((State.employeesAttr[r]?.workType)||'three') === 'night' ? night : others).push(r));
