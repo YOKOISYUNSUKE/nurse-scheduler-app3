@@ -982,7 +982,8 @@ function updateRange4wLabel(){
 
     const s = State.windowDates[0];
     const e = State.windowDates[30];
-    const fname = `勤務表_${s.getFullYear()}${pad2(s.getMonth()+1)}....getFullYear()}${pad2(e.getMonth()+1)}${pad2(e.getDate())}.csv`;
+    const fname = `勤務表_${s.getFullYear()}${pad2(s.getMonth()+1)}${pad2(s.getDate())}_${e.getFullYear()}${pad2(e.getMonth()+1)}${pad2(e.getDate())}.csv`;
+
 
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
