@@ -181,8 +181,6 @@
         }
       }
 
-
-
       if (mark === '☆' || mark === '★'){
         const night = [], others = [];
         cand.forEach(r => (((State.employeesAttr[r]?.workType)||'three') === 'night' ? night : others).push(r));
@@ -260,9 +258,10 @@
     }
     return false;
   }
+
   function fillDayShift(dayIdx){
     const ds = dateStr(State.windowDates[dayIdx]);
-    let cand = [];  // ★ const から let に変更
+    let cand = [];
     for(let r=0; r<State.employeeCount; r++){
       if (getAssign(r, ds)) continue;
       if (isRestByDate(r, ds)) continue;
@@ -295,7 +294,6 @@
         const count = whCount(cand[i]);
         let j = i;
         while (j < cand.length && whCount(cand[j]) === count) j++;
-        // i から j-1 までが同じカウント → この範囲をシャッフル
         const sameCountGroup = cand.slice(i, j);
         const shuffled = shuffleArray(sameCountGroup);
         for (let k = 0; k < shuffled.length; k++) {
@@ -304,7 +302,6 @@
         i = j;
       }
     } else {
-      // ★修正：平日の場合は新しい配列を生成して代入
       cand = shuffleArray(cand);
     }
     return (need)=>{
@@ -415,6 +412,139 @@
     if (typeof updateFooterCounts==='function') updateFooterCounts();
   }
 
+  // ★★★ 人数を厳格化する関数 ★★★
+  function enforceExactCount(dayIdx, targetNF, targetNS) {
+    const ds = dateStr(State.windowDates[dayIdx]);
+    
+    // NF帯（☆＋◆）の調整
+    const nfRows = [];
+    for (let r = 0; r < State.employeeCount; r++) {
+      const mk = getAssign(r, ds);
+      if (mk === '☆' || mk === '◆') {
+        nfRows.push({
+          r,
+          mark: mk,
+          isA: (State.employeesAttr[r]?.level) === 'A',
+          isLocked: isLocked(r, ds),
+          hasNextLock: (mk === '☆' && dayIdx + 1 < State.windowDates.length) 
+            ? isLocked(r, dateStr(State.windowDates[dayIdx + 1])) 
+            : false
+        });
+      }
+    }
+    
+    // NF帯の超過分を削除（ロックされていない非Aから優先）
+    while (nfRows.length > targetNF) {
+      let removed = false;
+      
+      // 1. ロックされていない非Aの◆から削除
+      for (let i = nfRows.length - 1; i >= 0; i--) {
+        if (!nfRows[i].isLocked && !nfRows[i].isA && nfRows[i].mark === '◆') {
+          clearAssign(nfRows[i].r, ds);
+          nfRows.splice(i, 1);
+          removed = true;
+          break;
+        }
+      }
+      if (removed) continue;
+      
+      // 2. ロックされていない非Aの☆から削除（翌日も削除）
+      for (let i = nfRows.length - 1; i >= 0; i--) {
+        if (!nfRows[i].isLocked && !nfRows[i].hasNextLock && !nfRows[i].isA && nfRows[i].mark === '☆') {
+          clearAssign(nfRows[i].r, ds);
+          if (dayIdx + 1 < State.windowDates.length) {
+            const nextDs = dateStr(State.windowDates[dayIdx + 1]);
+            if (getAssign(nfRows[i].r, nextDs) === '★') {
+              clearAssign(nfRows[i].r, nextDs);
+            }
+          }
+          nfRows.splice(i, 1);
+          removed = true;
+          break;
+        }
+      }
+      if (removed) continue;
+      
+      // 3. A職員も含めて削除（最低1名のAは残す）
+      const aCount = nfRows.filter(x => x.isA).length;
+      for (let i = nfRows.length - 1; i >= 0; i--) {
+        if (!nfRows[i].isLocked && (!nfRows[i].isA || aCount > 1)) {
+          clearAssign(nfRows[i].r, ds);
+          if (nfRows[i].mark === '☆' && dayIdx + 1 < State.windowDates.length) {
+            const nextDs = dateStr(State.windowDates[dayIdx + 1]);
+            if (getAssign(nfRows[i].r, nextDs) === '★') {
+              clearAssign(nfRows[i].r, nextDs);
+            }
+          }
+          nfRows.splice(i, 1);
+          removed = true;
+          break;
+        }
+      }
+      
+      if (!removed) break;
+    }
+    
+    // NS帯（★＋●）の調整
+    const nsRows = [];
+    for (let r = 0; r < State.employeeCount; r++) {
+      const mk = getAssign(r, ds);
+      if (mk === '★' || mk === '●') {
+        nsRows.push({
+          r,
+          mark: mk,
+          isA: (State.employeesAttr[r]?.level) === 'A',
+          isLocked: isLocked(r, ds),
+          hasPrevStar: (mk === '★' && dayIdx > 0) 
+            ? getAssign(r, dateStr(State.windowDates[dayIdx - 1])) === '☆' 
+            : false
+        });
+      }
+    }
+    
+    // NS帯の超過分を削除
+    while (nsRows.length > targetNS) {
+      let removed = false;
+      
+      // 1. ロックされていない非Aの●から削除
+      for (let i = nsRows.length - 1; i >= 0; i--) {
+        if (!nsRows[i].isLocked && !nsRows[i].isA && nsRows[i].mark === '●') {
+          clearAssign(nsRows[i].r, ds);
+          nsRows.splice(i, 1);
+          removed = true;
+          break;
+        }
+      }
+      if (removed) continue;
+      
+      // 2. ロックされていない非Aの★から削除（前日の☆も確認）
+      for (let i = nsRows.length - 1; i >= 0; i--) {
+        if (!nsRows[i].isLocked && !nsRows[i].isA && nsRows[i].mark === '★' && !nsRows[i].hasPrevStar) {
+          clearAssign(nsRows[i].r, ds);
+          nsRows.splice(i, 1);
+          removed = true;
+          break;
+        }
+      }
+      if (removed) continue;
+      
+      // 3. A職員も含めて削除（最低1名のAは残す）
+      const aCount = nsRows.filter(x => x.isA).length;
+      for (let i = nsRows.length - 1; i >= 0; i--) {
+        if (!nsRows[i].isLocked && (!nsRows[i].isA || aCount > 1)) {
+          clearAssign(nsRows[i].r, ds);
+          nsRows.splice(i, 1);
+          removed = true;
+          break;
+        }
+      }
+      
+      if (!removed) break;
+    }
+    
+    if (typeof updateFooterCounts === 'function') updateFooterCounts();
+  }
+
   function nightQuotasOK(startIdx, endIdx){
     return (window.NightBand && window.NightBand.nightQuotasOK)
       ? window.NightBand.nightQuotasOK(nbCtx(), startIdx, endIdx)
@@ -515,18 +645,24 @@
 
   // === メイン自動割当関数 ===
   function autoAssignRange(startDayIdx, endDayIdx){
+  const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
+  const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
     for (let sweep=0; sweep<3; sweep++){
       let changed = false;
       for(let d=startDayIdx; d<=endDayIdx; d++){
         let { nf, ns, hasANf, hasANs } = countDayStats(d);
 
-        const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
-        const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
-
         if (nf < FIXED_NF){
           const before = nf;
           fillWith(d, FIXED_NF - nf, ['☆','◆'], !hasANf);
           nf = countDayStats(d).nf;
+          
+          // ★追加：超過分を厳格に削除
+          if (nf > FIXED_NF) {
+            enforceExactCount(d, FIXED_NF, FIXED_NS);
+            nf = countDayStats(d).nf;
+          }
+          
           if (nf !== before) changed = true;
         }
 
@@ -534,6 +670,13 @@
           const before = ns;
           fillWith(d, FIXED_NS - ns, ['★','●'], !hasANs);
           ns = countDayStats(d).ns;
+          
+          // ★追加：超過分を厳格に削除
+          if (ns > FIXED_NS) {
+            enforceExactCount(d, FIXED_NF, FIXED_NS);
+            ns = countDayStats(d).ns;
+          }
+          
           if (ns !== before) changed = true;
         }
       }
@@ -543,10 +686,9 @@
     if (!nightQuotasOK(startDayIdx, endDayIdx)){
       for(let d=startDayIdx; d<=endDayIdx; d++){
         let { nf, ns } = countDayStats(d);
-        const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
-        const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
-        if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], true);
+               if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], true);
         if (ns < FIXED_NS) fillWith(d, FIXED_NS - ns, ['★','●'], true);
+        enforceExactCount(d, FIXED_NF, FIXED_NS);
       }
     }
 
@@ -566,6 +708,12 @@
           if (tryPlace(d, r, '☆')) need--;
         }
       }
+
+    for(let d=startDayIdx; d<=endDayIdx; d++){
+      enforceExactCount(d, FIXED_NF, FIXED_NS);
+    }
+
+
     })();
 
     (function enforceANightBands(){
@@ -646,6 +794,8 @@
             }
           }
         }
+        enforceExactCount(d, FIXED_NF, FIXED_NS)
+
       }
     })();
 
@@ -676,6 +826,13 @@
 
     if (typeof ensureRenkyuMin2 === 'function'){
       ensureRenkyuMin2(startDayIdx, endDayIdx);
+     }
+  
+     // ★★★ 追加：最終チェック：全日程で厳格化を再実行 ★★★
+     for(let d=startDayIdx; d<=endDayIdx; d++){
+       enforceExactCount(d, FIXED_NF, FIXED_NS);
+
+
     }
   }
 
