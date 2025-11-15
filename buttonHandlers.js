@@ -105,7 +105,6 @@
       setupModeRadios();
       setupLeaveButtons();
       setupAttrDialog();
-      setupClearCellButtons();
       setupEscapeKey();
     }
   };
@@ -446,16 +445,21 @@ if (fullCancelCloseBtn) {
     });
   }
 
-  // === モード切替ラジオボタン ===
-  function setupModeRadios() {
-    modeRadios.forEach(r => {
-      r.addEventListener('change', () => {
-        State.mode = modeRadios.find(x => x.checked).value;
-        State.leaveMode = null; // 特別休暇モード解除
-        showToast(State.mode === 'off' ? '希望休モード' : '割当モード');
-      });
+// === モード切替ラジオボタン ===
+function setupModeRadios() {
+  modeRadios.forEach(r => {
+    r.addEventListener('change', () => {
+      State.mode = modeRadios.find(x => x.checked).value;
+      State.leaveMode = null; // 特別休暇モード解除
+      const label = 
+        State.mode === 'off' ? '希望休モード' : 
+        State.mode === 'assign' ? '割当モード' : 
+        State.mode === 'clear' ? 'クリアモード（セルをクリックで消去）' :
+        'モード切替';
+      showToast(label);
     });
-  }
+  });
+}
 
   // === 特別休暇ボタン ===
   function setupLeaveButtons() {
@@ -474,24 +478,7 @@ if (fullCancelCloseBtn) {
     bindLeaveBtn(btnLeaveRefresh, 'リ');
   }
 
-  // === セルクリアボタン ===
-  function setupClearCellButtons() {
-    // 希望休のセルクリア
-    if (btnClearOffCell) {
-      btnClearOffCell.addEventListener('click', () => {
-        State.clearCellMode = 'off';
-        showToast('希望休クリア：対象セルをクリック（Escで解除）');
-      });
-    }
 
-    // 割り当てのセルクリア
-    if (btnClearAssignCell) {
-      btnClearAssignCell.addEventListener('click', () => {
-        State.clearCellMode = 'assign';
-        showToast('割り当てクリア：対象セルをクリック（Escで解除）');
-      });
-    }
-  }
   // === 従業員編集ダイアログ ===
   function setupAttrDialog() {
     if (btnAttrOpen) {

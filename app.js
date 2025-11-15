@@ -741,60 +741,63 @@ ensureEmployees();
       }
     }
 
-    State.fullCancelCellMode = false;
-    showToast('1セルを完全キャンセルしました');
+  State.fullCancelCellMode = false;
+  showToast('1セルを完全キャンセルしました');
+}
+
+// ★追加：セルクリア処理（希望休・割り当て・特別休暇を一括消去）
+function handleClearCell(r, dayIdx, td){
+  const ds = dateStr(State.windowDates[dayIdx]);
+  
+  // 現在のマークを把握（☆なら翌日の★を連鎖で外す）
+  const mk = getAssign(r, ds);
+  const hadOff = hasOffByDate(r, ds);
+  const hadLeave = getLeaveType(r, ds);
+  
+  if (!mk && !hadOff && !hadLeave) {
+    showToast('このセルには何も設定されていません');
+    return;
   }
-  // ★追加：セルクリア処理（希望休 or 割り当て）
-  function handleClearCell(r, dayIdx, td){
-    const ds = dateStr(State.windowDates[dayIdx]);
-    
-    if (State.clearCellMode === 'off'){
-      // 希望休をクリア
-      const s = State.offRequests.get(r);
-      if (s && s.has(ds)){
-        s.delete(ds);
-        if (s.size === 0) State.offRequests.delete(r);
-        td.classList.remove('off');
-        td.textContent = '';
-        updateFooterCounts();
-        showToast('希望休をクリアしました');
-      } else {
-        showToast('このセルには希望休が設定されていません');
-      }
-    } else if (State.clearCellMode === 'assign'){
-      // 割り当てをクリア
-      const mk = getAssign(r, ds);
-      if (mk){
-        const wasNightThrough = (mk === '☆');
-        clearAssign(r, ds);
-        td.textContent = '';
-        
-        // ☆だった場合は翌日の★も削除
-        if (wasNightThrough){
-          const nextIndex = dayIdx + 1;
-          if (nextIndex < State.windowDates.length){
-            const nds = dateStr(State.windowDates[nextIndex]);
-            if (getAssign(r, nds) === '★'){
-              clearAssign(r, nds);
-              setLocked(r, nds, false);
-              const nextCell = grid.querySelector(`td[data-row="${r}"][data-day="${nextIndex}"]`);
-              if (nextCell){
-                nextCell.classList.remove('locked');
-                nextCell.textContent = '';
-              }
-            }
-          }
+
+  // 割当・特別休暇・希望休を一括クリア
+  clearAssign(r, ds);
+  clearLeaveType(r, ds);
+  const s = State.offRequests.get(r);
+  if (s) {
+    s.delete(ds);
+    if (s.size === 0) State.offRequests.delete(r);
+  }
+  
+  // ロックも解除
+  setLocked(r, ds, false);
+
+  // 表示リフレッシュ（当日セル）
+  td.classList.remove('off', 'locked');
+  td.textContent = '';
+  updateFooterCounts();
+
+  // ☆だった場合のみ：翌日の★も削除
+  if (mk === '☆') {
+    const nextIndex = dayIdx + 1;
+    if (nextIndex < State.windowDates.length) {
+      const nds = dateStr(State.windowDates[nextIndex]);
+      if (getAssign(r, nds) === '★') {
+        clearAssign(r, nds);
+        setLocked(r, nds, false);
+        const nextCell = grid.querySelector(`td[data-row="${r}"][data-day="${nextIndex}"]`);
+        if (nextCell) {
+          nextCell.classList.remove('locked');
+          nextCell.textContent = '';
         }
-        
         updateFooterCounts();
-        showToast('割り当てをクリアしました');
-      } else {
-        showToast('このセルには割り当てがありません');
       }
     }
-    
-    State.clearCellMode = null;
   }
+
+  showToast('セルをクリアしました');
+}
+
+// ★追加：直前キャンセルのための一時バッファ
 
 
   // ★追加：直前キャンセルのための一時バッファ
@@ -1070,32 +1073,29 @@ function updateRange4wLabel(){
           td.classList.add('locked');
         }
 
-        td.addEventListener('click', () => {
-           // セルクリアモード優先
-         if (State.clearCellMode){
-            handleClearCell(r, d, td);
-            return;
-          }
+td.addEventListener('click', () => {
+  // 範囲ロックモードが有効なら先に処理
+  if (maybeHandleRangeLock(r, d)) return;
 
+  // ★追加：クリアモード
+  if (State.mode === 'clear') {
+    handleClearCell(r, d, td);
+    return;
+  }
 
+  // cellOperations.js に委譲
+  if (State.leaveMode) {
+    window.CellOperations.toggleLeave(r, d, td);
+    return;
+  }
 
+  if (State.mode === 'off') {
+    window.CellOperations.toggleOff(r, d, td);
+    return;
+  }
 
-          // 範囲ロックモードが有効なら先に処理
-          if (maybeHandleRangeLock(r, d)) return;
-
-          // cellOperations.js に委譲
-          if (State.leaveMode) {
-            window.CellOperations.toggleLeave(r, d, td);
-            return;
-          }
-
-          if (State.mode === 'off') {
-            window.CellOperations.toggleOff(r, d, td);
-            return;
-          }
-
-          window.CellOperations.cycleAssign(r, d, td);
-        });
+  window.CellOperations.cycleAssign(r, d, td);
+});
 
         td.addEventListener('contextmenu', (e) => {  
           e.preventDefault();
@@ -1731,6 +1731,7 @@ function deleteEmployee(idx){
   
   window.completeCancelAll = completeCancelAll;
   window.completeCancelOneCell = completeCancelOneCell;
+  window.handleClearCell = handleClearCell; // ★追加
   window.saveWindow = saveWindow;
   window.pushToRemote = pushToRemote;
   window.openAttrDialog = openAttrDialog;
