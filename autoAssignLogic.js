@@ -302,7 +302,58 @@
         i = j;
       }
     } else {
-      cand = shuffleArray(cand);
+      // ★修正：平日も配置回数と位置の分散を考慮
+      const dayCount = (r)=>{
+        let c=0;
+        const startIdx = State.range4wStart;
+        const endIdx = State.range4wStart + 27;
+        for(let i=startIdx; i<=endIdx && i<State.windowDates.length; i++){
+          const ds2 = dateStr(State.windowDates[i]);
+          const mk2 = getAssign(r, ds2);
+          if (mk2==='〇') c++;
+        }
+        return c;
+      };
+      
+      // ★追加：最後に配置された日からの経過日数を計算
+      const daysSinceLastAssign = (r)=>{
+        const startIdx = State.range4wStart;
+        let lastAssignIdx = -1;
+        for(let i=startIdx; i<dayIdx; i++){
+          const ds2 = dateStr(State.windowDates[i]);
+          const mk2 = getAssign(r, ds2);
+          if (mk2==='〇' || mk2==='☆' || mk2==='★' || mk2==='◆' || mk2==='●') {
+            lastAssignIdx = i;
+          }
+        }
+        return lastAssignIdx === -1 ? 9999 : (dayIdx - lastAssignIdx);
+      };
+      
+      // ★ソート：配置回数が少ない順、同数なら最後の配置から遠い順
+      cand.sort((a, b) => {
+        const countDiff = dayCount(a) - dayCount(b);
+        if (countDiff !== 0) return countDiff;
+        return daysSinceLastAssign(b) - daysSinceLastAssign(a);
+      });
+      
+      // ★同じ条件の人たちをシャッフル（さらなる公平性）
+      let i = 0;
+      while (i < cand.length) {
+        const countA = dayCount(cand[i]);
+        const daysA = daysSinceLastAssign(cand[i]);
+        let j = i;
+        while (j < cand.length && 
+               dayCount(cand[j]) === countA && 
+               daysSinceLastAssign(cand[j]) === daysA) {
+          j++;
+        }
+        const sameConditionGroup = cand.slice(i, j);
+        const shuffled = shuffleArray(sameConditionGroup);
+        for (let k = 0; k < shuffled.length; k++) {
+          cand[i + k] = shuffled[k];
+        }
+        i = j;
+      }
     }
     return (need)=>{
       let placed=0;
