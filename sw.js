@@ -1,5 +1,5 @@
 // sw.js
-const VERSION = 'v2025-11-16.2';
+const VERSION = 'v2025-11-16.3';
 const STATIC_CACHE = `static-${VERSION}`;
 const ENTRY_HTML = './index.html'; // ← `!doctype (1).html` のまま使うなら './!doctype (1).html' に変更
 
