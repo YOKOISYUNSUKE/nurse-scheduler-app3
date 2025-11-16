@@ -189,7 +189,7 @@
           if (!preferA) return arr;
           const a = [], non = [];
           arr.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? a : non).push(r));
-          // ★追加：A・非Aそれぞれをシャッフル
+          // ★修正：A・非Aそれぞれをシャッフル（ランダム性向上）
           return shuffleArray(a).concat(shuffleArray(non));
         };
 
@@ -197,7 +197,7 @@
           const nightA = [], nightNon = [], othersA = [], othersNon = [];
           night.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? nightA : nightNon).push(r));
           others.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? othersA : othersNon).push(r));
-          // ★追加：各グループをシャッフル
+          // ★修正：各グループを完全シャッフル（ランダム性向上）
           cand = shuffleArray(nightA).concat(shuffleArray(othersA), shuffleArray(nightNon), shuffleArray(othersNon));
         } else {
           cand = applyAHead(night).concat(applyAHead(others));
@@ -205,7 +205,7 @@
       } else if (preferA){
         const a = [], non = [];
         cand.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? a : non).push(r));
-        // ★追加：A・非Aそれぞれをシャッフル
+        // ★修正：A・非Aそれぞれをシャッフル（ランダム性向上）
         cand = shuffleArray(a).concat(shuffleArray(non));
       } else {
         // ★追加：preferAがfalseの場合もシャッフル
@@ -738,7 +738,7 @@
         };
 
         const findAFor = (mark)=>{
-          const cand = candidatesFor(d, mark).filter(r => getLv(r) === 'A');
+          const cand = shuffleArray(candidatesFor(d, mark).filter(r => getLv(r) === 'A'));
           for (const r of cand){
             if (tryPlace(d, r, mark)) return r;
             if (mark === '★' && placePrevStar(d, r)) return r;
