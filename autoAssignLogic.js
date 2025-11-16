@@ -189,7 +189,7 @@
           if (!preferA) return arr;
           const a = [], non = [];
           arr.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? a : non).push(r));
-          // ★修正：A・非Aそれぞれをシャッフル（ランダム性向上）
+          // ★追加：A・非Aそれぞれをシャッフル
           return shuffleArray(a).concat(shuffleArray(non));
         };
 
@@ -197,7 +197,7 @@
           const nightA = [], nightNon = [], othersA = [], othersNon = [];
           night.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? nightA : nightNon).push(r));
           others.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? othersA : othersNon).push(r));
-          // ★修正：各グループを完全シャッフル（ランダム性向上）
+          // ★追加：各グループをシャッフル
           cand = shuffleArray(nightA).concat(shuffleArray(othersA), shuffleArray(nightNon), shuffleArray(othersNon));
         } else {
           cand = applyAHead(night).concat(applyAHead(others));
@@ -205,7 +205,7 @@
       } else if (preferA){
         const a = [], non = [];
         cand.forEach(r => (((State.employeesAttr[r]?.level)==='A') ? a : non).push(r));
-        // ★修正：A・非Aそれぞれをシャッフル（ランダム性向上）
+        // ★追加：A・非Aそれぞれをシャッフル
         cand = shuffleArray(a).concat(shuffleArray(non));
       } else {
         // ★追加：preferAがfalseの場合もシャッフル
@@ -692,12 +692,14 @@
       }
     }
 
+// 修正後（5行前後を含む）
     (function ensureNightToTen(){
       for (let r = 0; r < State.employeeCount; r++){
         if ((State.employeesAttr[r]?.workType) !== 'night') continue;
         const now = countLast28Days(r, State.windowDates[State.range4wStart+27]).star;
         const quota = State.employeesAttr[r]?.nightQuota || 10;
         let need = Math.max(0, quota - now);
+        
         if (need === 0) continue;
 
         for (let d = startDayIdx; d <= endDayIdx - 1 && need > 0; d++){
@@ -709,12 +711,13 @@
         }
       }
 
+// 修正後
+    })();
+
+    // ★夜勤専従配置後に人数を厳格化
     for(let d=startDayIdx; d<=endDayIdx; d++){
       enforceExactCount(d, FIXED_NF, FIXED_NS);
     }
-
-
-    })();
 
     (function enforceANightBands(){
       for (let d = startDayIdx; d <= endDayIdx; d++){
@@ -794,11 +797,21 @@
             }
           }
         }
-        enforceExactCount(d, FIXED_NF, FIXED_NS)
-
+        enforceExactCount(d, FIXED_NF, FIXED_NS);
       }
     })();
 
+    // ★その他の夜勤配置（不足分を補填）
+    (function fillRemainingNightShifts(){
+      for(let d=startDayIdx; d<=endDayIdx; d++){
+        let { nf, ns } = countDayStats(d);
+        if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], false);
+        if (ns < FIXED_NS) fillWith(d, FIXED_NS - ns, ['★','●'], false);
+        enforceExactCount(d, FIXED_NF, FIXED_NS);
+      }
+    })();
+
+    // ★最後に日勤を配置
     for(let d=startDayIdx; d<=endDayIdx; d++){
       let { day, hasADay } = countDayStats(d);
       const target = targetDayForIndex(d);
