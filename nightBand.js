@@ -58,8 +58,8 @@
     }
     if (mark === '◆' || mark === '●'){
       if (wt !== 'three') return -Infinity;
-      if (half >= 10) return -Infinity;
-      return 100 + (10 - half);
+      if (half >= 8) return -Infinity; // 三部制：4週間で◆+●≦8
+      return 100 + (8 - half);
     }
     return 0; // 〇などは対象外
   }
@@ -242,9 +242,9 @@ return { r, score: base + riskBoost + fair + pen + aBonus + jitter };
           const minQuota = Math.max(0, quota - 2); // 下限はノルマ-2
           if (star < minQuota || star > quota) return false;
         } else if (wt === 'two'){
-          if (star < 4) return false;
+          if (star < 4) return false; // 二部制：4週間で☆≦4（下限も4）
         } else { // three
-          if (half < 8) return false;
+          if (half < 8) return false; // 三部制：4週間で◆+●≦8（下限も8）
         }
       }
       return true;
