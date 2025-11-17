@@ -293,12 +293,16 @@ function precheckPlace(p){
     }
 
 
-// 当日：NF側（☆+◆）は設定の固定値「まで」
+// 当日：NF側（☆+◆）は設定の固定値「まで」（特定日設定を優先）
     if (p.mark==='☆' || p.mark==='◆'){
-      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
+      const ds = dateStr(p.dates[d]);
+      const FIXED_NF = (window.Counts && typeof window.Counts.getFixedNF === 'function')
+        ? window.Counts.getFixedNF(ds)
+        : ((window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3);
       const c = countForDay(d, p.dates, p.employeeCount, p.getAssign, {rowIndex:p.rowIndex, mark:p.mark});
       if (c.nf > FIXED_NF) return { ok:false, message:`当日の（☆＋◆）は${FIXED_NF}名までです` };
     }
+
 
     // ★追加：夜勤帯で「A・C・夜勤専従」の同席禁止（NF帯）
     if (p.mark==='☆' || p.mark==='◆'){
@@ -333,7 +337,7 @@ if (p.mark==='☆'){
       // 既に本人が翌日に★なら差分ゼロ
       const already = p.getAssign(p.rowIndex, dsNext) === '★';
       if (!already){
-        // 翌日の ns を再計算（本人に★を仮置き）
+      // 翌日の ns を再計算（本人に★を仮置き）
         let day=0, nf=0, ns=0;
         for(let r=0;r<p.employeeCount;r++){
           let mk = p.getAssign(r, dsNext);
@@ -342,8 +346,11 @@ if (p.mark==='☆'){
           if (mk==='☆' || mk==='◆') nf++;
           if (mk==='★' || mk==='●') ns++;
         }
-        const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+        const FIXED_NS = (window.Counts && typeof window.Counts.getFixedNS === 'function')
+          ? window.Counts.getFixedNS(dsNext)
+          : ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
         if (ns > FIXED_NS) return { ok:false, message:`翌日の（★＋●）が${FIXED_NS}名を超えます` };
+
       }
 
 
@@ -503,13 +510,18 @@ if (p.mark==='☆'){
       const cnt = countForDay(d, p.dates, p.employeeCount, p.getAssign);
 
       // 夜勤帯の固定値（絶対条件）：設定値に置換
-      const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
-      const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+      const FIXED_NF = (window.Counts && typeof window.Counts.getFixedNF === 'function')
+        ? window.Counts.getFixedNF(ds)
+        : ((window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3);
+      const FIXED_NS = (window.Counts && typeof window.Counts.getFixedNS === 'function')
+        ? window.Counts.getFixedNS(ds)
+        : ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
       if (cnt.nf !== FIXED_NF) errors.push({ dayIndex:d, type:'NF', expected:FIXED_NF, actual:cnt.nf });
       if (cnt.ns !== FIXED_NS) errors.push({ dayIndex:d, type:'NS', expected:FIXED_NS, actual:cnt.ns });
 
       // 追加：『〇』人数（固定＝未使用）→ 平日：最低値 / 土日祝：許容リスト
       const fx = (typeof p.getFixedDayCount === 'function') ? p.getFixedDayCount(ds) : null;
+
       if (Number.isInteger(fx)) {
         if (cnt.day !== fx) {
           errors.push({ dayIndex:d, type:'DAY_EQ', expected: fx, actual: cnt.day });
@@ -925,9 +937,6 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
 
     return { ok: errors.length === 0, errors };
   }
-
-
-
 
 
   global.AssignRules = { canAssign, precheckPlace, validateWindow };

@@ -271,8 +271,44 @@
       if (ok.ok) cand.push(r);
     }
 
+
+    // 直近4週間の〇回数（職員ごと）
+    const dayCount4w = (r)=>{
+      let c = 0;
+      const startIdx = State.range4wStart;
+      const endIdx   = State.range4wStart + 27;
+      for (let i = startIdx; i <= endIdx && i < State.windowDates.length; i++){
+        const ds2 = dateStr(State.windowDates[i]);
+        const mk2 = getAssign(r, ds2);
+        if (mk2 === '〇') c++;
+      }
+      return c;
+    };
+
+    // 直近の〇からの経過日数（2部制/3部制は〇のみで計算）
+    const daysSinceLastDay4w = (r)=>{
+      const startIdx = State.range4wStart;
+      const attr = State.employeesAttr[r] || { workType:'three' };
+      const wt = attr.workType || 'three';
+      const useDayOnly = (wt === 'two' || wt === 'three');
+      let lastIdx = -1;
+      for (let i = startIdx; i < dayIdx; i++){
+        const ds2 = dateStr(State.windowDates[i]);
+        const mk2 = getAssign(r, ds2);
+        if (useDayOnly){
+          if (mk2 === '〇') lastIdx = i;
+        } else {
+          if (mk2 === '〇' || mk2 === '☆' || mk2 === '★' || mk2 === '◆' || mk2 === '●') {
+            lastIdx = i;
+          }
+        }
+      }
+      return lastIdx === -1 ? 9999 : (dayIdx - lastIdx);
+    };
+
     const dt = State.windowDates[dayIdx];
     const isWH = isWeekendOrHoliday(dt);
+
     if (isWH){
       const startIdx = State.range4wStart;
       const endIdx = State.range4wStart + 27;
@@ -287,13 +323,23 @@
         }
         return c;
       };
-      cand.sort((a, b) => whCount(a) - whCount(b));
+      cand.sort((a, b) => {
+        const diffWh = whCount(a) - whCount(b);
+        if (diffWh !== 0) return diffWh;
+        // 二部制/三部制の日勤間隔（〇と〇の間隔）が均等になるよう、直近の〇から遠い人を優先
+        return daysSinceLastDay4w(b) - daysSinceLastDay4w(a);
+      });
       // ★追加：同じカウントの人たちをシャッフル（公平性を保ちつつランダム性向上）
       let i = 0;
       while (i < cand.length) {
         const count = whCount(cand[i]);
+        const gap   = daysSinceLastDay4w(cand[i]);
         let j = i;
-        while (j < cand.length && whCount(cand[j]) === count) j++;
+        while (j < cand.length &&
+               whCount(cand[j]) === count &&
+               daysSinceLastDay4w(cand[j]) === gap) {
+          j++;
+        }
         const sameCountGroup = cand.slice(i, j);
         const shuffled = shuffleArray(sameCountGroup);
         for (let k = 0; k < shuffled.length; k++) {
@@ -301,33 +347,21 @@
         }
         i = j;
       }
+
     } else {
       // ★修正：平日も配置回数と位置の分散を考慮
-      const dayCount = (r)=>{
-        let c=0;
-        const startIdx = State.range4wStart;
-        const endIdx = State.range4wStart + 27;
-        for(let i=startIdx; i<=endIdx && i<State.windowDates.length; i++){
-          const ds2 = dateStr(State.windowDates[i]);
-          const mk2 = getAssign(r, ds2);
-          if (mk2==='〇') c++;
-        }
-        return c;
-      };
+      const dayCount = (r)=> dayCount4w(r);
       
-      // ★追加：最後に配置された日からの経過日数を計算
-      const daysSinceLastAssign = (r)=>{
-        const startIdx = State.range4wStart;
-        let lastAssignIdx = -1;
-        for(let i=startIdx; i<dayIdx; i++){
-          const ds2 = dateStr(State.windowDates[i]);
-          const mk2 = getAssign(r, ds2);
-          if (mk2==='〇' || mk2==='☆' || mk2==='★' || mk2==='◆' || mk2==='●') {
-            lastAssignIdx = i;
-          }
-        }
-        return lastAssignIdx === -1 ? 9999 : (dayIdx - lastAssignIdx);
-      };
+      // ★追加：最後に配置された日勤（〇）からの経過日数を優先（2部制/3部制では〇間隔を重視）
+      const daysSinceLastAssign = (r)=> daysSinceLastDay4w(r);
+      
+      // ★ソート：配置回数が少ない順、同数なら最後の配置から遠い順
+      cand.sort((a, b) => {
+        const countDiff = dayCount(a) - dayCount(b);
+        if (countDiff !== 0) return countDiff;
+        return daysSinceLastAssign(b) - daysSinceLastAssign(a);
+      });
+
       
       // ★ソート：配置回数が少ない順、同数なら最後の配置から遠い順
       cand.sort((a, b) => {
@@ -695,12 +729,27 @@
   }
 
   // === メイン自動割当関数 ===
-  function autoAssignRange(startDayIdx, endDayIdx){
-  const FIXED_NF = (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
-  const FIXED_NS = (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+function autoAssignRange(startDayIdx, endDayIdx){
+  function targetNFFor(ds){
+    if (window.Counts && typeof window.Counts.getFixedNF === 'function'){
+      return window.Counts.getFixedNF(ds);
+    }
+    return (window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3;
+  }
+  function targetNSFor(ds){
+    if (window.Counts && typeof window.Counts.getFixedNS === 'function'){
+      return window.Counts.getFixedNS(ds);
+    }
+    return (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+  }
+
     for (let sweep=0; sweep<3; sweep++){
       let changed = false;
       for(let d=startDayIdx; d<=endDayIdx; d++){
+        const ds = dateStr(State.windowDates[d]);
+        const FIXED_NF = targetNFFor(ds);
+        const FIXED_NS = targetNSFor(ds);
+
         let { nf, ns, hasANf, hasANs } = countDayStats(d);
 
         if (nf < FIXED_NF){
@@ -736,12 +785,17 @@
 
     if (!nightQuotasOK(startDayIdx, endDayIdx)){
       for(let d=startDayIdx; d<=endDayIdx; d++){
+        const ds = dateStr(State.windowDates[d]);
+        const FIXED_NF = targetNFFor(ds);
+        const FIXED_NS = targetNSFor(ds);
+
         let { nf, ns } = countDayStats(d);
-               if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], true);
+        if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], true);
         if (ns < FIXED_NS) fillWith(d, FIXED_NS - ns, ['★','●'], true);
         enforceExactCount(d, FIXED_NF, FIXED_NS);
       }
     }
+
 
 // 修正後（5行前後を含む）
     (function ensureNightToTen(){
@@ -767,6 +821,9 @@
 
     // ★夜勤専従配置後に人数を厳格化
     for(let d=startDayIdx; d<=endDayIdx; d++){
+      const ds = dateStr(State.windowDates[d]);
+      const FIXED_NF = targetNFFor(ds);
+      const FIXED_NS = targetNSFor(ds);
       enforceExactCount(d, FIXED_NF, FIXED_NS);
     }
 
@@ -848,19 +905,28 @@
             }
           }
         }
-        enforceExactCount(d, FIXED_NF, FIXED_NS);
+        {
+          const dsFix = dateStr(State.windowDates[d]);
+          const FIXED_NF = targetNFFor(dsFix);
+          const FIXED_NS = targetNSFor(dsFix);
+          enforceExactCount(d, FIXED_NF, FIXED_NS);
+        }
       }
     })();
 
     // ★その他の夜勤配置（不足分を補填）
     (function fillRemainingNightShifts(){
       for(let d=startDayIdx; d<=endDayIdx; d++){
+        const ds = dateStr(State.windowDates[d]);
+        const FIXED_NF = targetNFFor(ds);
+        const FIXED_NS = targetNSFor(ds);
         let { nf, ns } = countDayStats(d);
         if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], false);
         if (ns < FIXED_NS) fillWith(d, FIXED_NS - ns, ['★','●'], false);
         enforceExactCount(d, FIXED_NF, FIXED_NS);
       }
     })();
+
 
     // ★最後に日勤を配置
     for(let d=startDayIdx; d<=endDayIdx; d++){
@@ -894,10 +960,12 @@
   
      // ★★★ 追加：最終チェック：全日程で厳格化を再実行 ★★★
      for(let d=startDayIdx; d<=endDayIdx; d++){
+       const ds = dateStr(State.windowDates[d]);
+       const FIXED_NF = targetNFFor(ds);
+       const FIXED_NS = targetNSFor(ds);
        enforceExactCount(d, FIXED_NF, FIXED_NS);
+     }
 
-
-    }
   }
 
   // === 祝日・代休の自動付与 ===

@@ -185,8 +185,18 @@
       <label>NS（★＋●）固定人数</label>
       <input id="cfgFixedNS" type="number" class="txt" min="0" step="1">
     </div>
+    <div class="row">
+      <label>特定日 固定条件</label>
+      <textarea id="cfgFixedByDate" class="txt" rows="4"
+                placeholder="2025-11-03 8 3 3&#10;2025-11-04 7 2 3"></textarea>
+      <div class="hint">
+        1行ごとに「日付 〇 NF NS」を入力（例: 2025-11-03 8 3 3）。
+        日付だけの行はその日の固定解除として扱われます。
+      </div>
+    </div>
   </div>
   <footer>
+
     <button id="countsClose" class="btn btn-outline" type="button">閉じる</button>
     <button id="countsSave"  class="btn btn-accent"  type="button">保存</button>
 
