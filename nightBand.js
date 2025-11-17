@@ -126,8 +126,72 @@
     return p1 + p2;
   }
 
-  // 乱数（線形合同法）とシード設定
+
+  // 二部制・三部制の夜勤間隔スコア（夜勤専従は対象外）
+  function nightSpacingScore(ctx, dayIdx, mark, r){
+    const attr = ctx.getEmpAttr(r) || { level:'B', workType:'three' };
+    const wt = attr.workType || 'three';
+    let groupMarks = null;
+
+    // 二部制：☆★の間隔を均一化（夜勤専従は除外）
+    if (wt === 'two' && (mark === '☆' || mark === '★')){
+      groupMarks = ['☆','★'];
+    }
+    // 三部制：◆●の間隔を均一化
+    else if (wt === 'three' && (mark === '◆' || mark === '●')){
+      groupMarks = ['◆','●'];
+    } else {
+      // 夜勤専従や対象外の勤務形態はスコア0
+      return 0;
+    }
+
+    const startIdx = ctx.range4wStart;
+    const endIdx   = Math.min(ctx.range4wStart + 27, ctx.dates.length - 1);
+
+    // これまでの同種夜勤の位置と件数
+    let lastIdx = -1;
+    let count = 0;
+    for (let i = startIdx; i <= endIdx; i++){
+      const ds2 = dateStr(ctx.dates[i]);
+      const mk2 = ctx.getAssign(r, ds2);
+      if (groupMarks.includes(mk2)){
+        count++;
+        if (i < dayIdx) lastIdx = i;
+      }
+    }
+
+    // まだ一度も入っていない人には少しボーナス
+    if (count === 0 && lastIdx === -1){
+      return 15;
+    }
+
+    // 直近の夜勤からの間隔
+    const interval = (lastIdx === -1) ? (dayIdx - startIdx + 1) : (dayIdx - lastIdx);
+    if (interval <= 0) return -40; // 同日・逆行するようなケースは強く抑制
+
+    // この4週における理想的な間隔（今置く分も含めた件数で割る）
+    const windowLen = endIdx - startIdx + 1;
+    const futureCount = count + 1;
+    if (futureCount <= 0) return 0;
+    const ideal = windowLen / futureCount;
+
+    const diff = Math.abs(interval - ideal);
+
+    // 差が大きいほど不利にする（最大でも数十点程度の影響に抑える）
+    const INTERVAL_W = 4;
+    let score = - diff * INTERVAL_W;
+
+    // 極端に短い間隔（理想の半分未満）は追加ペナルティ
+    if (interval < ideal * 0.5){
+      score -= 40;
+    }
+
+    return score;
+  }
+
+  // 乱数（線形合同法）とシード設定（線形合同法）とシード設定
   let _seed = 1;
+
   let _randAmp = 0.49;                   // ← 既定の振れ幅（従来値互換）
   function setSeed(v){ _seed = (v>>>0) || 1; }
   function setRandAmp(a){                // ← 外部から振れ幅を変更
@@ -208,14 +272,18 @@ out = out
     const FAIR_W = 5.0;
     const fair = isWH(dayIdx) ? (- whCount28(r) * FAIR_W) : 0;
 
+    // 二部制／三部制の夜勤間隔をなるべく均一化するスコア（夜勤専従は影響なし）
+    const spacing = nightSpacingScore(ctx, dayIdx, mark, r);
+
 const pen  = acNightPenalty(ctx, dayIdx, mark, r);
 const jitter = (_rand() - 0.5) * _randAmp;
 // ★追加：A属性にボーナスを付与（各帯に必須のため優先度を上げる）
 const attr = ctx.getEmpAttr(r) || { level:'B', workType:'three' };
 const aBonus = (attr.level === 'A') ? 50 : 0;
-return { r, score: base + riskBoost + fair + pen + aBonus + jitter };
+return { r, score: base + riskBoost + fair + spacing + pen + aBonus + jitter };
 
   })
+
   .filter(x => x.score !== -Infinity)
   .sort((a, b) => b.score - a.score)
   .map(x => x.r);
