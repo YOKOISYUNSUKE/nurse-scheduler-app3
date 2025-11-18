@@ -110,6 +110,7 @@
       getAssign, hasOffByDate:(i,ds)=>isRestByDate(i, ds),
       getWorkType: (i)=> (State.employeesAttr[i]?.workType) || 'three',
       getLevel:   (i)=> (State.employeesAttr[i]?.level)    || 'B'
+    , getForbiddenPairs: (i)=> State.forbiddenPairs.get(i) || new Set()
     }) || { ok:true };
     if (!pre.ok) return false;
 
@@ -470,35 +471,95 @@
 
   function reduceDayShiftTo(dayIdx, target){
     const ds = dateStr(State.windowDates[dayIdx]);
-    const dayRows = [];
-    let hasA = false;
-    for(let r=0;r<State.employeeCount;r++){
+
+    // 直近4週間の〇回数（職員ごと）
+    const dayCount4w = (r)=>{
+      let c = 0;
+      const startIdx = Number.isInteger(State.range4wStart) ? State.range4wStart : 0;
+      const endIdx   = startIdx + 27;
+      for (let i = startIdx; i <= endIdx && i < State.windowDates.length; i++){
+        const ds2 = dateStr(State.windowDates[i]);
+        const mk2 = getAssign(r, ds2);
+        if (mk2 === '〇') c++;
+      }
+      return c;
+    };
+
+    // 当日〇が入っている職員一覧
+    const info = [];
+    for (let r = 0; r < State.employeeCount; r++){
       if (getAssign(r, ds) === '〇'){
-        const isA = (State.employeesAttr[r]?.level) === 'A';
-        dayRows.push({ r, isA });
-        if (isA) hasA = true;
+        const lv = (State.employeesAttr[r]?.level) || 'B';
+        info.push({
+          r,
+          level: lv,
+          isA: lv === 'A',
+          isB: lv === 'B'
+        });
       }
     }
-    let day = dayRows.length;
-    const nonA = dayRows.filter(x=>!x.isA).map(x=>x.r);
-    const onlyA = dayRows.filter(x=>x.isA).map(x=>x.r);
 
-    for(const r of nonA){
+    let day = info.length;
+    if (day <= target) return;
+
+    // Aがいれば「直近4週間で〇が最も少ないA」を1人保護（Aゼロ日防止＋A内の公平化）
+    let protectA = null;
+    const aInfo = info.filter(x => x.isA);
+    if (aInfo.length > 0){
+      let best = aInfo[0];
+      let bestCount = dayCount4w(best.r);
+      for (let i = 1; i < aInfo.length; i++){
+        const c = dayCount4w(aInfo[i].r);
+        if (c < bestCount){
+          best = aInfo[i];
+          bestCount = c;
+        }
+      }
+      protectA = best.r;
+    }
+
+    // 削除候補を作成（保護したA以外）
+    let removal = info
+      .filter(x => x.r !== protectA)
+      .map(x => ({
+        r: x.r,
+        isB: x.isB,
+        dayCount: dayCount4w(x.r)
+      }));
+
+    if (removal.length === 0) return;
+
+    // 同じ条件の中での偏りを避けるために一度シャッフル
+    if (typeof shuffleArray === 'function'){
+      removal = shuffleArray(removal);
+    }
+
+    // 優先順位：
+    // 1) Bかどうか（Bを先に削る）
+    // 2) 直近4週間の〇回数（多い人から削る）
+    removal.sort((a, b) => {
+      if (a.isB !== b.isB){
+        return (b.isB ? 1 : 0) - (a.isB ? 1 : 0); // B=true を先に
+      }
+      const diff = b.dayCount - a.dayCount;       // 多い方を先に削る
+      if (diff !== 0) return diff;
+      return 0;
+    });
+
+    for (const cand of removal){
       if (day <= target) break;
-      clearAssign(r, ds);
+      clearAssign(cand.r, ds);
       day--;
     }
-    for(const r of onlyA){
-      if (day <= target) break;
-      if (hasA && onlyA.length === 1) break;
-      clearAssign(r, ds);
-      day--;
-    }
-    if (typeof updateFooterCounts==='function') updateFooterCounts();
+
+    if (typeof updateFooterCounts === 'function') updateFooterCounts();
   }
+
+
 
   // ★★★ 人数を厳格化する関数 ★★★
   function enforceExactCount(dayIdx, targetNF, targetNS) {
+
     const ds = dateStr(State.windowDates[dayIdx]);
     
     // NF帯（☆＋◆）の調整

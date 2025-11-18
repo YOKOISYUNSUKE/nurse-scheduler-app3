@@ -101,6 +101,9 @@ document.addEventListener('auth:logged-in', async (ev)=>{
     employeeCount: 20,
     employeesAttr: [],          // [{level:'A'|'B'|'C', workType:'two'|'three'|'day'|'night'}]
     // 永続化は日付キー（YYYY-MM-DD）で行う
+    forbiddenPairs: new Map(), // Map<empIndex, Set<empIndex>>：禁忌ペア
+  // 例：0番目の職員が2番・5番と禁忌 → forbiddenPairs.get(0) = Set([2, 5])
+
     holidaySet: new Set(),      // Set<dateStr>
     offRequests: new Map(),     // Map<empIndex, Set<dateStr>>
     leaveRequests: new Map(),   // Map<empIndex, Map<dateStr, '祝'|'代'|'年'|'リ'>>
@@ -454,6 +457,7 @@ async function pushToRemote(){
     meta.employees     = State.employees;
     meta.employeesAttr = State.employeesAttr; // ← 追加：属性も保存
     meta.range4wStart  = State.range4wStart;
+    meta.forbiddenPairs = Array.from(State.forbiddenPairs.entries()).map(([k, set]) => [k, Array.from(set)]);
     writeMeta(meta);
     // 追加：クラウドへ非同期送信（失敗は無視）
     pushToRemote();
@@ -519,8 +523,11 @@ window.saveMetaOnly = saveMetaOnly; // ★追加
    // employeeCount は保存値があれば優先、なければ配列長
   State.employeeCount = Number.isInteger(meta.employeeCount) ? meta.employeeCount :              State.employees.length;
   State.range4wStart  = meta.range4wStart ?? State.range4wStart;
-
-  // 従業員数の下限は設けない（削除を正しく反映）
+  if (Array.isArray(meta.forbiddenPairs)){
+    State.forbiddenPairs = new Map(meta.forbiddenPairs.map(([k, arr]) => [k, new Set(arr)]));
+  } else {
+    State.forbiddenPairs = new Map();
+  }
 
 } else {
   // 新規ユーザー：デフォルト（20名）で初期化
@@ -1477,6 +1484,35 @@ function buildAttrDialog(){
     quotaWrap.appendChild(quotaLabel);
     quotaWrap.appendChild(quotaInput);
 
+// 禁忌ペア選択（複数選択可能）
+const forbidWrap = document.createElement('div');
+forbidWrap.className = 'forbid-wrap';
+forbidWrap.style.display = 'flex';
+forbidWrap.style.alignItems = 'center';
+forbidWrap.style.gap = '4px';
+
+const forbidLabel = document.createElement('span');
+forbidLabel.textContent = '禁忌ペア:';
+forbidLabel.style.fontSize = '0.9em';
+
+const forbidSelect = document.createElement('select');
+forbidSelect.className = 'forbid-select';
+forbidSelect.multiple = true;
+forbidSelect.style.minWidth = '100px';
+forbidSelect.style.maxWidth = '200px';
+forbidSelect.size = 3;
+for (let j = 0; j < State.employeeCount; j++) {
+  if (j === i) continue;
+  const opt = document.createElement('option');
+  opt.value = String(j);
+  opt.textContent = State.employees[j] || `職員${pad2(j+1)}`;
+  const current = State.forbiddenPairs.get(i);
+  if (current && current.has(j)) opt.selected = true;
+  forbidSelect.appendChild(opt);
+}
+
+forbidWrap.appendChild(forbidLabel);
+forbidWrap.appendChild(forbidSelect);
     // 勤務形態変更時にノルマ入力欄の表示/非表示を切り替え
     selWt.addEventListener('change', ()=>{
       quotaWrap.style.display = selWt.value === 'night' ? 'flex' : 'none';
@@ -1513,7 +1549,8 @@ function buildAttrDialog(){
     row.appendChild(name);
     row.appendChild(selLv);
     row.appendChild(selWt);
-    row.appendChild(quotaWrap); // ★追加
+    row.appendChild(quotaWrap); 
+    row.appendChild(forbidWrap);
     row.appendChild(ctrls);
     attrContent.appendChild(row);
   }
@@ -1527,7 +1564,8 @@ function readAttrDialogToState(){
     const i = Number(row.dataset.idx);
     const [selLv, selWt] = row.querySelectorAll('select');
     const nameInput = row.querySelector('input[data-role="name"]');
-    const quotaInput = row.querySelector('.quota-input'); // ★追加
+    const quotaInput = row.querySelector('.quota-input');
+    const forbidSelect = row.querySelector('.forbid-select');
     const nm = (nameInput?.value || '').trim();
     State.employees[i] = nm || `職員${pad2(i+1)}`;
     // ★修正：夜勤ノルマを追加
@@ -1537,6 +1575,11 @@ function readAttrDialogToState(){
       workType: selWt.value,
       nightQuota: (selWt.value === 'night' && Number.isInteger(nightQuota)) ? nightQuota : undefined
     };
+    if (forbidSelect) {
+      const selected = Array.from(forbidSelect.selectedOptions).map(opt => Number(opt.value));
+      if (selected.length > 0) State.forbiddenPairs.set(i, new Set(selected));
+      else State.forbiddenPairs.delete(i);
+    }
   });
 }
 
