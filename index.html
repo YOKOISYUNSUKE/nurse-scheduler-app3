@@ -185,14 +185,23 @@
     </div>
     <div class="row">
       <label>特定日 固定条件</label>
-      <textarea id="cfgFixedByDate" class="txt" rows="4"
-                placeholder="2025-11-03 8 3 3&#10;2025-11-04 7 2 3"></textarea>
-      <div class="hint">
-        1行ごとに「日付 〇 NF NS」を入力（例: 2025-11-03 8 3 3）。
-        日付だけの行はその日の固定解除として扱われます。
+      <div>
+        <div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-bottom:0.25rem;">
+          <input id="cfgFixedDate" type="date" class="txt">
+          <input id="cfgFixedDay" type="number" class="txt" min="0" step="1" placeholder="〇">
+          <input id="cfgFixedNFDate" type="number" class="txt" min="0" step="1" placeholder="NF">
+          <input id="cfgFixedNSDate" type="number" class="txt" min="0" step="1" placeholder="NS">
+          <button id="btnFixedByDateAdd" class="btn btn-outline" type="button">追加</button>
+        </div>
+        <textarea id="cfgFixedByDate" class="txt" rows="4"
+                  placeholder="2025-11-03 8 3 3&#10;2025-11-04 7 2 3"></textarea>
+        <div class="hint">
+          1行ごとに「日付 〇 NF NS」を入力（例: 2025-11-03 8 3 3）。
+          日付だけの行はその日の固定解除として扱われます。
+        </div>
       </div>
     </div>
-  </div>
+
   <footer>
 
     <button id="countsClose" class="btn btn-outline" type="button">閉じる</button>

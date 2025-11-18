@@ -163,8 +163,8 @@
     return lines.join('\n');
   }
 
-  Counts.exportFixedByDateText = function(){
-    return exportFixedByDateText(Counts.FIXED_BY_DATE);
+  Counts.exportFixedByDateText = function(map){
+    return exportFixedByDateText(map || Counts.FIXED_BY_DATE);
   };
 
   function init(){
@@ -188,6 +188,11 @@
     const inpNF          = $('cfgFixedNF');
     const inpNS          = $('cfgFixedNS');
     const inpFixedByDate = $('cfgFixedByDate');
+    const inpFixedDate   = $('cfgFixedDate');
+    const inpFixedDay    = $('cfgFixedDay');
+    const inpFixedNFDate = $('cfgFixedNFDate');
+    const inpFixedNSDate = $('cfgFixedNSDate');
+    const btnFixedAdd    = $('btnFixedByDateAdd');
 
     function populate(){
       inpDayMin.value  = String(Counts.DAY_MIN_WEEKDAY);
@@ -201,8 +206,72 @@
           ? Counts.exportFixedByDateText()
           : '';
       }
+      if (inpFixedDate){
+        inpFixedDate.value = '';
+        if (inpFixedDay)    inpFixedDay.value    = '';
+        if (inpFixedNFDate) inpFixedNFDate.value = '';
+        if (inpFixedNSDate) inpFixedNSDate.value = '';
+      }
     }
 
+    // 日付変更時：テキストエリアから該当日の設定を読み込んで反映
+    if (inpFixedDate && inpFixedByDate){
+      inpFixedDate.addEventListener('change', ()=>{
+        const ds = inpFixedDate.value;
+        if (!ds){
+          if (inpFixedDay)    inpFixedDay.value    = '';
+          if (inpFixedNFDate) inpFixedNFDate.value = '';
+          if (inpFixedNSDate) inpFixedNSDate.value = '';
+          return;
+        }
+        const map = parseFixedByDateText(inpFixedByDate.value || '');
+        const v = map[ds] || {};
+        if (inpFixedDay)    inpFixedDay.value    = Number.isFinite(v.day) ? String(v.day) : '';
+        if (inpFixedNFDate) inpFixedNFDate.value = Number.isFinite(v.nf)  ? String(v.nf)  : '';
+        if (inpFixedNSDate) inpFixedNSDate.value = Number.isFinite(v.ns)  ? String(v.ns)  : '';
+      });
+    }
+
+    // 「追加」ボタン：テキストエリアの内容を（該当日行を）更新 or 追加
+    if (btnFixedAdd && inpFixedByDate && inpFixedDate){
+      btnFixedAdd.addEventListener('click', ()=>{
+        const ds = inpFixedDate.value;
+        if (!ds) return;
+
+        const parts = [ds];
+        const dayStr = inpFixedDay    ? inpFixedDay.value.trim()    : '';
+        const nfStr  = inpFixedNFDate ? inpFixedNFDate.value.trim() : '';
+        const nsStr  = inpFixedNSDate ? inpFixedNSDate.value.trim() : '';
+
+        if (dayStr) parts.push(dayStr);
+        if (nfStr)  parts.push(nfStr);
+        if (nsStr)  parts.push(nsStr);
+
+        const line = parts.join(' ');
+
+        const raw = inpFixedByDate.value || '';
+        const lines = raw.split(/\r?\n/);
+        let found = false;
+        for (let i = 0; i < lines.length; i++){
+          const t = lines[i].trim();
+          if (!t) continue;
+          const first = t.split(/\s+/)[0];
+          if (first === ds){
+            lines[i] = line;
+            found = true;
+            break;
+          }
+        }
+        if (!found){
+          lines.push(line);
+        }
+
+        inpFixedByDate.value = lines
+          .map(s => s.trim())
+          .filter(s => s.length > 0)
+          .join('\n');
+      });
+    }
 
     btn.addEventListener('click', ()=>{
       populate();
@@ -231,5 +300,6 @@
 
     dlg.querySelector('#countsClose')?.addEventListener('click', ()=> dlg.close ? dlg.close() : (dlg.open=false));
   });
+
 })(window);
 
