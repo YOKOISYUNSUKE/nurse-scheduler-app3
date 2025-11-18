@@ -1511,8 +1511,18 @@ for (let j = 0; j < State.employeeCount; j++) {
   forbidSelect.appendChild(opt);
 }
 
+// 左クリックだけで禁忌ペアをトグル選択できるようにする
+forbidSelect.addEventListener('mousedown', (ev) => {
+  if (ev.button !== 0) return; // 左クリック以外は無視
+  const target = ev.target;
+  if (!target || target.tagName !== 'OPTION') return;
+  ev.preventDefault();          // ブラウザ標準の選択挙動を抑止
+  target.selected = !target.selected;
+});
+
 forbidWrap.appendChild(forbidLabel);
 forbidWrap.appendChild(forbidSelect);
+
 
     // 勤務形態変更時にノルマ入力欄の表示/非表示を切り替え
     selWt.addEventListener('change', ()=>{
