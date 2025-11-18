@@ -109,8 +109,8 @@
       dates:State.windowDates, employeeCount:State.employeeCount,
       getAssign, hasOffByDate:(i,ds)=>isRestByDate(i, ds),
       getWorkType: (i)=> (State.employeesAttr[i]?.workType) || 'three',
-      getLevel:   (i)=> (State.employeesAttr[i]?.level)    || 'B'
-    , getForbiddenPairs: (i)=> State.forbiddenPairs.get(i) || new Set()
+      getLevel:   (i)=> (State.employeesAttr[i]?.level)    || 'B',
+      getForbiddenPairs: (i)=> State.forbiddenPairs.get(i) || new Set() // ★追加
     }) || { ok:true };
     if (!pre.ok) return false;
 

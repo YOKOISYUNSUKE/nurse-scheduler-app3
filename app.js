@@ -1484,7 +1484,7 @@ function buildAttrDialog(){
     quotaWrap.appendChild(quotaLabel);
     quotaWrap.appendChild(quotaInput);
 
-// 禁忌ペア選択（複数選択可能）
+// ★修正：禁忌ペア選択（複数選択可能）
 const forbidWrap = document.createElement('div');
 forbidWrap.className = 'forbid-wrap';
 forbidWrap.style.display = 'flex';
@@ -1513,6 +1513,7 @@ for (let j = 0; j < State.employeeCount; j++) {
 
 forbidWrap.appendChild(forbidLabel);
 forbidWrap.appendChild(forbidSelect);
+
     // 勤務形態変更時にノルマ入力欄の表示/非表示を切り替え
     selWt.addEventListener('change', ()=>{
       quotaWrap.style.display = selWt.value === 'night' ? 'flex' : 'none';
@@ -1565,7 +1566,7 @@ function readAttrDialogToState(){
     const [selLv, selWt] = row.querySelectorAll('select');
     const nameInput = row.querySelector('input[data-role="name"]');
     const quotaInput = row.querySelector('.quota-input');
-    const forbidSelect = row.querySelector('.forbid-select');
+    const forbidSelect = row.querySelector('.forbid-select'); // ★追加
     const nm = (nameInput?.value || '').trim();
     State.employees[i] = nm || `職員${pad2(i+1)}`;
     // ★修正：夜勤ノルマを追加
@@ -1575,6 +1576,8 @@ function readAttrDialogToState(){
       workType: selWt.value,
       nightQuota: (selWt.value === 'night' && Number.isInteger(nightQuota)) ? nightQuota : undefined
     };
+    
+    // ★追加：禁忌ペアの保存（複数選択対応）
     if (forbidSelect) {
       const selected = Array.from(forbidSelect.selectedOptions).map(opt => Number(opt.value));
       if (selected.length > 0) State.forbiddenPairs.set(i, new Set(selected));

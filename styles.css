@@ -238,3 +238,32 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
 .attr .ctrls .btn{ padding:6px 8px; font-size:12px; }
 .attr .ctrls .btn:active{ transform: translateY(1px); }
 
+/* 既存のスタイル */
+.attr .content .row .ctrls button + button { margin-left: .4rem; }
+
+/* ★追加：禁忌ペア選択UIのスタイル */
+.forbid-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.forbid-select {
+  min-width: 100px;
+  max-width: 200px;
+  height: auto;
+  padding: 4px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.forbid-select option {
+  padding: 2px 4px;
+}
+
+.forbid-select option:checked {
+  background-color: #3b82f6;
+  color: white;
+}
+

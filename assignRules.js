@@ -81,7 +81,7 @@ function precheckPlace(p){
   const pairGapMinDays = (wt === 'night') ? 0 : 3;
   const idxDiffMin = pairGapMinDays + 1;
 
-// ★新規：禁忌ペアチェック（NF帯・NS帯のみ適用、〇は対象外）
+// ★追加：禁忌ペアチェック（NF帯・NS帯のみ適用、〇は対象外）
   if (p.mark && typeof p.getForbiddenPairs === 'function') {
     const ds = dateStr(p.dates[d]);
     const forbidden = p.getForbiddenPairs(p.rowIndex);
@@ -107,7 +107,6 @@ function precheckPlace(p){
       }
     }
   }
-
 
 // ★新規：同一日の夜勤専従は最大2名まで（NF帯・NS帯それぞれ）
   if (wt === 'night') {
