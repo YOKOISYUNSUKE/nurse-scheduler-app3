@@ -327,14 +327,28 @@ function setupModeRadios() {
 
 
   // === 従業員編集ダイアログ ===
-  function setupAttrDialog() {
+function setupAttrDialog() {
     if (btnAttrOpen) {
-      btnAttrOpen.addEventListener('click', openAttrDialog);
+      btnAttrOpen.addEventListener('click', () => {
+        // 優先：employeeDialog.js 側の実装を利用（勤務時間編集ボタン付き）
+        if (window.EmployeeDialog && typeof window.EmployeeDialog.openAttrDialog === 'function') {
+          window.EmployeeDialog.openAttrDialog();
+        } else if (typeof openAttrDialog === 'function') {
+          // フォールバック：従来の実装
+          openAttrDialog();
+        }
+      });
     }
 
     if (attrSave) {
       attrSave.addEventListener('click', () => {
-        readAttrDialogToState();
+        // 優先：employeeDialog.js 側の readAttrDialogToState を利用
+        if (window.EmployeeDialog && typeof window.EmployeeDialog.readAttrDialogToState === 'function') {
+          window.EmployeeDialog.readAttrDialogToState();
+        } else if (typeof readAttrDialogToState === 'function') {
+          // フォールバック：従来の実装
+          readAttrDialogToState();
+        }
         saveMetaOnly();
         renderGrid();
         if (attrDlg) attrDlg.close();
@@ -348,6 +362,7 @@ function setupModeRadios() {
       });
     }
   }
+
 
   // === Escキー処理 ===
   function setupEscapeKey() {

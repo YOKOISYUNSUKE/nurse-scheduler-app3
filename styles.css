@@ -267,3 +267,66 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
   color: white;
 }
 
+/* --- 末尾に追加 --- */
+
+/* 勤務時間設定フィールド */
+.durations-wrap {
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+    transform: translateY(0);
+  }
+}
+
+.duration-field {
+  transition: all 0.2s ease;
+}
+
+.duration-field:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+
+.duration-select {
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.duration-select:hover {
+  border-color: #3b82f6;
+}
+
+.duration-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.current-duration-label {
+  font-style: italic;
+}
+
+/* 勤務時間編集ボタンの強調 */
+.btn-duration-toggle {
+  font-size: 0.9em;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.btn-duration-toggle:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+

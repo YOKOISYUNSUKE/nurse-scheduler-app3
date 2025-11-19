@@ -12,6 +12,9 @@ window.setLocked = null;
 window.renderGrid = null;
 window.showToast = null;
 window.saveMetaOnly = null;
+// 追加：勤務時間定義ファイル（shiftDurations.js）を参照するエイリアス（ファイルが読み込まれていることが前提）
+window.ShiftDurations = window.ShiftDurations || null; // shiftDurations.js を index.html で先に読み込む想定
+// 例： window.ShiftDurations.getOptionsForMark('〇') などで利用
 window.updateFooterCounts = null;
 
 // ====== UIロジック：連続31日ウィンドウ & 日単位スクロール対応 ======
@@ -315,7 +318,13 @@ window.setLocked = setLocked; // ★追加
     initControls();
     loadWindow(State.anchor);
     renderAll();
+
+    // 従業員ダイアログ（勤務時間編集ボタンなど）の初期化
+    if (window.EmployeeDialog && typeof window.EmployeeDialog.init === 'function') {
+      window.EmployeeDialog.init();
+    }
   }
+
 
 
   // ---- コントロール初期化 ----
@@ -455,7 +464,13 @@ async function pushToRemote(){
     const meta = readMeta();
     meta.employeeCount = State.employeeCount;
     meta.employees     = State.employees;
-    meta.employeesAttr = State.employeesAttr; // ← 追加：属性も保存
+    // 勤務時間を含む完全な属性を保存
+    meta.employeesAttr = State.employeesAttr.map(attr => ({
+      level: attr.level,
+      workType: attr.workType,
+      nightQuota: attr.nightQuota,
+      shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {}
+    }));
     meta.range4wStart  = State.range4wStart;
     meta.forbiddenPairs = Array.from(State.forbiddenPairs.entries()).map(([k, set]) => [k, Array.from(set)]);
     writeMeta(meta);
@@ -516,9 +531,15 @@ window.saveMetaOnly = saveMetaOnly; // ★追加
    State.employees = meta.employees.slice();
    // 属性長が合わない・未定義の場合は安全に補完
    if (Array.isArray(meta.employeesAttr) && meta.employeesAttr.length === State.employees.length){
-    State.employeesAttr = meta.employeesAttr.slice();
+    // 勤務時間を含む完全な属性を復元
+    State.employeesAttr = meta.employeesAttr.map(attr => ({
+      level: attr.level || 'B',
+      workType: attr.workType || 'three',
+      nightQuota: attr.nightQuota,
+      shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {}
+    }));
    } else {
-     State.employeesAttr = State.employees.map(()=> ({ level:'B', workType:'three' }));
+     State.employeesAttr = State.employees.map(()=> ({ level:'B', workType:'three', shiftDurations:{} }));
    }
    // employeeCount は保存値があれば優先、なければ配列長
   State.employeeCount = Number.isInteger(meta.employeeCount) ? meta.employeeCount :              State.employees.length;
