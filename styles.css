@@ -155,6 +155,23 @@ html, body { height: 100%; }                 /* ビューポート基準を安�
 .grid .dow{ display:block; font-size:11px; color:var(--muted); }
 .grid .today{ outline:2px solid rgba(37,99,235,.35); outline-offset:-2px; }
 
+/* 4週マーク集計セル（縦幅を詰めつつ二段表示） */
+.grid td.month-marks{
+  padding:4px 6px;
+  font-size:12px;
+  line-height:1.2;
+  white-space:normal;
+}
+.month-marks .mm-row{
+  display:flex;
+  justify-content:space-between;
+  gap:4px;
+}
+.month-marks .mm-row span{
+  display:inline-block;
+}
+
+
 /* 特別休暇タグ（祝/代/年/リ） */
 .leave{ display:inline-block; padding:2px 6px; border-radius:8px; border:1px solid var(--border); font-size:12px; font-weight:700; }
 .leave-h{ background:#fff7f7; color:#b91c1c; } /* 祝 */

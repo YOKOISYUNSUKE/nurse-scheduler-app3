@@ -1007,40 +1007,61 @@ function updateRange4wLabel(){
         const w  = '日月火水木金土'[dt.getDay()];
         header.push(`${dt.getMonth()+1}/${dt.getDate()}(${w})`);
       });
-      header.push('月合計');
+      // 末尾はカレンダー月ではなく「指定4週間(網掛け)」の勤務時間合計
+      header.push('4週時間');
       rows.push(header);
+
 
       // 本体（カレンダー月の各日を globalGetAssign / globalHasOffByDate / globalHasLeave で参照）
       for (let r = 0; r < State.employeeCount; r++){
         const name = State.employees[r] || `職員${String(r+1).padStart(2,'0')}`;
         const line = [name];
-        let totalMin = 0;
+
+        // まずはカレンダー月ぶんの日セルをそのまま出力（表示内容は従来どおり）
         for (const dt of days){
           const ds = dateStr(dt);
           const isOff = globalHasOffByDate(r, ds);
           const lv = globalHasLeave(r, ds) ? (getLeaveType(r, ds) || '') : undefined;
           const mk = globalGetAssign(r, ds);
 
-          // 表示セル値（祝/代/年/リ 等は getLeaveType では既に扱われる前提）
           const cell = lv ? lv : (isOff ? '休' : (mk || ''));
           line.push(cell);
+        }
 
-          // 合算：休・特別休は除外、割当マークがあれば勤務分を加算
-          if (mk && !isOff && !lv){
+        // 続いて、指定4週間（網掛け範囲）の勤務時間合計を算出
+        let totalMin = 0;
+        let start4w = (typeof State.range4wStart === 'number') ? State.range4wStart : 0;
+        if (start4w < 0) start4w = 0;
+        let end4w = start4w + 27;
+        const maxDayIdx4w = State.windowDates.length - 1;
+        if (end4w > maxDayIdx4w) end4w = maxDayIdx4w;
+
+        if (end4w >= start4w){
+          for (let d4 = start4w; d4 <= end4w; d4++){
+            const dt4 = State.windowDates[d4];
+            if (!dt4) continue;
+            const ds4 = dateStr(dt4);
+
+            const isOff4 = globalHasOffByDate(r, ds4);
+            const lv4 = globalHasLeave(r, ds4) ? (getLeaveType(r, ds4) || '') : undefined;
+            const mk4 = globalGetAssign(r, ds4);
+            if (!mk4) continue;
+            if (isOff4 || lv4) continue;
+
             let minutes = 0;
             if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
-              minutes = Number(window.ShiftDurations.getDurationForEmployee(State.employeesAttr[r] || {}, mk) || 0);
+              minutes = Number(window.ShiftDurations.getDurationForEmployee(State.employeesAttr[r] || {}, mk4) || 0);
             } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
-              minutes = Number(window.ShiftDurations.getDefaultForMark(mk) || 0);
+              minutes = Number(window.ShiftDurations.getDefaultForMark(mk4) || 0);
             } else {
               const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240};
-              minutes = fallback[mk] || 0;
+              minutes = fallback[mk4] || 0;
             }
             totalMin += minutes;
           }
         }
 
-        // 月合計を H:MM 形式で追加
+        // 4週間勤務時間合計を H:MM 形式で末尾に追加
         const fmt = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
           ? window.ShiftDurations.formatMinutes(totalMin)
           : `${Math.floor(totalMin/60)}:${String(totalMin%60).padStart(2,'0')}`;
@@ -1048,6 +1069,7 @@ function updateRange4wLabel(){
 
         rows.push(line);
       }
+
 
       // CSV化（必要なセルはクオート、Excel互換のCRLF、BOM付き）
       const csv = rows.map(cols => cols.map(v => {
@@ -1078,36 +1100,45 @@ function updateRange4wLabel(){
 
       const thead = document.createElement('thead');
       const trh = document.createElement('tr');
-      // 左端：従業員名
-      const thName = document.createElement('th');
-      thName.className = 'col-emp';
-      thName.textContent = '従業員';
-      trh.appendChild(thName);
+      
 
-      // 31日ヘッダー
-      for(let d=0; d<31; d++){
-        const dt = State.windowDates[d];
+      // 左端：従業員列
+      const thEmp = document.createElement('th');
+      thEmp.className = 'col-emp';
+      thEmp.textContent = '従業員';
+      trh.appendChild(thEmp);
+
+      // 日付ヘッダ（0〜30日ぶん）
+      for (let d = 0; d < 31; d++){
         const th = document.createElement('th');
-        th.dataset.day = String(d);
-        const md = `${dt.getMonth()+1}/${dt.getDate()}`;
-        const dow = '日月火水木金土'[dt.getDay()];
-        th.innerHTML = `${md}<span class="dow">(${dow})</span>`;
-
-
-        // 週末クラス付与（ヘッダー）
-        const w = dt.getDay();
-        if (w === 0) th.classList.add('sun');      // 日曜
-        else if (w === 6) th.classList.add('sat'); // 土曜
-        if(isToday(dt)) th.classList.add('today');
-        if(State.holidaySet.has(dateStr(dt))) th.classList.add('holiday');
-        th.addEventListener('click', ()=> window.CellOperations.toggleHoliday(d));
+        const dt = State.windowDates[d];
+        if (dt){
+          const ds = dateStr(dt);
+          const w = '日月火水木金土'[dt.getDay()];
+          th.dataset.day = String(d);
+          th.innerHTML = `${dt.getMonth()+1}/${dt.getDate()}<span class="dow">${w}</span>`;
+          const wd = dt.getDay();
+          if (wd === 0) th.classList.add('sun');
+          else if (wd === 6) th.classList.add('sat');
+          if (State.holidaySet.has(ds)) th.classList.add('holiday');
+        } else {
+          th.dataset.day = String(d);
+        }
         trh.appendChild(th);
       }
-      // 右端：月合計ヘッダを追加
+
+      // 右端：マーク集計と4週間勤務時間ヘッダを追加
+      const thMarks = document.createElement('th');
+      thMarks.className = 'col-month-marks';
+      thMarks.textContent = '4週マーク';
+      trh.appendChild(thMarks);
+
       const thTotal = document.createElement('th');
       thTotal.className = 'col-month-total';
-      thTotal.textContent = '月合計';
+      thTotal.textContent = '4週時間';
       trh.appendChild(thTotal);
+
+
 
       thead.appendChild(trh);
 
@@ -1199,34 +1230,93 @@ function updateRange4wLabel(){
 
           tr.appendChild(td);
         }
+        // 4週間（網掛け範囲）のマーク集計を算出して行末に追加（労働時間の左隣）
+        let start4w = (typeof State.range4wStart === 'number') ? State.range4wStart : 0;
+        if (start4w < 0) start4w = 0;
+        let end4w = start4w + 27;
+        const maxDayIdx4w = State.windowDates.length - 1;
+        if (end4w > maxDayIdx4w) end4w = maxDayIdx4w;
 
-        // === ここで各従業員の月合計（カレンダー月）を算出して行の末尾に追加 ===
-        // カレンダー月の範囲を決定（表示ウィンドウの先頭日を基準）
-        const anchor = State.windowDates[0];
-        const y = anchor.getFullYear();
-        const m = anchor.getMonth();
-        const monthStart = new Date(y, m, 1);
-        const monthEnd = new Date(y, m + 1, 0);
-        let totalMin = 0;
-        for (let dt = new Date(monthStart); dt <= monthEnd; dt = addDays(dt, 1)){
-          const ds = dateStr(dt);
-          // 窓外の日付は globalGetAssign/globalHasOffByDate/globalHasLeave を使う
-          const isOff = globalHasOffByDate(r, ds);
-          const lv = globalHasLeave(r, ds) ? (getLeaveType(r, ds) || '') : undefined;
-          const mk = globalGetAssign(r, ds);
-          if (!mk) continue;
-          if (isOff || lv) continue; // 休または特別休は計上しない
-          let minutes = 0;
-          if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
-            minutes = Number(window.ShiftDurations.getDurationForEmployee(State.employeesAttr[r] || {}, mk) || 0);
-          } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
-            minutes = Number(window.ShiftDurations.getDefaultForMark(mk) || 0);
-          } else {
-            const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240};
-            minutes = fallback[mk] || 0;
+        let cntO = 0, cntNightPair = 0, cntNF = 0, cntNS = 0;
+        if (end4w >= start4w){
+          for (let d = start4w; d <= end4w; d++){
+            const dt4 = State.windowDates[d];
+            if (!dt4) continue;
+            const ds4 = dateStr(dt4);
+            const mk4 = globalGetAssign(r, ds4);
+            if (!mk4) continue;
+            if (mk4 === '〇'){
+              cntO++;
+            } else if (mk4 === '☆'){
+              cntNightPair++;
+            } else if (mk4 === '★'){
+              const prevIdx = d - 1;
+              let countedWithPrev = false;
+              if (prevIdx >= start4w && prevIdx >= 0){
+                const prevDt = State.windowDates[prevIdx];
+                if (prevDt){
+                  const prevMk = globalGetAssign(r, dateStr(prevDt));
+                  if (prevMk === '☆') countedWithPrev = true;
+                }
+              }
+              if (!countedWithPrev) cntNightPair++;
+            } else if (mk4 === '◆'){
+              cntNF++;
+            } else if (mk4 === '●'){
+              cntNS++;
+            }
           }
-          totalMin += minutes;
         }
+
+        const tdMarks = document.createElement('td');
+        tdMarks.className = 'month-marks';
+        tdMarks.dataset.row = String(r);
+        tdMarks.innerHTML = `
+          <div class="mm-row">
+            <span>〇${cntO}</span><span>☆★${cntNightPair}</span>
+          </div>
+          <div class="mm-row">
+            <span>◆${cntNF}</span><span>●${cntNS}</span>
+          </div>
+        `.trim();
+        tr.appendChild(tdMarks);
+
+        // 労働時間セル
+        const tdTime = document.createElement('td');
+        tdTime.className = 'month-total';
+        tdTime.dataset.row = String(r);
+
+
+
+        // === ここで各従業員の4週間（網掛け範囲）の勤務時間合計を算出して行の末尾に追加 ===
+
+        let totalMin = 0;
+        if (typeof start4w === 'number' && end4w >= start4w){
+          for (let d4 = start4w; d4 <= end4w; d4++){
+            const dt4 = State.windowDates[d4];
+            if (!dt4) continue;
+            const ds4 = dateStr(dt4);
+
+            // 4週内の日付について、休・特別休は除外して勤務時間のみ加算
+            const isOff4 = globalHasOffByDate(r, ds4);
+            const lv4 = globalHasLeave(r, ds4) ? (getLeaveType(r, ds4) || '') : undefined;
+            const mk4 = globalGetAssign(r, ds4);
+            if (!mk4) continue;
+            if (isOff4 || lv4) continue;
+
+            let minutes = 0;
+            if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
+              minutes = Number(window.ShiftDurations.getDurationForEmployee(State.employeesAttr[r] || {}, mk4) || 0);
+            } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
+              minutes = Number(window.ShiftDurations.getDefaultForMark(mk4) || 0);
+            } else {
+              const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240};
+              minutes = fallback[mk4] || 0;
+            }
+            totalMin += minutes;
+          }
+        }
+
         const tdTotal = document.createElement('td');
         tdTotal.className = 'month-total';
         tdTotal.dataset.row = String(r);
@@ -1234,9 +1324,10 @@ function updateRange4wLabel(){
           ? window.ShiftDurations.formatMinutes(totalMin)
           : `${Math.floor(totalMin/60)}:${String(totalMin%60).padStart(2,'0')}`;
         tr.appendChild(tdTotal);
-        // === 月合計セルの追加ここまで ===
+        // === 4週間勤務時間セルの追加ここまで ===
 
         tbody.appendChild(tr);
+
       });
 
       grid.appendChild(thead);
