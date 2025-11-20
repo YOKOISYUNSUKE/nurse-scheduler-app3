@@ -161,15 +161,16 @@ html, body { height: 100%; }                 /* ビューポート基準を安�
   font-size:12px;
   line-height:1.2;
   white-space:normal;
+  min-width:90px;
+}
+.grid .col-month-marks{
+  min-width:90px;
 }
 .month-marks .mm-row{
-  display:flex;
-  justify-content:space-between;
-  gap:4px;
+  display:block;
+  text-align:center;
 }
-.month-marks .mm-row span{
-  display:inline-block;
-}
+
 
 
 /* 特別休暇タグ（祝/代/年/リ） */

@@ -1130,12 +1130,12 @@ function updateRange4wLabel(){
       // 右端：マーク集計と4週間勤務時間ヘッダを追加
       const thMarks = document.createElement('th');
       thMarks.className = 'col-month-marks';
-      thMarks.textContent = '4週マーク';
+      thMarks.innerHTML = '4週<br>マーク';
       trh.appendChild(thMarks);
 
       const thTotal = document.createElement('th');
       thTotal.className = 'col-month-total';
-      thTotal.textContent = '4週時間';
+      thTotal.textContent = '4週<br>時間';
       trh.appendChild(thTotal);
 
 
@@ -1271,18 +1271,17 @@ function updateRange4wLabel(){
         const tdMarks = document.createElement('td');
         tdMarks.className = 'month-marks';
         tdMarks.dataset.row = String(r);
+        const lineTop = `〇${cntO}☆★${cntNightPair}`;
+        const lineBottom = `◆${cntNF}●${cntNS}`;
         tdMarks.innerHTML = `
-          <div class="mm-row">
-            <span>〇${cntO}</span><span>☆★${cntNightPair}</span>
-          </div>
-          <div class="mm-row">
-            <span>◆${cntNF}</span><span>●${cntNS}</span>
-          </div>
+          <div class="mm-row">${lineTop}</div>
+          <div class="mm-row">${lineBottom}</div>
         `.trim();
         tr.appendChild(tdMarks);
 
         // 労働時間セル
         const tdTime = document.createElement('td');
+
         tdTime.className = 'month-total';
         tdTime.dataset.row = String(r);
 
