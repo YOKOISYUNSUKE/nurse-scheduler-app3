@@ -326,16 +326,26 @@ function setupModeRadios() {
   }
 
 
-  // === 従業員編集ダイアログ ===
+// 修正後（初期化完了を確認してから実行）
 function setupAttrDialog() {
     if (btnAttrOpen) {
       btnAttrOpen.addEventListener('click', () => {
+        // 初期化を確認してから実行
+        if (!window.EmployeeDialog) {
+          console.error('EmployeeDialog が未初期化です');
+          showToast('従業員ダイアログの初期化に失敗しました');
+          return;
+        }
+        
         // 優先：employeeDialog.js 側の実装を利用（勤務時間編集ボタン付き）
-        if (window.EmployeeDialog && typeof window.EmployeeDialog.openAttrDialog === 'function') {
+        if (typeof window.EmployeeDialog.openAttrDialog === 'function') {
           window.EmployeeDialog.openAttrDialog();
         } else if (typeof openAttrDialog === 'function') {
           // フォールバック：従来の実装
           openAttrDialog();
+        } else {
+          console.error('openAttrDialog が見つかりません');
+          showToast('ダイアログを開けません');
         }
       });
     }

@@ -18,14 +18,23 @@
   let attrDlg, attrContent, attrSave, attrClose;
   let employeeCountSel;
 
+// 修正後（DOMContentLoaded でラップ）
 function init(){
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initInternal);
+  } else {
+    initInternal();
+  }
+}
+
+function initInternal(){
     // DOM要素の取得（イベントリスナーは buttonHandlers.js 側で管理）
     attrDlg = document.getElementById('attrDlg');
     attrContent = document.getElementById('attrContent');
     attrSave = document.getElementById('attrSave');
     attrClose = document.getElementById('attrClose');
     employeeCountSel = document.getElementById('employeeCount');
-  }
+}
 
 
   function openAttrDialog(){
@@ -39,12 +48,120 @@ function init(){
     if (!State) return;
 
     attrContent.innerHTML = '';
-    for(let i = 0; i < State.employeeCount; i++){
-      const row = createEmployeeRow(i, State);
+
+    // --- 勤務時間（全体）一括設定パネル ---
+    // 既に ShiftDurations が読み込まれていることが前提
+    if (window.ShiftDurations){
+      const globalWrap = document.createElement('div');
+      globalWrap.className = 'global-durations';
+      globalWrap.style.display = 'flex';
+      globalWrap.style.flexDirection = 'column';
+      globalWrap.style.gap = '8px';
+      globalWrap.style.marginBottom = '12px';
+
+      const title = document.createElement('div');
+      title.textContent = '勤務時間（全体）一括設定';
+      title.style.fontWeight = '600';
+      globalWrap.appendChild(title);
+
+      const marks = window.ShiftDurations.MARKS || ['〇','☆','★','◆','●'];
+      const fields = document.createElement('div');
+      fields.style.display = 'flex';
+      fields.style.flexWrap = 'wrap';
+      fields.style.gap = '8px';
+
+      const currentDefs = (typeof window.ShiftDurations.getAllGlobalDefaults === 'function')
+        ? window.ShiftDurations.getAllGlobalDefaults()
+        : {};
+
+      marks.forEach(mk => {
+        const field = document.createElement('div');
+        field.style.minWidth = '120px';
+        field.style.display = 'flex';
+        field.style.flexDirection = 'column';
+
+        const lbl = document.createElement('label');
+        lbl.textContent = mk + ' マーク（全体既定）';
+        field.appendChild(lbl);
+
+        const sel = document.createElement('select');
+        sel.className = 'select global-duration-select';
+        sel.dataset.mark = mk;
+        // 選択肢は ShiftDurations.getOptionsForMark から取得
+        const opts = (typeof window.ShiftDurations.getOptionsForMark === 'function')
+          ? window.ShiftDurations.getOptionsForMark(mk)
+          : (function(){
+              const out = [];
+              for (let m = 300; m <= 1200; m += 15) out.push({ value: m, label: `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}` });
+              return out;
+            })();
+        opts.forEach(o => {
+          const op = document.createElement('option');
+          op.value = String(o.value);
+          op.textContent = o.label;
+          sel.appendChild(op);
+        });
+
+        const curVal = currentDefs[mk] ?? (window.ShiftDurations.getDefaultForMark ? window.ShiftDurations.getDefaultForMark(mk) : null);
+        if (curVal != null) sel.value = String(curVal);
+
+        const info = document.createElement('div');
+        info.className = 'current-duration-label';
+        info.style.fontSize = '0.8em';
+        info.style.color = '#6b7280';
+        info.textContent = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
+          ? window.ShiftDurations.formatMinutes(Number(curVal) || 0)
+          : `${Math.floor((Number(curVal)||0)/60)}:${String((Number(curVal)||0)%60).padStart(2,'0')}`;
+
+        sel.addEventListener('change', () => {
+          const val = parseInt(sel.value, 10);
+          if (!Number.isFinite(val)) return;
+          // 更新：ShiftDurations にセット（既存の個別設定は上書きしない）
+          if (typeof window.ShiftDurations.setGlobalDefault === 'function') {
+            window.ShiftDurations.setGlobalDefault(mk, val);
+          } else {
+            // フォールバックで直接格納（非推奨）
+            window.ShiftDurations._globalDefaults = window.ShiftDurations._globalDefaults || {};
+            window.ShiftDurations._globalDefaults[mk] = val;
+          }
+          // ラベル更新
+          info.textContent = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
+            ? window.ShiftDurations.formatMinutes(val)
+            : `${Math.floor(val/60)}:${String(val%60).padStart(2,'0')}`;
+
+          // 即時保存（メタデータのみ）
+          if (typeof window.saveMetaOnly === 'function') {
+            window.saveMetaOnly();
+            if (typeof window.showToast === 'function') {
+              window.showToast(`${mk} を一括で ${info.textContent} に変更しました`);
+            }
+          }
+
+          // 画面上の月合計なども即時反映
+          if (typeof window.renderGrid === 'function') {
+            window.renderGrid();
+          }
+        });
+
+
+        field.appendChild(sel);
+        field.appendChild(info);
+        fields.appendChild(field);
+      });
+
+      globalWrap.appendChild(fields);
+      attrContent.appendChild(globalWrap);
+    }
+    // --- ここまで全体設定パネル ---
+
+    // --- 従業員ごとの行を追加 ---
+    for (let i = 0; i < State.employeeCount; i++){
+      const row = createEmployeeRow(i, State);  // ← 今度は正しく参照できる
       attrContent.appendChild(row);
     }
   }
 
+  // createEmployeeRow を buildAttrDialog の外に移動（関数スコープを修正）
   function createEmployeeRow(i, State){
     const row = document.createElement('div');
     row.className = 'row';
@@ -138,18 +255,16 @@ function init(){
       ? window.ShiftDurations.MARKS 
       : ['〇','☆','★','◆','●'];
 
-    // 初期化：empAttr.shiftDurations を確保
+    // 初期化：empAttr.shiftDurations オブジェクトだけを確保
+    // 実際の値は「個別 > 全体既定 > デフォルト」で解決し、
+    // 変更されたマークだけを empAttr.shiftDurations に保持する
     if (!empAttr.shiftDurations) {
       empAttr.shiftDurations = {};
-      marks.forEach(mk => {
-        empAttr.shiftDurations[mk] = (window.ShiftDurations && window.ShiftDurations.getDefaultForMark)
-          ? window.ShiftDurations.getDefaultForMark(mk)
-          : 8 * 60;
-      });
     }
 
     marks.forEach(mk => {
       const fieldWrap = document.createElement('div');
+
       fieldWrap.className = 'duration-field';
       fieldWrap.style.display = 'flex';
       fieldWrap.style.flexDirection = 'column';
@@ -193,14 +308,22 @@ function init(){
         sel.appendChild(op);
       });
 
-      // 現在値を設定（優先順位: 保存値 > デフォルト値）
-      const currentValue = empAttr.shiftDurations[mk] 
-        || (window.ShiftDurations && window.ShiftDurations.getDefaultForMark(mk)) 
-        || 480;
+      // 現在値を設定（優先順位: 個別 > 全体既定 > デフォルト）
+      const per = empAttr.shiftDurations[mk];
+      const global = (window.ShiftDurations && typeof window.ShiftDurations.getGlobalDefault === 'function')
+        ? window.ShiftDurations.getGlobalDefault(mk)
+        : undefined;
+      const def = (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function')
+        ? window.ShiftDurations.getDefaultForMark(mk)
+        : 480;
+      const currentValue = Number.isFinite(per)
+        ? per
+        : (Number.isFinite(global) ? global : def);
       sel.value = String(currentValue);
 
       // 現在の時間を表示
       const currentLabel = document.createElement('div');
+
       currentLabel.className = 'current-duration-label';
       currentLabel.style.fontSize = '0.75em';
       currentLabel.style.color = '#6b7280';
@@ -226,8 +349,14 @@ function init(){
               window.showToast(`${mk} の勤務時間を ${currentLabel.textContent} に変更しました`);
             }
           }
+
+          // 画面上の月合計なども即時反映
+          if (typeof window.renderGrid === 'function') {
+            window.renderGrid();
+          }
         }
       });
+
 
       fieldWrap.appendChild(lbl);
       fieldWrap.appendChild(sel);
@@ -602,11 +731,19 @@ function readAttrDialogToState(){
     }
   }
 
+// 修正後（init() を自動実行）
   // グローバル公開
   window.EmployeeDialog = {
     init,
     openAttrDialog,
     readAttrDialogToState
   };
+
+  // 自動初期化（DOM読み込み完了後）
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
 })();

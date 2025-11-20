@@ -50,7 +50,7 @@
     // 将来的に mark ごとに範囲を変える場合はここで分岐する
     if (MARKS.indexOf(mark) === -1) return [];
     return OPTIONS.slice(); // copy
-  }
+    }
 
   function getDefaultForMark(mark){
     return DEFAULT_FOR_MARK[mark] || DEFAULT_FOR_MARK['〇'];
@@ -66,13 +66,40 @@
     return minutesToLabel(minutes);
   }
 
-// --- 修正後（末尾部分に関数追加） ---
+  // --- 追加：グローバル既定の保持と API ---
+  // globalDefaults は mark -> minutes の連想（例：{ '〇':480, '☆':480, ... }）
+  // ここで window.ShiftDurations / _globalDefaults を必ず初期化しておく
+  window.ShiftDurations = window.ShiftDurations || {};
+  window.ShiftDurations._globalDefaults = window.ShiftDurations._globalDefaults || {};
+  var globalDefaults = window.ShiftDurations._globalDefaults;
+
+  function getGlobalDefault(mark){
+    return Number.isFinite(globalDefaults[mark]) ? globalDefaults[mark] : undefined;
+  }
+  function setGlobalDefault(mark, minutes){
+    if (!MARKS.includes(mark)) return false;
+
+    if (!Number.isFinite(minutes)) return false;
+    globalDefaults[mark] = Number(minutes);
+    // 永続化は app.js の saveMetaOnly にて meta に含める（ここでは通知のみ）
+    return true;
+  }
+  function getAllGlobalDefaults(){
+    // コピーを返す
+    return Object.assign({}, globalDefaults);
+  }
+
   // 従業員属性から勤務時間を取得（フォールバック付き）
   function getDurationForEmployee(empAttr, mark){
-    if (!empAttr || !mark) return getDefaultForMark(mark);
-    if (empAttr.shiftDurations && Number.isFinite(empAttr.shiftDurations[mark])){
+    if (!mark) return getDefaultForMark(mark);
+    // 1) 個別定義があれば優先
+    if (empAttr && empAttr.shiftDurations && Number.isFinite(empAttr.shiftDurations[mark])){
       return empAttr.shiftDurations[mark];
     }
+    // 2) グローバル既定があれば次に使う
+    const g = getGlobalDefault(mark);
+    if (Number.isFinite(g)) return g;
+    // 3) モジュール内デフォルトへフォールバック
     return getDefaultForMark(mark);
   }
 
@@ -85,7 +112,7 @@
   }
 
   // 公開（window）
-  window.ShiftDurations = {
+  window.ShiftDurations = Object.assign(window.ShiftDurations, {
     MARKS: MARKS,
     minutesList: minutesList,
     getOptionsForMark: getOptionsForMark,
@@ -93,6 +120,12 @@
     isDurationAllowed: isDurationAllowed,
     formatMinutes: formatMinutes,
     getDurationForEmployee: getDurationForEmployee,
-    formatDurationLabel: formatDurationLabel
-  };
+    formatDurationLabel: formatDurationLabel,
+    // --- 追加 API: global defaults の操作（employeeDialog から使用）
+    getGlobalDefault: getGlobalDefault,
+    setGlobalDefault: setGlobalDefault,
+    getAllGlobalDefaults: getAllGlobalDefaults,
+    // 内部データ参照（テスト/デバッグ用）
+    _globalDefaults: globalDefaults
+  });
 })();

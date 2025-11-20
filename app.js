@@ -308,21 +308,24 @@ window.setLocked = setLocked; // ★追加
   }
   $$('.btn').forEach(b=> b.addEventListener('click', addRipple));
 
-  async function enterApp(){
+// 修正後（initControls の前に初期化）
+async function enterApp(){
     loginView.classList.remove('active');
     appView.classList.add('active');
 
     const loginLoading = document.getElementById('loginLoading');
     if (loginLoading) loginLoading.classList.add('hidden');
 
+    // 従業員ダイアログを先に初期化（DOM要素が必要）
+    if (window.EmployeeDialog && typeof window.EmployeeDialog.init === 'function') {
+      window.EmployeeDialog.init();
+    } else {
+      console.warn('EmployeeDialog が読み込まれていません');
+    }
+
     initControls();
     loadWindow(State.anchor);
     renderAll();
-
-    // 従業員ダイアログ（勤務時間編集ボタンなど）の初期化
-    if (window.EmployeeDialog && typeof window.EmployeeDialog.init === 'function') {
-      window.EmployeeDialog.init();
-    }
   }
 
 
@@ -460,23 +463,27 @@ async function pushToRemote(){
   function writeMeta(meta){
     localStorage.setItem(storageKey('meta'), JSON.stringify(meta));
   }
-  function saveMetaOnly(){
-    const meta = readMeta();
-    meta.employeeCount = State.employeeCount;
-    meta.employees     = State.employees;
-    // 勤務時間を含む完全な属性を保存
-    meta.employeesAttr = State.employeesAttr.map(attr => ({
-      level: attr.level,
-      workType: attr.workType,
-      nightQuota: attr.nightQuota,
-      shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {}
-    }));
-    meta.range4wStart  = State.range4wStart;
-    meta.forbiddenPairs = Array.from(State.forbiddenPairs.entries()).map(([k, set]) => [k, Array.from(set)]);
-    writeMeta(meta);
-    // 追加：クラウドへ非同期送信（失敗は無視）
-    pushToRemote();
-  }
+    function saveMetaOnly(){
+      const meta = readMeta();
+      meta.employeeCount = State.employeeCount;
+      meta.employees     = State.employees;
+      // 勤務時間を含む完全な属性を保存
+      meta.employeesAttr = State.employeesAttr.map(attr => ({
+        level: attr.level,
+        workType: attr.workType,
+        nightQuota: attr.nightQuota,
+        shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {}
+      }));
+      meta.range4wStart  = State.range4wStart;
+      meta.forbiddenPairs = Array.from(State.forbiddenPairs.entries()).map(([k, set]) => [k, Array.from(set)]);
+      // ★追加：ShiftDurations のグローバル既定を保存（存在すれば）
+      if (window.ShiftDurations && typeof window.ShiftDurations.getAllGlobalDefaults === 'function') {
+        meta.shiftDurationsDefaults = window.ShiftDurations.getAllGlobalDefaults();
+      }
+      writeMeta(meta);
+      // 追加：クラウドへ非同期送信（失敗は無視）
+      pushToRemote();
+    }
 window.saveMetaOnly = saveMetaOnly; // ★追加
 
   function readDatesStore(){
@@ -548,6 +555,14 @@ window.saveMetaOnly = saveMetaOnly; // ★追加
     State.forbiddenPairs = new Map(meta.forbiddenPairs.map(([k, arr]) => [k, new Set(arr)]));
   } else {
     State.forbiddenPairs = new Map();
+  }
+  // ★追加：ShiftDurations のグローバル既定を復元（存在すれば）
+  if (meta.shiftDurationsDefaults && window.ShiftDurations && typeof window.ShiftDurations.setGlobalDefault === 'function') {
+    const defs = meta.shiftDurationsDefaults;
+    Object.keys(defs).forEach(mk => {
+      const v = defs[mk];
+      if (Number.isFinite(v)) window.ShiftDurations.setGlobalDefault(mk, Number(v));
+    });
   }
 
 } else {
@@ -972,182 +987,266 @@ function updateRange4wLabel(){
 }
 
 
-  // 追加：表示中31日ウィンドウをExcelで開けるCSVとして保存（UTF-8 BOM付き）
-  function exportExcelCsv(){
-    const rows = [];
+     // 追加：表示月（年月区切りのカレンダー月）をExcelで開けるCSVとして保存（UTF-8 BOM付き）
+    function exportExcelCsv(){
+      const rows = [];
 
-    // ヘッダ
-    const header = ['従業員'];
-    for (let d = 0; d < 31; d++){
-      const dt = State.windowDates[d];
-      const w  = '日月火水木金土'[dt.getDay()];
-      header.push(`${dt.getMonth()+1}/${dt.getDate()}(${w})`);
-    }
-    rows.push(header);
+      // カレンダー月の範囲を決定（表示ウィンドウの先頭日を基準に、その月の1日〜末日）
+      const anchor = State.windowDates[0];
+      const year = anchor.getFullYear();
+      const month = anchor.getMonth();
+      const monthStart = new Date(year, month, 1);
+      const monthEnd = new Date(year, month + 1, 0); // 月末日
+      // 日リスト
+      const days = [];
+      for (let d = new Date(monthStart); d <= monthEnd; d = addDays(d, 1)) days.push(new Date(d));
 
-    // 本体
-    for (let r = 0; r < State.employeeCount; r++){
-      const name = State.employees[r] || `職員${String(r+1).padStart(2,'0')}`;
-      const line = [name];
-      for (let d = 0; d < 31; d++){
-        const ds = dateStr(State.windowDates[d]);
-        const cell = hasOffByDate(r, ds) ? '休' : (getAssign(r, ds) || '');
-        line.push(cell);
-      }
-      rows.push(line);
-    }
+      // ヘッダ
+      const header = ['従業員'];
+      days.forEach(dt => {
+        const w  = '日月火水木金土'[dt.getDay()];
+        header.push(`${dt.getMonth()+1}/${dt.getDate()}(${w})`);
+      });
+      header.push('月合計');
+      rows.push(header);
 
-    // CSV化（必要なセルはクオート、Excel互換のCRLF、BOM付き）
-    const csv = rows.map(cols => cols.map(v => {
-      let s = String(v ?? '');
-      const needQuote = /[",\r\n]/.test(s);
-      if (needQuote) s = '"' + s.replace(/"/g, '""') + '"';
-      return s;
-    }).join(',')).join('\r\n');
+      // 本体（カレンダー月の各日を globalGetAssign / globalHasOffByDate / globalHasLeave で参照）
+      for (let r = 0; r < State.employeeCount; r++){
+        const name = State.employees[r] || `職員${String(r+1).padStart(2,'0')}`;
+        const line = [name];
+        let totalMin = 0;
+        for (const dt of days){
+          const ds = dateStr(dt);
+          const isOff = globalHasOffByDate(r, ds);
+          const lv = globalHasLeave(r, ds) ? (getLeaveType(r, ds) || '') : undefined;
+          const mk = globalGetAssign(r, ds);
 
-    const bom = '\uFEFF'; // ExcelでUTF-8を正しく認識させる
-    const blob = new Blob([bom, csv], { type: 'text/csv' });
+          // 表示セル値（祝/代/年/リ 等は getLeaveType では既に扱われる前提）
+          const cell = lv ? lv : (isOff ? '休' : (mk || ''));
+          line.push(cell);
 
-    const s = State.windowDates[0];
-    const e = State.windowDates[30];
-    const fname = `勤務表_${s.getFullYear()}${pad2(s.getMonth()+1)}${pad2(s.getDate())}_${e.getFullYear()}${pad2(e.getMonth()+1)}${pad2(e.getDate())}.csv`;
-
-
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = fname;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
-
-    if (typeof showToast === 'function') showToast('CSV（Excel対応）をダウンロードしました');
-  }
-
-  function renderGrid(){
-    grid.innerHTML = '';
-
-    const thead = document.createElement('thead');
-    const trh = document.createElement('tr');
-    // 左端：従業員名
-    const thName = document.createElement('th');
-    thName.className = 'col-emp';
-    thName.textContent = '従業員';
-    trh.appendChild(thName);
-
-    // 31日ヘッダー
-    for(let d=0; d<31; d++){
-      const dt = State.windowDates[d];
-      const th = document.createElement('th');
-      th.dataset.day = String(d);
-      const md = `${dt.getMonth()+1}/${dt.getDate()}`;
-      const dow = '日月火水木金土'[dt.getDay()];
-      th.innerHTML = `${md}<span class="dow">(${dow})</span>`;
-
-
-      // 週末クラス付与（ヘッダー）
-      const w = dt.getDay();
-      if (w === 0) th.classList.add('sun');      // 日曜
-      else if (w === 6) th.classList.add('sat'); // 土曜
-      if(isToday(dt)) th.classList.add('today');
-      if(State.holidaySet.has(dateStr(dt))) th.classList.add('holiday');
-      th.addEventListener('click', ()=> window.CellOperations.toggleHoliday(d));
-      trh.appendChild(th);
-    }
-    thead.appendChild(trh);
-
-    const tbody = document.createElement('tbody');
-    State.employees.forEach((name, r)=>{
-      const tr = document.createElement('tr');
-      const tdName = document.createElement('td');
-      tdName.className = 'col-emp';
-      // 属性チップ
-      tdName.appendChild(renderNameCell(r, name));
-      tr.appendChild(tdName);
-
-      for(let d=0; d<31; d++){
-        const dt = State.windowDates[d];
-        const ds = dateStr(dt);
-        const td = document.createElement('td');
-        td.dataset.row = String(r);
-        td.dataset.day = String(d);
-        // 週末クラス付与（列全体を帯状に）
-        const w = dt.getDay();
-        if (w === 0) td.classList.add('sun');      // 日曜（赤帯） 
-        else if (w === 6) td.classList.add('sat'); // 土曜（青帯）
-
-        if(State.holidaySet.has(ds)) td.classList.add('holiday');
-
-        // 中身：特別休暇 → 希望休 → 割当マーク
-        const lv = getLeaveType(r, ds);
-        if (lv){
-          td.classList.add('off');
-          const sp = document.createElement('span');
-          sp.className = `leave ${leaveClassOf(lv)}`;
-          sp.textContent = lv;
-          td.appendChild(sp);
-        } else if(hasOffByDate(r, ds)){
-          td.classList.add('off');
-          td.textContent = '休';
-        } else {
-          const mk = getAssign(r, ds);
-          if(mk){
-            const span = document.createElement('span');
-            span.className = 'mark ' + markToClass(mk);
-            span.textContent = mk;
-            td.appendChild(span);
+          // 合算：休・特別休は除外、割当マークがあれば勤務分を加算
+          if (mk && !isOff && !lv){
+            let minutes = 0;
+            if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
+              minutes = Number(window.ShiftDurations.getDurationForEmployee(State.employeesAttr[r] || {}, mk) || 0);
+            } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
+              minutes = Number(window.ShiftDurations.getDefaultForMark(mk) || 0);
+            } else {
+              const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240};
+              minutes = fallback[mk] || 0;
+            }
+            totalMin += minutes;
           }
         }
 
-        if (isLocked(r, ds)) {
-          td.classList.add('locked');
-        }
+        // 月合計を H:MM 形式で追加
+        const fmt = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
+          ? window.ShiftDurations.formatMinutes(totalMin)
+          : `${Math.floor(totalMin/60)}:${String(totalMin%60).padStart(2,'0')}`;
+        line.push(fmt);
 
-td.addEventListener('click', () => {
-  // 範囲ロックモードが有効なら先に処理
-  if (maybeHandleRangeLock(r, d)) return;
-
-  // ★追加：クリアモード
-  if (State.mode === 'clear') {
-    handleClearCell(r, d, td);
-    return;
-  }
-
-  // cellOperations.js に委譲
-  if (State.leaveMode) {
-    window.CellOperations.toggleLeave(r, d, td);
-    return;
-  }
-
-  if (State.mode === 'off') {
-    window.CellOperations.toggleOff(r, d, td);
-    return;
-  }
-
-  window.CellOperations.cycleAssign(r, d, td);
-});
-
-        td.addEventListener('contextmenu', (e) => {  
-          e.preventDefault();
-          const nowLocked = isLocked(r, ds);
-          setLocked(r, ds, !nowLocked);
-          td.classList.toggle('locked', !nowLocked);
-          showToast(!nowLocked
-            ? 'セルをロックしました（自動割当の対象外）'
-            : 'セルのロックを解除しました');
-        });
-
-        tr.appendChild(td);
+        rows.push(line);
       }
 
-      tbody.appendChild(tr);
-    });
+      // CSV化（必要なセルはクオート、Excel互換のCRLF、BOM付き）
+      const csv = rows.map(cols => cols.map(v => {
+        let s = String(v ?? '');
+        const needQuote = /[",\r\n]/.test(s);
+        if (needQuote) s = '"' + s.replace(/"/g, '""') + '"';
+        return s;
+      }).join(',')).join('\r\n');
 
-    grid.appendChild(thead);
-    grid.appendChild(tbody);
+      const bom = '\uFEFF'; // ExcelでUTF-8を正しく認識させる
+      const blob = new Blob([bom, csv], { type: 'text/csv' });
 
-    renderFooterCounts();
-    paintRange4w();
-  }
+      const s = monthStart;
+      const e = monthEnd;
+      const fname = `勤務表_${s.getFullYear()}${pad2(s.getMonth()+1)}${pad2(s.getDate())}_${e.getFullYear()}${pad2(e.getMonth()+1)}${pad2(e.getDate())}.csv`;
+
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+
+      if (typeof showToast === 'function') showToast('CSV（Excel対応）をダウンロードしました');
+    }
+    function renderGrid(){
+      grid.innerHTML = '';
+
+      const thead = document.createElement('thead');
+      const trh = document.createElement('tr');
+      // 左端：従業員名
+      const thName = document.createElement('th');
+      thName.className = 'col-emp';
+      thName.textContent = '従業員';
+      trh.appendChild(thName);
+
+      // 31日ヘッダー
+      for(let d=0; d<31; d++){
+        const dt = State.windowDates[d];
+        const th = document.createElement('th');
+        th.dataset.day = String(d);
+        const md = `${dt.getMonth()+1}/${dt.getDate()}`;
+        const dow = '日月火水木金土'[dt.getDay()];
+        th.innerHTML = `${md}<span class="dow">(${dow})</span>`;
+
+
+        // 週末クラス付与（ヘッダー）
+        const w = dt.getDay();
+        if (w === 0) th.classList.add('sun');      // 日曜
+        else if (w === 6) th.classList.add('sat'); // 土曜
+        if(isToday(dt)) th.classList.add('today');
+        if(State.holidaySet.has(dateStr(dt))) th.classList.add('holiday');
+        th.addEventListener('click', ()=> window.CellOperations.toggleHoliday(d));
+        trh.appendChild(th);
+      }
+      // 右端：月合計ヘッダを追加
+      const thTotal = document.createElement('th');
+      thTotal.className = 'col-month-total';
+      thTotal.textContent = '月合計';
+      trh.appendChild(thTotal);
+
+      thead.appendChild(trh);
+
+
+
+
+
+      const tbody = document.createElement('tbody');
+      State.employees.forEach((name, r)=>{
+        const tr = document.createElement('tr');
+        const tdName = document.createElement('td');
+        tdName.className = 'col-emp';
+        // 属性チップ
+        tdName.appendChild(renderNameCell(r, name));
+        tr.appendChild(tdName);
+
+        // 各日セル
+        for(let d=0; d<31; d++){
+          const dt = State.windowDates[d];
+          const ds = dateStr(dt);
+          const td = document.createElement('td');
+          td.dataset.row = String(r);
+          td.dataset.day = String(d);
+          // 週末クラス付与（列全体を帯状に）
+          const w = dt.getDay();
+          if (w === 0) td.classList.add('sun');      // 日曜（赤帯） 
+          else if (w === 6) td.classList.add('sat'); // 土曜（青帯）
+
+          if(State.holidaySet.has(ds)) td.classList.add('holiday');
+
+          // 中身：特別休暇 → 希望休 → 割当マーク
+          const lv = getLeaveType(r, ds);
+          if (lv){
+            td.classList.add('off');
+            const sp = document.createElement('span');
+            sp.className = `leave ${leaveClassOf(lv)}`;
+            sp.textContent = lv;
+            td.appendChild(sp);
+          } else if(hasOffByDate(r, ds)){
+            td.classList.add('off');
+            td.textContent = '休';
+          } else {
+            const mk = getAssign(r, ds);
+            if(mk){
+              const span = document.createElement('span');
+              span.className = 'mark ' + markToClass(mk);
+              span.textContent = mk;
+              td.appendChild(span);
+            }
+          }
+
+          if (isLocked(r, ds)) {
+            td.classList.add('locked');
+          }
+
+          td.addEventListener('click', () => {
+            // 範囲ロックモードが有効なら先に処理
+            if (maybeHandleRangeLock(r, d)) return;
+
+            // ★追加：クリアモード
+            if (State.mode === 'clear') {
+              handleClearCell(r, d, td);
+              return;
+            }
+
+            // cellOperations.js に委譲
+            if (State.leaveMode) {
+              window.CellOperations.toggleLeave(r, d, td);
+              return;
+            }
+
+            if (State.mode === 'off') {
+              window.CellOperations.toggleOff(r, d, td);
+              return;
+            }
+
+            window.CellOperations.cycleAssign(r, d, td);
+          });
+
+          td.addEventListener('contextmenu', (e) => {  
+            e.preventDefault();
+            const nowLocked = isLocked(r, ds);
+            setLocked(r, ds, !nowLocked);
+            td.classList.toggle('locked', !nowLocked);
+            showToast(!nowLocked
+              ? 'セルをロックしました（自動割当の対象外）'
+              : 'セルのロックを解除しました');
+          });
+
+          tr.appendChild(td);
+        }
+
+        // === ここで各従業員の月合計（カレンダー月）を算出して行の末尾に追加 ===
+        // カレンダー月の範囲を決定（表示ウィンドウの先頭日を基準）
+        const anchor = State.windowDates[0];
+        const y = anchor.getFullYear();
+        const m = anchor.getMonth();
+        const monthStart = new Date(y, m, 1);
+        const monthEnd = new Date(y, m + 1, 0);
+        let totalMin = 0;
+        for (let dt = new Date(monthStart); dt <= monthEnd; dt = addDays(dt, 1)){
+          const ds = dateStr(dt);
+          // 窓外の日付は globalGetAssign/globalHasOffByDate/globalHasLeave を使う
+          const isOff = globalHasOffByDate(r, ds);
+          const lv = globalHasLeave(r, ds) ? (getLeaveType(r, ds) || '') : undefined;
+          const mk = globalGetAssign(r, ds);
+          if (!mk) continue;
+          if (isOff || lv) continue; // 休または特別休は計上しない
+          let minutes = 0;
+          if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
+            minutes = Number(window.ShiftDurations.getDurationForEmployee(State.employeesAttr[r] || {}, mk) || 0);
+          } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
+            minutes = Number(window.ShiftDurations.getDefaultForMark(mk) || 0);
+          } else {
+            const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240};
+            minutes = fallback[mk] || 0;
+          }
+          totalMin += minutes;
+        }
+        const tdTotal = document.createElement('td');
+        tdTotal.className = 'month-total';
+        tdTotal.dataset.row = String(r);
+        tdTotal.textContent = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
+          ? window.ShiftDurations.formatMinutes(totalMin)
+          : `${Math.floor(totalMin/60)}:${String(totalMin%60).padStart(2,'0')}`;
+        tr.appendChild(tdTotal);
+        // === 月合計セルの追加ここまで ===
+
+        tbody.appendChild(tr);
+      });
+
+      grid.appendChild(thead);
+      grid.appendChild(tbody);
+
+      renderFooterCounts();
+      paintRange4w();
+    }
+
+
  window.renderGrid = renderGrid; // ★追加
 
 function markToClass(mk){
