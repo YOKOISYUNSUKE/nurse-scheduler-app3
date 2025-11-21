@@ -1121,6 +1121,13 @@ function updateRange4wLabel(){
           if (wd === 0) th.classList.add('sun');
           else if (wd === 6) th.classList.add('sat');
           if (State.holidaySet.has(ds)) th.classList.add('holiday');
+          
+          // ★ここに移動：日付が存在する場合にクリックイベントを設定
+          th.addEventListener('click', ()=>{
+            if(window.CellOperations && typeof window.CellOperations.toggleHoliday === 'function'){
+              window.CellOperations.toggleHoliday(d);
+            }
+          });
         } else {
           th.dataset.day = String(d);
         }

@@ -95,6 +95,7 @@
       // イベントリスナーの登録
       setupMonthNavigation();
       setupDayNavigation();
+      setupHolidayAutoButton();
       setupAutoAssignButton();
       setupCancelButtons();
       setupLockButtons();
