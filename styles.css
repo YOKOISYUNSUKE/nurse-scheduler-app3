@@ -171,6 +171,21 @@ html, body { height: 100%; }                 /* ビューポート基準を安�
   text-align:center;
 }
 
+/* 4週休日集計セル */
+.grid td.month-off{
+  padding:4px 6px;
+  font-size:12px;
+  min-width:60px;
+  white-space:normal;
+}
+
+/* 4週時間ヘッダ（2行表示前提） */
+.grid .col-month-total{
+  white-space:normal;
+  line-height:1.2;
+}
+
+
 
 
 /* 特別休暇タグ（祝/代/年/リ） */

@@ -1134,20 +1134,26 @@ function updateRange4wLabel(){
         trh.appendChild(th);
       }
 
-      // 右端：マーク集計と4週間勤務時間ヘッダを追加
+      // 右端：マーク集計・休日集計・4週間勤務時間ヘッダを追加
       const thMarks = document.createElement('th');
       thMarks.className = 'col-month-marks';
       thMarks.innerHTML = '4週<br>マーク';
       trh.appendChild(thMarks);
 
+      const thHoliday = document.createElement('th');
+      thHoliday.className = 'col-month-off';
+      thHoliday.textContent = '休日';
+      trh.appendChild(thHoliday);
+
       const thTotal = document.createElement('th');
       thTotal.className = 'col-month-total';
-      thTotal.textContent = '4週<br>時間';
+      thTotal.innerHTML = '<div>4週</div><div>時間</div>';
       trh.appendChild(thTotal);
 
 
 
       thead.appendChild(trh);
+
 
 
 
@@ -1244,7 +1250,7 @@ function updateRange4wLabel(){
         const maxDayIdx4w = State.windowDates.length - 1;
         if (end4w > maxDayIdx4w) end4w = maxDayIdx4w;
 
-        let cntO = 0, cntNightPair = 0, cntNF = 0, cntNS = 0;
+        let cntO = 0, cntNightPair = 0, cntNF = 0, cntNS = 0, cntHoliday = 0;
         if (end4w >= start4w){
           for (let d = start4w; d <= end4w; d++){
             const dt4 = State.windowDates[d];
@@ -1257,6 +1263,7 @@ function updateRange4wLabel(){
             } else if (mk4 === '☆'){
               cntNightPair++;
             } else if (mk4 === '★'){
+
               const prevIdx = d - 1;
               let countedWithPrev = false;
               if (prevIdx >= start4w && prevIdx >= 0){
@@ -1286,16 +1293,13 @@ function updateRange4wLabel(){
         `.trim();
         tr.appendChild(tdMarks);
 
-        // 労働時間セル
-        const tdTime = document.createElement('td');
+        // 休日集計セル（4週間）
+        const tdOff = document.createElement('td');
+        tdOff.className = 'month-off';
+        tdOff.dataset.row = String(r);
 
-        tdTime.className = 'month-total';
-        tdTime.dataset.row = String(r);
-
-
-
-        // === ここで各従業員の4週間（網掛け範囲）の勤務時間合計を算出して行の末尾に追加 ===
-
+        // === ここで各従業員の4週間（網掛け範囲）の勤務時間合計と休日数を算出して行の末尾に追加 ===
+        cntHoliday = 0; 
         let totalMin = 0;
         if (typeof start4w === 'number' && end4w >= start4w){
           for (let d4 = start4w; d4 <= end4w; d4++){
@@ -1303,12 +1307,21 @@ function updateRange4wLabel(){
             if (!dt4) continue;
             const ds4 = dateStr(dt4);
 
-            // 4週内の日付について、休・特別休は除外して勤務時間のみ加算
-            const isOff4 = globalHasOffByDate(r, ds4);
-            const lv4 = globalHasLeave(r, ds4) ? (getLeaveType(r, ds4) || '') : undefined;
-            const mk4 = globalGetAssign(r, ds4);
-            if (!mk4) continue;
-            if (isOff4 || lv4) continue;
+
+    // 4週内の日付について、
+    // 「マークなし or 希望休」かつ「特別休暇なし」を休日としてカウント
+    const mk4   = globalGetAssign(r, ds4);
+    const hasLv = globalHasLeave(r, ds4);
+    const isOff4 = (globalHasOffByDate(r, ds4) || !mk4) && !hasLv;
+
+    if (isOff4){
+      cntHoliday++;
+      continue;
+    }
+
+    // ここまでで休日でないことが確定しているので、
+    // 勤務マークが無ければ勤務時間は 0 分としてスキップ
+    if (!mk4) continue;
 
             let minutes = 0;
             if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
@@ -1323,6 +1336,9 @@ function updateRange4wLabel(){
           }
         }
 
+        tdOff.textContent = String(cntHoliday);
+        tr.appendChild(tdOff);
+
         const tdTotal = document.createElement('td');
         tdTotal.className = 'month-total';
         tdTotal.dataset.row = String(r);
@@ -1331,7 +1347,6 @@ function updateRange4wLabel(){
           : `${Math.floor(totalMin/60)}:${String(totalMin%60).padStart(2,'0')}`;
         tr.appendChild(tdTotal);
         // === 4週間勤務時間セルの追加ここまで ===
-
         tbody.appendChild(tr);
 
       });
