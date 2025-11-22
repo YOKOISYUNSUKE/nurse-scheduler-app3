@@ -189,7 +189,7 @@
     return score;
   }
 
-  // 乱数（線形合同法）とシード設定（線形合同法）とシード設定
+  // 乱数（線形合同法）とシード設定
   let _seed = 1;
 
   let _randAmp = 0.49;                   // ← 既定の振れ幅（従来値互換）
@@ -203,8 +203,59 @@
     return (_seed >>> 0) / 4294967296;
   }
 
-  // 候補抽出（空き・希望休なし・勤務形態OK）→不足度でソート（微小ゆらぎ）→勤務形態優先→公平ローテ
+  // スコアに応じた「重み付きランダム順」（ソフトマックス風）
+  function _softmaxOrderByScore(items){
+    if (!Array.isArray(items) || items.length <= 1){
+      return Array.isArray(items) ? items.slice() : [];
+    }
+
+    const scores = items.map(x => x.score);
+    const maxScore = Math.max(...scores);
+    const T = 40; // 温度パラメータ：大きいほどランダム寄り、小さいほどスコア優先
+
+    const work = items.map((x, idx) => {
+      const w = Math.exp((scores[idx] - maxScore) / T);
+      return {
+        r: x.r,
+        score: x.score,
+        _w: w > 0 ? w : 0
+      };
+    });
+
+    const result = [];
+    while (work.length > 0){
+      let total = 0;
+      for (const x of work){
+        total += x._w;
+      }
+
+      if (!(total > 0)){
+        // すべての重みが 0 もしくは NaN 等の場合はスコア順で残りを並べる
+        work.sort((a, b) => b.score - a.score);
+        result.push(...work);
+        break;
+      }
+
+      let rnd = _rand() * total;
+      let pickIndex = 0;
+      for (let i = 0; i < work.length; i++){
+        rnd -= work[i]._w;
+        if (rnd <= 0){
+          pickIndex = i;
+          break;
+        }
+      }
+
+      result.push(work[pickIndex]);
+      work.splice(pickIndex, 1);
+    }
+
+    return result;
+  }
+
+  // 候補抽出（空き・希望休なし・勤務形態OK）→不足度でスコアリング→重み付きランダム→勤務形態優先
   function candidatesFor(ctx, dayIdx, mark){
+
     const ds = dateStr(ctx.dates[dayIdx]);
     const startIdx = ctx.range4wStart;
     const endIdx   = ctx.range4wStart + 27;
@@ -275,28 +326,30 @@ out = out
     // 二部制／三部制の夜勤間隔をなるべく均一化するスコア（夜勤専従は影響なし）
     const spacing = nightSpacingScore(ctx, dayIdx, mark, r);
 
-const pen  = acNightPenalty(ctx, dayIdx, mark, r);
-const jitter = (_rand() - 0.5) * _randAmp;
-// ★追加：A属性にボーナスを付与（各帯に必須のため優先度を上げる）
-const attr = ctx.getEmpAttr(r) || { level:'B', workType:'three' };
-const aBonus = (attr.level === 'A') ? 50 : 0;
-return { r, score: base + riskBoost + fair + spacing + pen + aBonus + jitter };
-
+    const pen  = acNightPenalty(ctx, dayIdx, mark, r);
+    const jitter = (_rand() - 0.5) * _randAmp;
+    // ★追加：A属性にボーナスを付与（各帯に必須のため優先度を上げる）
+    const attr = ctx.getEmpAttr(r) || { level:'B', workType:'three' };
+    const aBonus = (attr.level === 'A') ? 50 : 0;
+    return { r, score: base + riskBoost + fair + spacing + pen + aBonus + jitter };
   })
 
-  .filter(x => x.score !== -Infinity)
-  .sort((a, b) => b.score - a.score)
-  .map(x => x.r);
+  .filter(x => x.score !== -Infinity);
 
+  // スコアに応じた「重み付きランダム順」（ソフトマックス風）に並べ替え
+  out = _softmaxOrderByScore(out);
 
-    // 勤務形態の優先度は維持（夜勤専従をグループ先頭のまま）
-    out = _orderByWorkType(ctx, out, mark);
+  out = out.map(x => x.r);
 
-    // ★削除：公平ローテは土日祈日公平化と競合するため削除
-    // （スコアソートで公平性が確保される）
+  // 勤務形態の優先度は維持（夜勤専従をグループ先頭のまま）
+  out = _orderByWorkType(ctx, out, mark);
 
-    return out;
-  }
+  // ★削除：公平ローテは土日祈日公平化と競合するため削除
+  // （スコアソートで公平性が確保される）
+
+  return out;
+}
+
 
 
     // 4週間の夜勤ノルマ充足判定

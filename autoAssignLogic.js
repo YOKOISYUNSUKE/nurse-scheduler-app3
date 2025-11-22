@@ -143,14 +143,22 @@
   }
 
   // ★追加：配列をシャッフルする関数（Fisher-Yatesアルゴリズム）
+  // ---- ヘルパー：配列シャッフル ----
   function shuffleArray(arr){
-    const result = [...arr];
+    // 元配列を壊さないようにコピー
+    const result = Array.isArray(arr) ? arr.slice() : [];
+    // Fisher–Yates 方式でシャッフル
     for (let i = result.length - 1; i > 0; i--){
       const j = Math.floor(Math.random() * (i + 1));
-      [result[i], result[j]] = [result[j], result[i]];
+      const tmp = result[i];
+      result[i] = result[j];
+      result[j] = tmp;
     }
     return result;
   }
+
+  // （このあとで shuffleArray を使って日勤候補や削除候補をシャッフルしています）
+
 
   function fillWith(dayIdx, deficit, marks, preferA){
     let placed = 0;
