@@ -9,8 +9,9 @@
   let dateStr, getAssign, setAssign, clearAssign;
   let hasOffByDate, getLeaveType, setLeaveType, clearLeaveType;
   let isLocked, setLocked;
-  let showToast, updateFooterCounts, renderGrid;
+  let showToast, updateFooterCounts, renderGrid, refresh4wSummaryForRow;
   let isRestByDate, markToClass, leaveClassOf;
+
 
   // 初期化関数（app.jsから呼ばれる）
   window.CellOperations = {
@@ -31,10 +32,13 @@
       showToast = window.showToast;
       updateFooterCounts = window.updateFooterCounts;
       renderGrid = window.renderGrid;
+      refresh4wSummaryForRow = window.refresh4wSummaryForRow;
       isRestByDate = window.isRestByDate;
       markToClass = window.markToClass;
       leaveClassOf = window.leaveClassOf;
     },
+
+
 
     // 公開関数
     toggleHoliday: toggleHoliday,
@@ -96,6 +100,8 @@
     }
 
     if (typeof updateFooterCounts === 'function') updateFooterCounts();
+    if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
+
   }
 
   // === 翌日の「★」を強制消去 ===
@@ -112,6 +118,7 @@
         nextCell.textContent = '';
       }
       if (typeof updateFooterCounts === 'function') updateFooterCounts();
+      if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
     }
   }
 
@@ -155,8 +162,10 @@
         removeNextDayStarIfAny(r, d);
       }
       updateFooterCounts();
+      if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
       return;
     }
+
 
     // 勤務形態チェック（手動はスキップ）
     if (!IGNORE_RULES_ON_MANUAL && window.AssignRules && typeof window.AssignRules.canAssign === 'function') {
@@ -191,11 +200,13 @@
     span.textContent = next;
     td.appendChild(span);
     updateFooterCounts();
+    if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
 
     // ☆の翌日は★
     if (next === '☆') {
       forceNextDayStar(r, d);
     }
+
 
     // 連鎖ルール適用（手動はスキップ）
     if (!IGNORE_RULES_ON_MANUAL && window.Rules && typeof window.Rules.applyAfterAssign === 'function') {
@@ -212,10 +223,12 @@
         clearAssign(r, ds);
         td.textContent = '';
         updateFooterCounts(); 
+        if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
         showToast(result.message || 'ルール違反です');
         return;
       } else {
         updateFooterCounts();
+        if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
       }
     }
 
@@ -237,9 +250,11 @@
       td.textContent = '';
       td.classList.remove('off');
       updateFooterCounts(d);
+      if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
       showToast('希望休を解除しました');
       return;
     }
+
 
     if (hasOffByDate(r, ds)) {
       clearLeaveType(r, ds);
@@ -257,8 +272,10 @@
 
     removeNextDayStarIfAny(r, d);
     updateFooterCounts(d);
+    if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
     showToast('希望休を更新しました');
   }
+
 
   // === 希望休トグル ===
   function toggleOff(r, d, td){
@@ -284,8 +301,10 @@
       td.classList.remove('off');
       td.textContent = '';
       updateFooterCounts();
+      if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
       return;
     }
+
 
     // 単一休み3連続チェック
     const wouldViolate = (()=>{
@@ -323,6 +342,8 @@
     clearAssign(r, ds);
     removeNextDayStarIfAny(r, d);
     updateFooterCounts();
+    if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
   }
+
 
 })();

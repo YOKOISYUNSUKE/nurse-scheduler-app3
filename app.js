@@ -214,6 +214,7 @@ window.setLocked = setLocked; // ★追加
   function countLast28Days(r, endDt){
     const start = addDays(endDt, -27);
     let star=0, half=0, off=0;
+    let workMinutes = 0; // ★追加：直近4週間の実労働時間（分）
     for (let i=0;i<28;i++){
       const dt = addDays(start, i);
       const ds = dateStr(dt);
@@ -222,10 +223,25 @@ window.setLocked = setLocked; // ★追加
       const isOff = (globalHasOffByDate(r, ds) || !mk) && !hasLv; // 特別休暇日は“勤務扱い”
       if (mk === '☆') star++;
       if (mk === '◆' || mk === '●') half++;
-      if (isOff) off++;
+      if (isOff) {
+        off++;
+      } else if (mk && !hasLv){
+        // ★追加：実労働時間（勤務マークがあり、公休・特別休暇でない日）を積算
+        let minutes = 0;
+        if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
+          minutes = Number(window.ShiftDurations.getDurationForEmployee(State.employeesAttr[r] || {}, mk) || 0);
+        } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
+          minutes = Number(window.ShiftDurations.getDefaultForMark(mk) || 0);
+        } else {
+          const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240};
+          minutes = fallback[mk] || 0;
+        }
+        workMinutes += minutes;
+      }
     }
-    return { star, half, off, start, end:endDt };
+    return { star, half, off, workMinutes, start, end:endDt };
   }
+
 
   // 〈新規〉28日窓の休日日数の必要量（★始まり/☆終わり 補正）
   function requiredOffFor28(r, startDt, endDt){
@@ -974,6 +990,120 @@ function handleClearCell(r, dayIdx, td){
   }
 window.updateFooterCounts = updateFooterCounts; // ★追加
 
+  // ★追加：指定行の4週間マーク・休日・時間セルだけ再計算（手動操作用）
+  function refresh4wSummaryForRow(r){
+    if (!grid || typeof r !== 'number') return;
+
+    const start4w = State.range4wStart;
+    if (typeof start4w !== 'number') return;
+
+    const maxIdx = State.windowDates.length - 1;
+    const end4w  = Math.min(start4w + 27, maxIdx);
+    if (end4w < start4w) return;
+
+    const tdMarks = grid.querySelector(`td.month-marks[data-row="${r}"]`);
+    const tdOff   = grid.querySelector(`td.month-off[data-row="${r}"]`);
+    const tdTotal = grid.querySelector(`td.month-total[data-row="${r}"]`);
+
+    if (!tdMarks && !tdOff && !tdTotal) return;
+
+    // ---- マーク集計（〇 / 通し夜勤ペア / NF / NS） ----
+    if (tdMarks){
+      let cntO = 0, cntNightPair = 0, cntNF = 0, cntNS = 0;
+      for (let d = start4w; d <= end4w; d++){
+        const dt4 = State.windowDates[d];
+        if (!dt4) continue;
+        const ds4 = dateStr(dt4);
+        const mk4 = globalGetAssign(r, ds4);
+        if (!mk4) continue;
+
+        if (mk4 === '〇'){
+          cntO++;
+        } else if (mk4 === '☆'){
+          cntNightPair++;
+        } else if (mk4 === '★'){
+          // 直前が☆ならペアとして既にカウント済み
+          const prevIdx = d - 1;
+          let countedWithPrev = false;
+          if (prevIdx >= start4w && prevIdx >= 0){
+            const prevDt = State.windowDates[prevIdx];
+            if (prevDt){
+              const prevMk = globalGetAssign(r, dateStr(prevDt));
+              if (prevMk === '☆') countedWithPrev = true;
+            }
+          }
+          if (!countedWithPrev) cntNightPair++;
+        } else if (mk4 === '◆'){
+          cntNF++;
+        } else if (mk4 === '●'){
+          cntNS++;
+        }
+      }
+      const lineTop = `〇${cntO}☆★${cntNightPair}`;
+      const lineBottom = `◆${cntNF}●${cntNS}`;
+      tdMarks.innerHTML = `
+        <div class="mm-row">${lineTop}</div>
+        <div class="mm-row">${lineBottom}</div>
+      `.trim();
+    }
+
+    // ---- 休日数と4週間勤務時間 ----
+    if (tdOff || tdTotal){
+      let cntHoliday = 0;
+      let totalMin   = 0;
+
+      for (let d4 = start4w; d4 <= end4w; d4++){
+        const dt4 = State.windowDates[d4];
+        if (!dt4) continue;
+        const ds4 = dateStr(dt4);
+
+        const mk4   = globalGetAssign(r, ds4);
+        const hasLv = globalHasLeave(r, ds4);
+        const isOff4 = (globalHasOffByDate(r, ds4) || !mk4) && !hasLv;
+
+        if (isOff4){
+          cntHoliday++;
+          continue;
+        }
+        if (!mk4) continue;
+
+        let minutes = 0;
+        if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
+          minutes = Number(window.ShiftDurations.getDurationForEmployee(State.employeesAttr[r] || {}, mk4) || 0);
+        } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
+          minutes = Number(window.ShiftDurations.getDefaultForMark(mk4) || 0);
+        } else {
+          const fallback = { '〇':480, '☆':480, '★':480, '◆':240, '●':240 };
+          minutes = fallback[mk4] || 0;
+        }
+        totalMin += minutes;
+      }
+
+      if (tdOff){
+        tdOff.textContent = String(cntHoliday);
+      }
+
+      if (tdTotal){
+        const formatted = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
+          ? window.ShiftDurations.formatMinutes(totalMin)
+          : `${Math.floor(totalMin/60)}:${String(totalMin%60).padStart(2,'0')}`;
+        tdTotal.textContent = formatted;
+
+        // 36協定 4週間155時間超 → 赤字表示
+        if (totalMin > 155 * 60){
+          tdTotal.style.color = '#b91c1c';
+          tdTotal.style.fontWeight = '700';
+        } else {
+          tdTotal.style.color = '';
+          tdTotal.style.fontWeight = '';
+        }
+      }
+    }
+  }
+  window.refresh4wSummaryForRow = refresh4wSummaryForRow;
+
+
+
   function updatePeriodText(){
     const s = State.windowDates[0];
     const e = State.windowDates[30];
@@ -1342,11 +1472,25 @@ function updateRange4wLabel(){
         const tdTotal = document.createElement('td');
         tdTotal.className = 'month-total';
         tdTotal.dataset.row = String(r);
-        tdTotal.textContent = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
+
+        const formatted = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
           ? window.ShiftDurations.formatMinutes(totalMin)
           : `${Math.floor(totalMin/60)}:${String(totalMin%60).padStart(2,'0')}`;
+
+        tdTotal.textContent = formatted;
+
+        // ★追加：36協定 4週間 155時間超 → 赤字表示
+        if (totalMin > 155 * 60) {
+          tdTotal.style.color = '#b91c1c';   // var(--danger) と同じ赤
+          tdTotal.style.fontWeight = '700';
+        } else {
+          tdTotal.style.color = '';
+          tdTotal.style.fontWeight = '';
+        }
+
         tr.appendChild(tdTotal);
         // === 4週間勤務時間セルの追加ここまで ===
+
         tbody.appendChild(tr);
 
       });
@@ -2020,13 +2164,14 @@ function deleteEmployee(idx){
   
   window.completeCancelAll = completeCancelAll;
   window.completeCancelOneCell = completeCancelOneCell;
-  window.handleClearCell = handleClearCell; // ★追加
+  window.handleClearCell = handleClearCell; 
   window.saveWindow = saveWindow;
   window.pushToRemote = pushToRemote;
   window.openAttrDialog = openAttrDialog;
   window.readAttrDialogToState = readAttrDialogToState;
   window.requiredOffFor28 = requiredOffFor28;
   window.validateRollingFourWeeksWithHistory = validateRollingFourWeeksWithHistory;
+  window.countLast28Days = countLast28Days; // 直近4週間集計（36協定チェック用）
   window.State = State;
 
   // === グローバル公開（cellOperations.js / autoAssignLogic.js 用） ===

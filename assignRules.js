@@ -315,19 +315,30 @@ function precheckPlace(p){
       const hasC  = nsRows.some(i=> getLv(i)==='C');
       const hasNi = nsRows.some(i=> getWk(i)==='night');
       if (hasA && hasC && hasNi){
-        return { ok:false, message:'NS帯で「A・C・夜勤専従」が同席になるため不可' };
+        return { ok:false, message:'NF帯で「A・C・夜勤専従」が同席になるため不可' };
       }
     }
 
 
-// 当日：NF側（☆+◆）は設定の固定値「まで」（特定日設定を優先）
+// 当日：NF側（☆+◆）は設定の固定値「のみ」（特定日設定を優先）
     if (p.mark==='☆' || p.mark==='◆'){
       const ds = dateStr(p.dates[d]);
       const FIXED_NF = (window.Counts && typeof window.Counts.getFixedNF === 'function')
         ? window.Counts.getFixedNF(ds)
         : ((window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3);
       const c = countForDay(d, p.dates, p.employeeCount, p.getAssign, {rowIndex:p.rowIndex, mark:p.mark});
-      if (c.nf > FIXED_NF) return { ok:false, message:`当日の（☆＋◆）は${FIXED_NF}名までです` };
+      if (c.nf > FIXED_NF) return { ok:false, message:`当日の（☆＋◆）は${FIXED_NF}名のみです` };
+    }
+
+
+    // 当日：NS側（★+●）は設定の固定値「のみ」（特定日設定を優先）
+    if (p.mark==='★' || p.mark==='●'){
+      const ds = dateStr(p.dates[d]);
+      const FIXED_NS = (window.Counts && typeof window.Counts.getFixedNS === 'function')
+        ? window.Counts.getFixedNS(ds)
+        : ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
+      const c = countForDay(d, p.dates, p.employeeCount, p.getAssign, {rowIndex:p.rowIndex, mark:p.mark});
+      if (c.ns > FIXED_NS) return { ok:false, message:`当日の（★＋●）は${FIXED_NS}名のみです` };
     }
 
 
@@ -351,7 +362,7 @@ function precheckPlace(p){
       }
     }
     
-// 当日：NS側（★+●）は3名「まで」
+// 当日：NS側（★+●）は固定値「のみ」
 if (p.mark==='☆'){
   if (d+1 >= p.dates.length) return { ok:false, message:'月末のため「☆」を置けません' };
   if (p.hasOffByDate && p.hasOffByDate(p.rowIndex, dsNext)) return { ok:false, message:'翌日が希望休のため「☆」を置けません' };
@@ -516,8 +527,96 @@ if (p.mark==='☆'){
         return { ok:false, message:'「☆★」の次の2日は必ず休（希望休または未割当）。配置できません' };
       }
     }
+
+    // ★追加：36協定 4週間155時間（実労働）の上限チェック
+    if (typeof global.countLast28Days === 'function'){
+      try {
+        const endDt = p.dates[d];
+        const stats = global.countLast28Days(p.rowIndex, endDt);
+        if (stats && typeof stats.workMinutes === 'number'){
+          const limitMinutes = 155 * 60; // 4週155時間
+          // 既存のマーク分を差し引き、今回のマークを仮置きした場合の総時間を計算
+          const ds = dateStr(endDt);
+          let currentMk = null;
+          if (typeof p.getAssign === 'function'){
+            currentMk = p.getAssign(p.rowIndex, ds) || null;
+          }
+
+          const state = global.State || {};
+          const attrs = (state.employeesAttr && state.employeesAttr[p.rowIndex]) || {};
+
+          const sd = global.ShiftDurations;
+          const calcMinutes = (mk)=>{
+            if (!mk) return 0;
+            if (sd && typeof sd.getDurationForEmployee === 'function'){
+              return Number(sd.getDurationForEmployee(attrs, mk) || 0);
+            }
+            if (sd && typeof sd.getDefaultForMark === 'function'){
+              return Number(sd.getDefaultForMark(mk) || 0);
+            }
+            const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240};
+            return fallback[mk] || 0;
+          };
+
+          const currentMin   = calcMinutes(currentMk);
+          const candidateMin = calcMinutes(p.mark);
+          const newTotal = stats.workMinutes - currentMin + candidateMin;
+
+          if (newTotal > limitMinutes){
+            // NS/NFの人数充足は絶対条件：夜勤帯の不足を埋める勤務は36協定より優先
+            let mustKeepNightQuota = false;
+            const isNightMark = (p.mark === '☆' || p.mark === '◆' || p.mark === '★' || p.mark === '●');
+            if (isNightMark && typeof countForDay === 'function'){
+              try {
+                const dsDay = dateStr(p.dates[d]);
+
+                const FIXED_NF2 = (window.Counts && typeof window.Counts.getFixedNF === 'function')
+                  ? window.Counts.getFixedNF(dsDay)
+                  : ((window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3);
+                const FIXED_NS2 = (window.Counts && typeof window.Counts.getFixedNS === 'function')
+                  ? window.Counts.getFixedNS(dsDay)
+                  : ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
+
+                // 当日の現状カウント（候補マークを置く前）
+                const cntToday = countForDay(d, p.dates, p.employeeCount, p.getAssign);
+
+                if ((p.mark === '☆' || p.mark === '◆') && cntToday.nf < FIXED_NF2){
+                  mustKeepNightQuota = true;
+                }
+                if ((p.mark === '★' || p.mark === '●') && cntToday.ns < FIXED_NS2){
+                  mustKeepNightQuota = true;
+                }
+
+                // 「☆」は翌日のNS（★）も埋めるため、翌日分の不足も確認
+                if (p.mark === '☆' && d + 1 < p.dates.length){
+                  const dsNext2 = dateStr(p.dates[d+1]);
+                  const FIXED_NS_NEXT = (window.Counts && typeof window.Counts.getFixedNS === 'function')
+                    ? window.Counts.getFixedNS(dsNext2)
+                    : ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
+                  const cntNext = countForDay(d+1, p.dates, p.employeeCount, p.getAssign);
+                  if (cntNext.ns < FIXED_NS_NEXT){
+                    mustKeepNightQuota = true;
+                  }
+                }
+              } catch(e){
+                // 夜勤帯充足判定での例外は無視し、従来通り36協定のみで判定
+              }
+            }
+
+            if (!mustKeepNightQuota){
+              return { ok:false, message:'4週間の実労働時間が155時間を超えるため、この勤務は配置できません' };
+            }
+          }
+        }
+      } catch(e){
+        // 36協定チェックで例外が出ても、割り当て処理自体は継続させる
+
+      }
+    }
+
     return { ok:true };
   }
+
 
 
 
