@@ -989,8 +989,14 @@ function autoAssignRange(startDayIdx, endDayIdx){
     })();
 
 
-    // ★最後に日勤を配置
-    for(let d=startDayIdx; d<=endDayIdx; d++){
+    // ★最後に日勤を配置（処理順のみランダム化：NS/NFの充足ロジックには影響なし）
+    const dayOrderForDayShift = [];
+    for (let d = startDayIdx; d <= endDayIdx; d++){
+      dayOrderForDayShift.push(d);
+    }
+    shuffleArray(dayOrderForDayShift);
+
+    for (const d of dayOrderForDayShift){
       let { day, hasADay } = countDayStats(d);
       const target = targetDayForIndex(d);
 
@@ -1002,6 +1008,7 @@ function autoAssignRange(startDayIdx, endDayIdx){
         const pushDay = fillDayShift(d);
         pushDay(target - day);
         ({ day } = countDayStats(d));
+
       }
 
       const capWkHol = (window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY))
