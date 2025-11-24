@@ -169,21 +169,111 @@
 
       // 再自動割当（別パターン）
       autoAssignRange(start, end);
-
-      // 祝日自動付与（休→祝 / 祝日勤務者に代休を自動設定）
-      applyHolidayLeaveFlags(start, end);
-
+      if (window.Rules && typeof window.Rules.applyHolidayLeaveFlags === 'function'){
+        window.Rules.applyHolidayLeaveFlags(State);
+      }
       renderGrid();
       paintRange4w();
 
+      // ★追加：Aレベル不在帯のアラート（自動割り当て範囲のみチェック）
+      checkABandAlert(start, end);
+
       const s = State.windowDates[start];
       const e = State.windowDates[end];
-      showToast(`4週間の自動割り当て完了：${s.getMonth() + 1}/${s.getDate()}〜${e.getMonth() + 1}/${e.getDate()}（別パターン／保存は別）`);
-
-      // 直前状態に戻せるようアンドゥを有効化
+      const msg = `${s.getMonth()+1}/${s.getDate()}〜${e.getMonth()+1}/${e.getDate()}に自動割り当てしました`;
+      showToast(msg);
       if (btnUndo) btnUndo.disabled = false;
     });
   }
+  // ★追加：日勤・夜勤前半・夜勤後半の A レベルカバレッジをチェック
+  // start, end … 自動割り当て対象の日インデックス（State.windowDates のインデックス）
+  function checkABandAlert(start, end) {
+    if (!State || !Array.isArray(State.windowDates)) return;
+    if (typeof window.getAssign !== 'function') return;
+
+    const problemDays = [];
+
+    for (let d = start; d <= end && d < State.windowDates.length; d++){
+      const dt = State.windowDates[d];
+      const ds = dateStr ? dateStr(dt) :
+        (window.App && window.App.Dates && typeof window.App.Dates.dateStr === 'function'
+          ? window.App.Dates.dateStr(dt)
+          : null);
+      if (!ds) continue;
+
+      let dayCount = 0;
+      let nfCount  = 0;
+      let nsCount  = 0;
+
+      let hasADay = false;
+      let hasANf  = false;
+      let hasANs  = false;
+
+      for (let r = 0; r < State.employeeCount; r++){
+        const mk = window.getAssign(r, ds);
+        if (!mk) continue;
+
+        const empAttr = (State.employeesAttr && State.employeesAttr[r]) || {};
+        const isA = empAttr.level === 'A';
+
+        // 日勤
+        if (mk === '〇'){
+          dayCount++;
+          if (isA) hasADay = true;
+        }
+
+        // 夜勤前半（NF：☆ / ◆）
+        if (mk === '☆' || mk === '◆'){
+          nfCount++;
+          if (isA) hasANf = true;
+        }
+
+        // 夜勤後半（NS：★ / ●）
+        if (mk === '★' || mk === '●'){
+          nsCount++;
+          if (isA) hasANs = true;
+        }
+      }
+
+      const missing = [];
+
+      // 「その帯に一人も入っていない日」は無視し、
+      // 「誰か入っているのに A がゼロ」の場合だけアラート対象とする
+      if (dayCount > 0 && !hasADay) missing.push('day');
+      if (nfCount  > 0 && !hasANf)  missing.push('NF');
+      if (nsCount  > 0 && !hasANs)  missing.push('NS');
+
+      if (missing.length > 0){
+        problemDays.push({ idx: d, missing });
+      }
+    }
+
+    if (problemDays.length === 0) return;
+
+    const lines = problemDays.map(x => {
+      const dt = State.windowDates[x.idx];
+      const label = `${dt.getMonth()+1}/${dt.getDate()}`;
+
+      const bandsText = x.missing.map(code => {
+        if (code === 'day') return '日勤';
+        if (code === 'NF')  return '夜勤前半（☆/◆）';
+        if (code === 'NS')  return '夜勤後半（★/●）';
+        return code;
+      }).join('・');
+
+      return `${label}：${bandsText}`;
+    });
+
+    alert(
+      'Aレベル職員が一人も入っていない帯があります（自動割り当て範囲のみ判定）\n\n'
+      + lines.join('\n')
+      + '\n\n必要に応じて手動で調整してください。'
+    );
+  }
+
+
+
+
 
   // === キャンセルボタン群 ===
   function setupCancelButtons() {

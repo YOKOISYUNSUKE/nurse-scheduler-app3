@@ -543,11 +543,41 @@ window.saveMetaOnly = saveMetaOnly; // ★追加
     [...State.assignments.keys()].forEach(idx=>{ if(idx >= need) State.assignments.delete(idx); });
   }
 
+  // レベルA同士をすべて禁忌ペアにする初期値生成
+  function buildDefaultForbiddenPairsForA(){
+    const map = new Map();
+    const n = State.employeeCount;
+    if (!Number.isInteger(n) || n <= 1) return map;
+
+    const aIndices = [];
+    for (let i = 0; i < n; i++){
+      const attr = State.employeesAttr[i] || {};
+      if (attr.level === 'A') aIndices.push(i);
+    }
+    if (aIndices.length <= 1) return map;
+
+    for (let x = 0; x < aIndices.length; x++){
+      const i = aIndices[x];
+      for (let y = 0; y < aIndices.length; y++){
+        if (x === y) continue;
+        const j = aIndices[y];
+        let set = map.get(i);
+        if (!set){
+          set = new Set();
+          map.set(i, set);
+        }
+        set.add(j);
+      }
+    }
+    return map;
+  }
+
   function loadWindow(anchorDate){
     State.anchor = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
     State.windowDates = buildWindowDates(State.anchor);
 
- // メタ（従業員・スライダ位置・属性）
+
+  // メタ（従業員・スライダ位置・属性）
   const meta = readMeta();
   if (Array.isArray(meta.employees) && meta.employees.length){
    // 保存されたメタをそのまま復元
@@ -570,7 +600,8 @@ window.saveMetaOnly = saveMetaOnly; // ★追加
   if (Array.isArray(meta.forbiddenPairs)){
     State.forbiddenPairs = new Map(meta.forbiddenPairs.map(([k, arr]) => [k, new Set(arr)]));
   } else {
-    State.forbiddenPairs = new Map();
+    // 初期状態：レベルA同士をすべて禁忌ペアにする
+    State.forbiddenPairs = buildDefaultForbiddenPairsForA();
   }
   // ★追加：ShiftDurations のグローバル既定を復元（存在すれば）
   if (meta.shiftDurationsDefaults && window.ShiftDurations && typeof window.ShiftDurations.setGlobalDefault === 'function') {
@@ -587,6 +618,7 @@ window.saveMetaOnly = saveMetaOnly; // ★追加
   State.employeesAttr = Array.from({length: State.employeeCount}, ()=> ({ level:'B', workType:'three' }));
 }
 ensureEmployees();
+
 
 
     // 日付ストアから現在ウィンドウ分だけ読み込む

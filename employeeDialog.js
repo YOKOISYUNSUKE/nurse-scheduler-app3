@@ -150,6 +150,20 @@ function initInternal(){
       });
 
       globalWrap.appendChild(fields);
+      
+      // 一括適用ボタンを追加
+      const applyBtn = document.createElement('button');
+      applyBtn.type = 'button';
+      applyBtn.className = 'btn btn-accent';
+      applyBtn.textContent = '適応';
+      applyBtn.title = '現在の全体既定値を全従業員に一括適用';
+      applyBtn.style.marginTop = '8px';
+      applyBtn.style.alignSelf = 'flex-start';
+      applyBtn.addEventListener('click', () => {
+        applyGlobalDurationsToAll();
+      });
+      globalWrap.appendChild(applyBtn);
+      
       attrContent.appendChild(globalWrap);
     }
     // --- ここまで全体設定パネル ---
@@ -379,7 +393,84 @@ function initInternal(){
       if(currentLevel === v) o.selected = true;
       sel.appendChild(o);
     });
+    
+    // レベルA選択時に他のレベルAを自動的に禁忌ペアに追加
+    sel.addEventListener('change', (e) => {
+      handleLevelAAutoForbidden(e.target);
+    });
+    
     return sel;
+  }
+  
+  // レベルA選択時に他のレベルAを自動的に禁忌ペアに追加する処理
+  function handleLevelAAutoForbidden(selectElement){
+    const State = getState();
+    if (!State) return;
+    
+    const newLevel = selectElement.value;
+    const row = selectElement.closest('[data-role="row"]');
+    if (!row) return;
+    
+    const currentIndex = parseInt(row.dataset.idx, 10);
+    if (!Number.isFinite(currentIndex)) return;
+    
+    // レベルAが選択された場合
+    if (newLevel === 'A') {
+      // 他のレベルAの従業員を検索
+      const otherLevelAIndices = [];
+      for (let i = 0; i < State.employeeCount; i++) {
+        if (i === currentIndex) continue;
+        const attr = State.employeesAttr[i] || {};
+        if (attr.level === 'A') {
+          otherLevelAIndices.push(i);
+        }
+      }
+      
+      // 現在の従業員の禁忌ペアに他のレベルAを追加
+      if (!State.forbiddenPairs.has(currentIndex)) {
+        State.forbiddenPairs.set(currentIndex, new Set());
+      }
+      const currentPairs = State.forbiddenPairs.get(currentIndex);
+      
+      otherLevelAIndices.forEach(idx => {
+        currentPairs.add(idx);
+        
+        // 相手側にも追加（双方向）
+        if (!State.forbiddenPairs.has(idx)) {
+          State.forbiddenPairs.set(idx, new Set());
+        }
+        State.forbiddenPairs.get(idx).add(currentIndex);
+      });
+      
+      // 禁忌ペアカウント表示を更新
+      updateForbiddenCountDisplay(currentIndex, State);
+      
+      // 他のレベルAのカウント表示も更新
+      otherLevelAIndices.forEach(idx => {
+        updateForbiddenCountDisplay(idx, State);
+      });
+      
+      // 保存
+      if (window.saveMetaOnly) window.saveMetaOnly();
+      
+      // トースト通知
+      if (otherLevelAIndices.length > 0 && window.showToast) {
+        window.showToast(`レベルAを選択したため、他のレベルA従業員${otherLevelAIndices.length}名を禁忌ペアに追加しました`);
+      }
+    }
+  }
+  
+  // 禁忌ペアカウント表示を更新するヘルパー関数
+  function updateForbiddenCountDisplay(employeeIndex, State){
+    const row = attrContent.querySelector(`[data-idx="${employeeIndex}"]`);
+    if (!row) return;
+    
+    const countLabel = row.querySelector('.forbid-count');
+    if (!countLabel) return;
+    
+    const pairs = State.forbiddenPairs.get(employeeIndex);
+    const count = pairs ? pairs.size : 0;
+    countLabel.textContent = count > 0 ? `(${count}件)` : '';
   }
 
   function createWorkTypeSelect(currentType){
@@ -434,44 +525,209 @@ function initInternal(){
     forbidWrap.className = 'forbid-wrap';
     forbidWrap.style.display = 'flex';
     forbidWrap.style.alignItems = 'center';
-    forbidWrap.style.gap = '4px';
+    forbidWrap.style.gap = '8px';
 
-    const forbidLabel = document.createElement('span');
-    forbidLabel.textContent = '禁忌ペア:';
-    forbidLabel.style.fontSize = '0.9em';
-
-    const forbidSelect = document.createElement('select');
-    forbidSelect.className = 'forbid-select';
-    forbidSelect.multiple = true;
-    forbidSelect.style.minWidth = '100px';
-    forbidSelect.style.maxWidth = '200px';
-    forbidSelect.size = 3;
+    // 禁忌ペアボタン
+    const forbidBtn = document.createElement('button');
+    forbidBtn.type = 'button';
+    forbidBtn.className = 'btn btn-outline';
+    forbidBtn.textContent = '禁忌ペア';
+    forbidBtn.title = 'この従業員の禁忌ペア（一緒に勤務できない相手）を設定';
     
-    for (let j = 0; j < State.employeeCount; j++) {
-      if (j === i) continue;
-      const opt = document.createElement('option');
-      opt.value = String(j);
-      opt.textContent = State.employees[j] || `職員${pad2(j+1)}`;
-      const current = State.forbiddenPairs.get(i);
-      if (current && current.has(j)) opt.selected = true;
-      forbidSelect.appendChild(opt);
-    }
+    // 現在の禁忌ペア数を表示
+    const forbidCount = document.createElement('span');
+    forbidCount.className = 'forbid-count';
+    forbidCount.style.fontSize = '0.85em';
+    forbidCount.style.color = '#6b7280';
+    const current = State.forbiddenPairs.get(i);
+    const count = current ? current.size : 0;
+    forbidCount.textContent = count > 0 ? `(${count}件)` : '';
 
-    // 左クリックだけで禁忌ペアをトグル選択
-    forbidSelect.addEventListener('mousedown', (ev) => {
-      if (ev.button !== 0) return;
-      const target = ev.target;
-      if (!target || target.tagName !== 'OPTION') return;
-      ev.preventDefault();
-      target.selected = !target.selected;
+    // ボタンクリックで別窓を開く
+    forbidBtn.addEventListener('click', () => {
+      openForbiddenPairDialog(i, State, forbidCount);
     });
 
-    forbidWrap.appendChild(forbidLabel);
-    forbidWrap.appendChild(forbidSelect);
+    forbidWrap.appendChild(forbidBtn);
+    forbidWrap.appendChild(forbidCount);
 
     return forbidWrap;
   }
 
+
+  // 禁忌ペア選択ダイアログを開く
+  function openForbiddenPairDialog(employeeIndex, State, countLabel){
+    const empName = State.employees[employeeIndex] || `職員${pad2(employeeIndex+1)}`;
+    
+    // ダイアログ要素を作成
+    const dialog = document.createElement('dialog');
+    dialog.className = 'attr forbid-pair-dialog';
+    dialog.style.maxWidth = '500px';
+    dialog.style.width = '90%';
+
+    // ヘッダー
+    const header = document.createElement('header');
+    header.textContent = `禁忌ペア設定：${empName}`;
+    dialog.appendChild(header);
+
+    // コンテンツ
+    const content = document.createElement('div');
+    content.className = 'content';
+    content.style.maxHeight = '400px';
+    content.style.overflowY = 'auto';
+
+    const hint = document.createElement('p');
+    hint.textContent = '一緒に勤務できない従業員を選択してください（複数選択可）';
+    hint.style.marginBottom = '12px';
+    hint.style.color = '#6b7280';
+    content.appendChild(hint);
+
+    // チェックボックスリスト
+    const checkboxList = document.createElement('div');
+    checkboxList.style.display = 'flex';
+    checkboxList.style.flexDirection = 'column';
+    checkboxList.style.gap = '8px';
+
+    const currentPairs = State.forbiddenPairs.get(employeeIndex) || new Set();
+    const currentEmpAttr = State.employeesAttr[employeeIndex] || {};
+    const isCurrentLevelA = currentEmpAttr.level === 'A';
+
+    for (let j = 0; j < State.employeeCount; j++) {
+      if (j === employeeIndex) continue;
+
+      const label = document.createElement('label');
+      label.style.display = 'flex';
+      label.style.alignItems = 'center';
+      label.style.gap = '8px';
+      label.style.padding = '8px';
+      label.style.borderRadius = '6px';
+      label.style.cursor = 'pointer';
+      label.style.transition = 'background-color 0.2s';
+      label.addEventListener('mouseenter', () => {
+        label.style.backgroundColor = '#f3f4f6';
+      });
+      label.addEventListener('mouseleave', () => {
+        label.style.backgroundColor = 'transparent';
+      });
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = String(j);
+      
+      // レベルA同士の場合は自動チェック（解除も可能）
+      const targetEmpAttr = State.employeesAttr[j] || {};
+      const isTargetLevelA = targetEmpAttr.level === 'A';
+      const shouldAutoCheck = isCurrentLevelA && isTargetLevelA;
+      
+      checkbox.checked = currentPairs.has(j) || shouldAutoCheck;
+      checkbox.style.width = '18px';
+      checkbox.style.height = '18px';
+      checkbox.style.cursor = 'pointer';
+
+      const text = document.createElement('span');
+      const empAttr = State.employeesAttr[j] || {};
+      const levelBadge = empAttr.level === 'A' ? ' [レベルA]' : '';
+      text.textContent = (State.employees[j] || `職員${pad2(j+1)}`) + levelBadge;
+      text.style.fontSize = '0.95em';
+      
+      // レベルA同士の場合は色を変えて強調
+      if (empAttr.level === 'A') {
+        text.style.color = '#dc2626';
+        text.style.fontWeight = '600';
+      }
+
+      label.appendChild(checkbox);
+      label.appendChild(text);
+      checkboxList.appendChild(label);
+    }
+
+    content.appendChild(checkboxList);
+    dialog.appendChild(content);
+
+    // フッター
+    const footer = document.createElement('footer');
+    footer.style.display = 'flex';
+    footer.style.justifyContent = 'flex-end';
+    footer.style.gap = '8px';
+
+    const btnCancel = document.createElement('button');
+    btnCancel.type = 'button';
+    btnCancel.className = 'btn btn-outline';
+    btnCancel.textContent = 'キャンセル';
+    btnCancel.addEventListener('click', () => {
+      dialog.close();
+      document.body.removeChild(dialog);
+    });
+
+    const btnSave = document.createElement('button');
+    btnSave.type = 'button';
+    btnSave.className = 'btn btn-accent';
+    btnSave.textContent = '保存';
+    btnSave.addEventListener('click', () => {
+      // チェックされた項目を取得
+      const checkboxes = checkboxList.querySelectorAll('input[type="checkbox"]');
+      const newPairs = new Set();
+      checkboxes.forEach(cb => {
+        if (cb.checked) {
+          newPairs.add(parseInt(cb.value, 10));
+        }
+      });
+
+      // State に反映（双方向に設定）
+      State.forbiddenPairs.set(employeeIndex, newPairs);
+      
+      // 相手側にも設定
+      newPairs.forEach(j => {
+        if (!State.forbiddenPairs.has(j)) {
+          State.forbiddenPairs.set(j, new Set());
+        }
+        State.forbiddenPairs.get(j).add(employeeIndex);
+      });
+
+      // 削除された項目は相手側からも削除
+      for (let j = 0; j < State.employeeCount; j++) {
+        if (j === employeeIndex) continue;
+        if (!newPairs.has(j) && currentPairs.has(j)) {
+          const otherPairs = State.forbiddenPairs.get(j);
+          if (otherPairs) {
+            otherPairs.delete(employeeIndex);
+          }
+        }
+      }
+
+      // カウント表示を更新
+      if (countLabel) {
+        countLabel.textContent = newPairs.size > 0 ? `(${newPairs.size}件)` : '';
+      }
+
+      // 保存してダイアログを閉じる
+      if (window.saveMetaOnly) window.saveMetaOnly();
+      if (window.showToast) window.showToast('禁忌ペアを保存しました');
+      
+      dialog.close();
+      document.body.removeChild(dialog);
+    });
+
+    footer.appendChild(btnCancel);
+    footer.appendChild(btnSave);
+    dialog.appendChild(footer);
+
+    // ダイアログを DOM に追加して表示
+    document.body.appendChild(dialog);
+    if (typeof dialog.showModal === 'function') {
+      dialog.showModal();
+    } else {
+      dialog.show();
+    }
+
+    // Escape キーで閉じる
+    dialog.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        dialog.close();
+        document.body.removeChild(dialog);
+      }
+    });
+  }
 
   function createControls(i, State){
     const ctrls = document.createElement('div');
@@ -518,7 +774,6 @@ function readAttrDialogToState(){
       const quotaInput = row.querySelector('.quota-input');
       // duration-select はクラスで取得（各 select に data-mark 属性は既に設定済み）
       const durSelects = Array.from(row.querySelectorAll('select.duration-select'));
-      const forbidSelect = row.querySelector('.forbid-select');
 
       const nm = (nameInput?.value || '').trim();
       State.employees[i] = nm || `職員${pad2(i+1)}`;
@@ -548,12 +803,7 @@ function readAttrDialogToState(){
 
       State.employeesAttr[i] = merged;
 
-      // ★追加：禁忌ペアの保存（複数選択対応）
-      if (forbidSelect) {
-        const selected = Array.from(forbidSelect.selectedOptions).map(opt => Number(opt.value));
-        if (selected.length > 0) State.forbiddenPairs.set(i, new Set(selected));
-        else State.forbiddenPairs.delete(i);
-      }
+      // 禁忌ペアは別窓で直接 State に保存されるため、ここでは読み取り不要
     });
   }
 
@@ -708,6 +958,54 @@ function readAttrDialogToState(){
     // app.jsのグローバル関数に委譲
     if (window.writeDatesStore) {
       window.writeDatesStore(store);
+    }
+  }
+
+  // 全体既定値を全従業員に一括適用する関数
+  function applyGlobalDurationsToAll(){
+    const State = getState();
+    if (!State) return;
+    
+    if (!window.ShiftDurations) {
+      if (window.showToast) window.showToast('エラー：ShiftDurationsモジュールが見つかりません');
+      return;
+    }
+    
+    // 確認ダイアログ
+    if (!confirm('現在の全体既定値を全従業員に一括適用します。\n各従業員の個別設定はリセットされます。\nよろしいですか？')) {
+      return;
+    }
+    
+    // 全体既定値を取得
+    const globalDefs = (typeof window.ShiftDurations.getAllGlobalDefaults === 'function')
+      ? window.ShiftDurations.getAllGlobalDefaults()
+      : {};
+    
+    // 全従業員の shiftDurations をクリア（個別設定をリセット）
+    let appliedCount = 0;
+    for (let i = 0; i < State.employeeCount; i++) {
+      if (!State.employeesAttr[i]) {
+        State.employeesAttr[i] = { level: 'B', workType: 'three' };
+      }
+      // shiftDurations を空にすることで、全体既定値が適用される
+      State.employeesAttr[i].shiftDurations = {};
+      appliedCount++;
+    }
+    
+    // ダイアログを再構築して表示を更新
+    buildAttrDialog();
+    
+    // 保存とトースト表示
+    if (window.saveMetaOnly) window.saveMetaOnly();
+    if (window.renderGrid) window.renderGrid();
+    if (window.showToast) {
+      const marks = window.ShiftDurations.MARKS || ['〇','☆','★','◆','●'];
+      const summary = marks.map(mk => {
+        const val = globalDefs[mk] || (window.ShiftDurations.getDefaultForMark ? window.ShiftDurations.getDefaultForMark(mk) : 0);
+        const formatted = (window.ShiftDurations.formatMinutes ? window.ShiftDurations.formatMinutes(val) : `${Math.floor(val/60)}:${String(val%60).padStart(2,'0')}`);
+        return `${mk}:${formatted}`;
+      }).join(', ');
+      window.showToast(`${appliedCount}人の従業員に一括適用しました\n${summary}`);
     }
   }
 
