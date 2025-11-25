@@ -404,6 +404,7 @@ async function testRemoteConnection(){ return (window.GAS ? GAS.testConnection()
 
 
 // 追加：ログイン直後にクラウド→ローカルへ取り込み
+// 追加：ログイン直後にクラウド→ローカルへ取り込み
 async function syncFromRemote(){
   const keys = cloudKeys(); 
   if (!keys.length) {
@@ -412,18 +413,22 @@ async function syncFromRemote(){
   }
   
   console.log('Syncing from remote with keys:', keys);
-  let metaBest = null, datesBest = null;
+  let metaBest = null, datesBest = null, countsBest = null;
 
   for (const ck of keys){
     console.log('Fetching data for key:', ck);
     const m = await remoteGet(`${ck}:meta`);
     const d = await remoteGet(`${ck}:dates`);
+    const c = await remoteGet(`${ck}:counts`);
     
     if (m) {
       console.log('Meta data received:', Object.keys(m));
     }
     if (d) {
       console.log('Dates data received:', Object.keys(d));
+    }
+    if (c) {
+      console.log('Counts data received');
     }
     
     // どちらか取れた時点で採用（先勝ち）。次鍵により良いものがあれば上書き。
@@ -437,6 +442,10 @@ async function syncFromRemote(){
       };
       if (!datesBest || score(d) > score(datesBest)) datesBest = d;
     }
+    // Counts は最初に取得できたものを採用
+    if (c && !countsBest){
+      countsBest = c;
+    }
   }
   
   if (metaBest) {
@@ -447,11 +456,23 @@ async function syncFromRemote(){
     localStorage.setItem(storageKey('dates'), JSON.stringify(datesBest));
     console.log('Dates data synced to local storage');
   }
+  if (countsBest) {
+    try{
+      localStorage.setItem('sched:counts', JSON.stringify(countsBest));
+      if (window.Counts && typeof window.Counts.load === 'function') {
+        window.Counts.load();
+      }
+      console.log('Counts data synced to local storage');
+    }catch(e){
+      console.error('Failed to sync counts data from remote', e);
+    }
+  }
   
-  if (!metaBest && !datesBest) {
+  if (!metaBest && !datesBest && !countsBest) {
     console.log('No remote data found. Using local data only.');
   }
 }
+
 
 
 
@@ -461,12 +482,31 @@ async function pushToRemote(){
   try{
     const meta  = readMeta();
     const dates = readDatesStore();
+    let countsCfg = null;
+    try{
+      const raw = localStorage.getItem('sched:counts');
+      if (raw) countsCfg = JSON.parse(raw);
+    }catch(_){}
+    if (!countsCfg && window.Counts){
+      const c = window.Counts;
+      countsCfg = {
+        DAY_MIN_WEEKDAY: c.DAY_MIN_WEEKDAY,
+        DAY_ALLOWED_WEEKEND_HOLIDAY: c.DAY_ALLOWED_WEEKEND_HOLIDAY,
+        DAY_TARGET_WEEKDAY: c.DAY_TARGET_WEEKDAY,
+        DAY_TARGET_WEEKEND_HOLIDAY: c.DAY_TARGET_WEEKEND_HOLIDAY,
+        FIXED_NF: c.FIXED_NF,
+        FIXED_NS: c.FIXED_NS,
+        FIXED_BY_DATE: c.FIXED_BY_DATE
+      };
+    }
     for (const ck of keys){
       remotePut(`${ck}:meta`,  meta);
       remotePut(`${ck}:dates`, dates);
+      if (countsCfg) remotePut(`${ck}:counts`, countsCfg);
     }
   }catch(_){}
 }
+
 
 
 

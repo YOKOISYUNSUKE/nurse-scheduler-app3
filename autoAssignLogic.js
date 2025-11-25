@@ -896,82 +896,89 @@ function autoAssignRange(startDayIdx, endDayIdx){
       enforceExactCount(d, FIXED_NF, FIXED_NS);
     }
 
-    (function enforceANightBands(){
-      for (let d = startDayIdx; d <= endDayIdx; d++){
-        let { hasANf, hasANs } = countDayStats(d);
-        if (hasANf && hasANs) continue;
+  // ========================================
+  // ★修正：夜勤専従をノルマ満たすまで割り当て
+  // ========================================
+  (function ensureNightToTen(){
+    for (let r = 0; r < State.employeeCount; r++){
+      if ((State.employeesAttr[r]?.workType) !== 'night') continue;
+      const now = countLast28Days(r, State.windowDates[State.range4wStart+27]).star;
+      const quota = State.employeesAttr[r]?.nightQuota || 10;
+      let need = Math.max(0, quota - now);
+      
+      if (need === 0) continue;
+
+      for (let d = startDayIdx; d <= endDayIdx - 1 && need > 0; d++){
         const ds = dateStr(State.windowDates[d]);
-        const prevDs = (d > 0) ? dateStr(State.windowDates[d-1]) : null;
-        const nextDs = (d+1 < State.windowDates.length) ? dateStr(State.windowDates[d+1]) : null;
-        const getLv = (i)=> (State.employeesAttr[i]?.level) || 'B';
+        const dsNext = dateStr(State.windowDates[d+1]);
+        if (getAssign(r, ds) || getAssign(r, dsNext)) continue;
+        if (isRestByDate(r, ds) || isRestByDate(r, dsNext)) continue;
+        if (tryPlace(d, r, '☆')) need--;
+      }
+    }
+  })();
 
-        const nonArows = (marks)=>{
-          const rows = [];
-          for (let r = 0; r < State.employeeCount; r++){
-            const mk = getAssign(r, ds);
-            if (!mk) continue;
-            if (marks.includes(mk) && getLv(r) !== 'A'){
-              if (!isLocked(r, ds)) rows.push(r);
-            }
-          }
-          return rows;
-        };
+  // 夜勤専従配置後に人数を厳格化
+  for(let d=startDayIdx; d<=endDayIdx; d++){
+    const ds = dateStr(State.windowDates[d]);
+    const FIXED_NF = targetNFFor(ds);
+    const FIXED_NS = targetNSFor(ds);
+    enforceExactCount(d, FIXED_NF, FIXED_NS);
+  }
 
-        const findAFor = (mark)=>{
-          const cand = shuffleArray(candidatesFor(d, mark).filter(r => getLv(r) === 'A'));
-          for (const r of cand){
-            if (tryPlace(d, r, mark)) return r;
-            if (mark === '★' && placePrevStar(d, r)) return r;
-          }
-          return null;
-        };
+  // ========================================
+  // ★修正：全ての日にAを割り当て
+  // ========================================
+  (function enforceANightBands(){
+    for (let d = startDayIdx; d <= endDayIdx; d++){
+      let { hasANf, hasANs } = countDayStats(d);
+      if (hasANf && hasANs) continue;
+      const ds = dateStr(State.windowDates[d]);
+      const prevDs = (d > 0) ? dateStr(State.windowDates[d-1]) : null;
+      const nextDs = (d+1 < State.windowDates.length) ? dateStr(State.windowDates[d+1]) : null;
+      const getLv = (i)=> (State.employeesAttr[i]?.level) || 'B';
 
-        if (!hasANf){
-          let placed = false;
-          for (const r of nonArows(['◆'])){
-            const keep = '◆';
-            clearAssign(r, ds);
-            const rA = findAFor('◆');
-            if (rA !== null){ placed = true; break; }
-            setAssign(r, ds, keep);
-          }
-          if (!placed){
-            for (const r of nonArows(['☆'])){
-              if (nextDs && isLocked(r, nextDs)) continue;
-              const hadNext = nextDs && getAssign(r, nextDs) === '★';
-              clearAssign(r, ds);
-              if (hadNext) clearAssign(r, nextDs);
-              const rA = findAFor('☆');
-              if (rA !== null){ placed = true; break; }
-              setAssign(r, ds, '☆');
-              if (hadNext) setAssign(r, nextDs, '★');
-            }
+      const nonArows = (marks)=>{
+        const rows = [];
+        for (let r = 0; r < State.employeeCount; r++){
+          const mk = getAssign(r, ds);
+          if (!mk) continue;
+          if (marks.includes(mk) && getLv(r) !== 'A'){
+            if (!isLocked(r, ds)) rows.push(r);
           }
         }
+        return rows;
+      };
 
-        ({ hasANf, hasANs } = countDayStats(d));
-        if (!hasANs){
-          let placed2 = false;
-          for (const r of nonArows(['●'])){
-            const keep = '●';
+      const findAFor = (mark)=>{
+        const cand = shuffleArray(candidatesFor(d, mark).filter(r => getLv(r) === 'A'));
+        for (const r of cand){
+          if (tryPlace(d, r, mark)) return r;
+          if (mark === '★' && placePrevStar(d, r)) return r;
+        }
+        return null;
+      };
+
+      // NF帯のA配置
+      if (!hasANf){
+        let placed = false;
+        for (const r of nonArows(['◆'])){
+          const keep = '◆';
+          clearAssign(r, ds);
+          const rA = findAFor('◆');
+          if (rA !== null){ placed = true; break; }
+          setAssign(r, ds, keep);
+        }
+        if (!placed){
+          for (const r of nonArows(['☆'])){
+            if (nextDs && isLocked(r, nextDs)) continue;
+            const hadNext = nextDs && getAssign(r, nextDs) === '★';
             clearAssign(r, ds);
-            const rA = findAFor('●');
-            if (rA !== null){ placed2 = true; break; }
-            setAssign(r, ds, keep);
-          }
-          if (!placed2){
-            for (const r of nonArows(['★'])){
-              if (isLocked(r, ds)) continue;
-              const hadPrev = prevDs && getAssign(r, prevDs) === '☆';
-              if (hadPrev && isLocked(r, prevDs)) continue;
-              clearAssign(r, ds);
-              if (hadPrev) clearAssign(r, prevDs);
-              fillWith(d, 1, ['★'], true);
-              const after = countDayStats(d);
-              if (after.hasANs){ placed2 = true; break; }
-              setAssign(r, ds, '★');
-              if (hadPrev) setAssign(r, prevDs, '☆');
-            }
+            if (hadNext) clearAssign(r, nextDs);
+            const rA = findAFor('☆');
+            if (rA !== null){ placed = true; break; }
+            setAssign(r, ds, '☆');
+            if (hadNext) setAssign(r, nextDs, '★');
           }
         }
         {
@@ -981,21 +988,53 @@ function autoAssignRange(startDayIdx, endDayIdx){
           enforceExactCount(d, FIXED_NF, FIXED_NS);
         }
       }
-    })();
 
-    // ★その他の夜勤配置（不足分を補填）
-    (function fillRemainingNightShifts(){
-      for(let d=startDayIdx; d<=endDayIdx; d++){
-        const ds = dateStr(State.windowDates[d]);
-        const FIXED_NF = targetNFFor(ds);
-        const FIXED_NS = targetNSFor(ds);
-        let { nf, ns } = countDayStats(d);
-        if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], false);
-        if (ns < FIXED_NS) fillWith(d, FIXED_NS - ns, ['★','●'], false);
-        enforceExactCount(d, FIXED_NF, FIXED_NS);
+      // NS帯のA配置
+      if (!hasANs){
+        let placed2 = false;
+        for (const r of nonArows(['●'])){
+          const keep = '●';
+          clearAssign(r, ds);
+          const rA = findAFor('●');
+          if (rA !== null){ placed2 = true; break; }
+          setAssign(r, ds, keep);
+        }
+        if (!placed2){
+          for (const r of nonArows(['★'])){
+            const hadPrev = (prevDs && getAssign(r, prevDs) === '☆');
+            clearAssign(r, ds);
+            if (hadPrev) clearAssign(r, prevDs);
+            fillWith(d, 1, ['★'], true);
+            const after = countDayStats(d);
+            if (after.hasANs){ placed2 = true; break; }
+            setAssign(r, ds, '★');
+            if (hadPrev) setAssign(r, prevDs, '☆');
+          }
+        }
+        {
+          const dsFix = dateStr(State.windowDates[d]);
+          const FIXED_NF = targetNFFor(dsFix);
+          const FIXED_NS = targetNSFor(dsFix);
+          enforceExactCount(d, FIXED_NF, FIXED_NS);
+        }
       }
-    })();
+    }
+  })();
 
+  // ========================================
+  // ★修正：残り割り当て（不足分を補填）
+  // ========================================
+  (function fillRemainingNightShifts(){
+    for(let d=startDayIdx; d<=endDayIdx; d++){
+      const ds = dateStr(State.windowDates[d]);
+      const FIXED_NF = targetNFFor(ds);
+      const FIXED_NS = targetNSFor(ds);
+      let { nf, ns } = countDayStats(d);
+      if (nf < FIXED_NF) fillWith(d, FIXED_NF - nf, ['☆','◆'], false);
+      if (ns < FIXED_NS) fillWith(d, FIXED_NS - ns, ['★','●'], false);
+      enforceExactCount(d, FIXED_NF, FIXED_NS);
+    }
+  })();
 
     // ★最後に日勤を配置（処理順のみランダム化：NS/NFの充足ロジックには影響なし）
     const dayOrderForDayShift = [];

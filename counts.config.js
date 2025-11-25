@@ -106,7 +106,7 @@
     }
   }
   function load(){ apply(read()); return {...Counts}; }
-  function save(partial){
+function save(partial){
     const next = { ...read(), ...(partial||{}) };
     apply(next);
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -119,11 +119,19 @@
       FIXED_BY_DATE: Counts.FIXED_BY_DATE
     }));
 
+    // 人数設定もクラウドへ同期（ログイン済みかつpushToRemoteがあれば）
+    try{
+      if (global.pushToRemote && typeof global.pushToRemote === 'function'){
+        global.pushToRemote();
+      }
+    }catch(_){}
+
     window.dispatchEvent(new CustomEvent('counts:changed', { detail: { ...Counts } }));
     if (typeof window.renderGrid === 'function') window.renderGrid(); // 即反映
   }
   Counts.load = load;
   Counts.save = save;
+
 
   // "YYYY-MM-DD 〇 NF NS" 形式テキスト ⇔ FIXED_BY_DATE マップ
   function parseFixedByDateText(text){
