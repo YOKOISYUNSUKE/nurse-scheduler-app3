@@ -579,6 +579,7 @@
           r,
           mark: mk,
           isA: (State.employeesAttr[r]?.level) === 'A',
+          isNightOnly: (State.employeesAttr[r]?.workType) === 'night',
           isLocked: isLocked(r, ds),
           hasNextLock: (mk === '☆' && dayIdx + 1 < State.windowDates.length) 
             ? isLocked(r, dateStr(State.windowDates[dayIdx + 1])) 
@@ -586,14 +587,16 @@
         });
       }
     }
+
+    const countRemovableNF = () => nfRows.filter(x => !x.isNightOnly).length;
     
     // NF帯の超過分を削除（ロックされていない非Aから優先）
-    while (nfRows.length > targetNF) {
+    while (nfRows.length > targetNF && countRemovableNF() > 0) {
       let removed = false;
       
-      // 1. ロックされていない非Aの◆から削除
+      // 1. ロックされていない非Aの◆から削除（夜勤専従は除外）
       for (let i = nfRows.length - 1; i >= 0; i--) {
-        if (!nfRows[i].isLocked && !nfRows[i].isA && nfRows[i].mark === '◆') {
+        if (!nfRows[i].isLocked && !nfRows[i].isA && !nfRows[i].isNightOnly && nfRows[i].mark === '◆') {
           clearAssign(nfRows[i].r, ds);
           nfRows.splice(i, 1);
           removed = true;
@@ -602,9 +605,9 @@
       }
       if (removed) continue;
       
-      // 2. ロックされていない非Aの☆から削除（翌日も削除）
+      // 2. ロックされていない非Aの☆から削除（翌日も削除／夜勤専従は除外）
       for (let i = nfRows.length - 1; i >= 0; i--) {
-        if (!nfRows[i].isLocked && !nfRows[i].hasNextLock && !nfRows[i].isA && nfRows[i].mark === '☆') {
+        if (!nfRows[i].isLocked && !nfRows[i].hasNextLock && !nfRows[i].isA && !nfRows[i].isNightOnly && nfRows[i].mark === '☆') {
           clearAssign(nfRows[i].r, ds);
           if (dayIdx + 1 < State.windowDates.length) {
             const nextDs = dateStr(State.windowDates[dayIdx + 1]);
@@ -619,10 +622,10 @@
       }
       if (removed) continue;
       
-      // 3. A職員も含めて削除（最低1名のAは残す）
+      // 3. A職員も含めて削除（最低1名のAは残す／夜勤専従は除外）
       const aCount = nfRows.filter(x => x.isA).length;
       for (let i = nfRows.length - 1; i >= 0; i--) {
-        if (!nfRows[i].isLocked && (!nfRows[i].isA || aCount > 1)) {
+        if (!nfRows[i].isLocked && !nfRows[i].isNightOnly && (!nfRows[i].isA || aCount > 1)) {
           clearAssign(nfRows[i].r, ds);
           if (nfRows[i].mark === '☆' && dayIdx + 1 < State.windowDates.length) {
             const nextDs = dateStr(State.windowDates[dayIdx + 1]);
@@ -638,6 +641,7 @@
       
       if (!removed) break;
     }
+
     
     // NS帯（★＋●）の調整
     const nsRows = [];
@@ -648,6 +652,7 @@
           r,
           mark: mk,
           isA: (State.employeesAttr[r]?.level) === 'A',
+          isNightOnly: (State.employeesAttr[r]?.workType) === 'night',
           isLocked: isLocked(r, ds),
           hasPrevStar: (mk === '★' && dayIdx > 0) 
             ? getAssign(r, dateStr(State.windowDates[dayIdx - 1])) === '☆' 
@@ -655,14 +660,16 @@
         });
       }
     }
+
+    const countRemovableNS = () => nsRows.filter(x => !x.isNightOnly).length;
     
     // NS帯の超過分を削除
-    while (nsRows.length > targetNS) {
+    while (nsRows.length > targetNS && countRemovableNS() > 0) {
       let removed = false;
       
-      // 1. ロックされていない非Aの●から削除
+      // 1. ロックされていない非Aの●から削除（夜勤専従は除外）
       for (let i = nsRows.length - 1; i >= 0; i--) {
-        if (!nsRows[i].isLocked && !nsRows[i].isA && nsRows[i].mark === '●') {
+        if (!nsRows[i].isLocked && !nsRows[i].isA && !nsRows[i].isNightOnly && nsRows[i].mark === '●') {
           clearAssign(nsRows[i].r, ds);
           nsRows.splice(i, 1);
           removed = true;
@@ -671,9 +678,9 @@
       }
       if (removed) continue;
       
-      // 2. ロックされていない非Aの★から削除（前日の☆も確認）
+      // 2. ロックされていない非Aの★から削除（前日の☆も確認／夜勤専従は除外）
       for (let i = nsRows.length - 1; i >= 0; i--) {
-        if (!nsRows[i].isLocked && !nsRows[i].isA && nsRows[i].mark === '★' && !nsRows[i].hasPrevStar) {
+        if (!nsRows[i].isLocked && !nsRows[i].isA && !nsRows[i].isNightOnly && nsRows[i].mark === '★' && !nsRows[i].hasPrevStar) {
           clearAssign(nsRows[i].r, ds);
           nsRows.splice(i, 1);
           removed = true;
@@ -682,10 +689,10 @@
       }
       if (removed) continue;
       
-      // 3. A職員も含めて削除（最低1名のAは残す）
+      // 3. A職員も含めて削除（最低1名のAは残す／夜勤専従は除外）
       const aCount = nsRows.filter(x => x.isA).length;
       for (let i = nsRows.length - 1; i >= 0; i--) {
-        if (!nsRows[i].isLocked && (!nsRows[i].isA || aCount > 1)) {
+        if (!nsRows[i].isLocked && !nsRows[i].isNightOnly && (!nsRows[i].isA || aCount > 1)) {
           clearAssign(nsRows[i].r, ds);
           nsRows.splice(i, 1);
           removed = true;
@@ -698,6 +705,7 @@
     
     if (typeof updateFooterCounts === 'function') updateFooterCounts();
   }
+
 
   function nightQuotasOK(startIdx, endIdx){
     return (window.NightBand && window.NightBand.nightQuotasOK)
