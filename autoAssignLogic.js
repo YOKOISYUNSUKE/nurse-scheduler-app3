@@ -1,3 +1,4 @@
+
 // ====== 自動割り当てアルゴリズム ======
 // app.jsから切り出した自動割り当てロジック
 
@@ -409,7 +410,12 @@
   }
 
   function normalizeOffToEight(startDayIdx, endDayIdx){
-    for(let r=0; r<State.employeeCount; r++){
+    // ★従業員順序をランダム化
+    const empOrder = [];
+    for(let r=0; r<State.employeeCount; r++) empOrder.push(r);
+    shuffleArray(empOrder);
+    
+    for(const r of empOrder){
       let off=0;
       const blanks = [];
       for(let d=startDayIdx; d<=endDayIdx; d++){
@@ -795,7 +801,12 @@
       return false;
     };
 
-    for (let r = 0; r < State.employeeCount; r++){
+    // ★従業員順序をランダム化
+    const empOrder = [];
+    for (let r = 0; r < State.employeeCount; r++) empOrder.push(r);
+    shuffleArray(empOrder);
+    
+    for (const r of empOrder){
       let attempts = 0;
       while (countBlocks(r).length < 2 && attempts < 50){
         if (tryExpandSingle(r))         { attempts++; continue; }
@@ -820,9 +831,16 @@ function autoAssignRange(startDayIdx, endDayIdx){
     return (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
   }
 
+    // ★日付順序をランダム化（夜勤割り当て用）
+    const dayOrderForNightShift = [];
+    for (let d = startDayIdx; d <= endDayIdx; d++){
+      dayOrderForNightShift.push(d);
+    }
+    shuffleArray(dayOrderForNightShift);
+
     for (let sweep=0; sweep<3; sweep++){
       let changed = false;
-      for(let d=startDayIdx; d<=endDayIdx; d++){
+      for(const d of dayOrderForNightShift){
         const ds = dateStr(State.windowDates[d]);
         const FIXED_NF = targetNFFor(ds);
         const FIXED_NS = targetNSFor(ds);
@@ -861,7 +879,8 @@ function autoAssignRange(startDayIdx, endDayIdx){
     }
 
     if (!nightQuotasOK(startDayIdx, endDayIdx)){
-      for(let d=startDayIdx; d<=endDayIdx; d++){
+      // ★日付順序をランダム化
+      for(const d of shuffleArray(dayOrderForNightShift)){
         const ds = dateStr(State.windowDates[d]);
         const FIXED_NF = targetNFFor(ds);
         const FIXED_NS = targetNSFor(ds);
@@ -876,8 +895,14 @@ function autoAssignRange(startDayIdx, endDayIdx){
 
 // 修正後（5行前後を含む）
     (function ensureNightToTen(){
+      // ★従業員順序をランダム化
+      const nightEmpOrder = [];
       for (let r = 0; r < State.employeeCount; r++){
-        if ((State.employeesAttr[r]?.workType) !== 'night') continue;
+        if ((State.employeesAttr[r]?.workType) === 'night') nightEmpOrder.push(r);
+      }
+      shuffleArray(nightEmpOrder);
+      
+      for (const r of nightEmpOrder){
         const now = countLast28Days(r, State.windowDates[State.range4wStart+27]).star;
         const quota = State.employeesAttr[r]?.nightQuota || 10;
         let need = Math.max(0, quota - now);
@@ -908,8 +933,14 @@ function autoAssignRange(startDayIdx, endDayIdx){
   // ★修正：夜勤専従をノルマ満たすまで割り当て
   // ========================================
   (function ensureNightToTen(){
+    // ★従業員順序をランダム化
+    const nightEmpOrder = [];
     for (let r = 0; r < State.employeeCount; r++){
-      if ((State.employeesAttr[r]?.workType) !== 'night') continue;
+      if ((State.employeesAttr[r]?.workType) === 'night') nightEmpOrder.push(r);
+    }
+    shuffleArray(nightEmpOrder);
+    
+    for (const r of nightEmpOrder){
       const now = countLast28Days(r, State.windowDates[State.range4wStart+27]).star;
       const quota = State.employeesAttr[r]?.nightQuota || 10;
       let need = Math.max(0, quota - now);
@@ -938,7 +969,9 @@ function autoAssignRange(startDayIdx, endDayIdx){
   // ★修正：全ての日にAを割り当て
   // ========================================
   (function enforceANightBands(){
-    for (let d = startDayIdx; d <= endDayIdx; d++){
+    // ★日付順序をランダム化
+    const dayOrder = shuffleArray(dayOrderForNightShift.slice());
+    for (const d of dayOrder){
       let { hasANf, hasANs } = countDayStats(d);
       if (hasANf && hasANs) continue;
       const ds = dateStr(State.windowDates[d]);
@@ -1033,7 +1066,8 @@ function autoAssignRange(startDayIdx, endDayIdx){
   // ★修正：残り割り当て（不足分を補填）
   // ========================================
   (function fillRemainingNightShifts(){
-    for(let d=startDayIdx; d<=endDayIdx; d++){
+    // ★日付順序をランダム化
+    for(const d of shuffleArray(dayOrderForNightShift.slice())){
       const ds = dateStr(State.windowDates[d]);
       const FIXED_NF = targetNFFor(ds);
       const FIXED_NS = targetNSFor(ds);
@@ -1098,7 +1132,12 @@ function autoAssignRange(startDayIdx, endDayIdx){
       const ds = dateStr(dt);
       if (!State.holidaySet.has(ds)) continue;
 
-      for (let r = 0; r < State.employeeCount; r++){
+      // ★従業員順序をランダム化
+      const empOrder = [];
+      for (let r = 0; r < State.employeeCount; r++) empOrder.push(r);
+      shuffleArray(empOrder);
+      
+      for (const r of empOrder){
         const wt = (State.employeesAttr[r]?.workType) || 'three';
         if (wt === 'night') continue;
         if (getLeaveType(r, ds)) continue;
