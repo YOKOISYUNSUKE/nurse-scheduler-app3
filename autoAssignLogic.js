@@ -778,7 +778,7 @@
       if (isLocked(r, ds)) return false;
       clearAssign(r, ds);
 
-      let { day, hasADay } = countDayStats(dayIdx);
+      let { day, hasADay } = countDayStats(r);
       const minDay = isWeekendOrHoliday(State.windowDates[dayIdx]) ? 5 : 10;
       if (day < minDay || !hasADay){
         const need = Math.max(1, minDay - day);
