@@ -52,7 +52,7 @@
       }
       if (wt === 'two'){
         if (star >= 4) return -Infinity;
-        return 100 + (4 - star);
+        return 100 + (4 - star) * 20;  
       }
       return -Infinity; // other は安全側で除外
     }
@@ -60,7 +60,7 @@ if (mark === '◆' || mark === '●'){
   if (wt !== 'three') return -Infinity;
   if (half >= 8) return -Infinity; // 三部制：4週間で◆+●≤8
   // ★修正：三部制従業員の夜勤回数をより強く公平化（重みを増加）
-  return 150 + (8 - half) * 20;
+  return 100 + (8 - half) * 20;   
 }
     return 0; // 〇などは対象外
   }
