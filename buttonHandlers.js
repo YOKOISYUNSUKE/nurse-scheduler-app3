@@ -9,7 +9,7 @@
   // 必要な要素参照を取得
   let btnJumpMonth, monthPicker, btnPrevDay, btnNextDay, btnHolidayAuto;
   let btnAutoAssign, btnCancel, btnFullCancel, btnUndo, btnSave;
-  let btnExportExcel, btnLogout, btnLockRange, btnUnlockRange;
+  let btnExportExcel, btnLogout, btnLockRange, btnUnlockRange, btnGlobalLock;
   let fullCancelDlg, fullCancelAllBtn, fullCancelCloseBtn;
   let btnLeaveHoliday, btnLeaveSub, btnLeavePaid, btnLeaveRefresh;
   let btnAttrOpen, attrDlg, attrSave, attrClose;
@@ -45,6 +45,7 @@
       btnLogout = document.getElementById('btnLogout');
       btnLockRange = document.getElementById('btnLockRange');
       btnUnlockRange = document.getElementById('btnUnlockRange');
+      btnGlobalLock = document.getElementById('btnGlobalLock');
       
       fullCancelDlg = document.getElementById('fullCancelDlg');
       fullCancelAllBtn = document.getElementById('fullCancelAll');
@@ -99,6 +100,7 @@
       setupAutoAssignButton();
       setupCancelButtons();
       setupLockButtons();
+      setupGlobalLockButton();
       setupExportButton();
       setupLogoutButton();
       setupModeRadios();
@@ -346,6 +348,87 @@ if (fullCancelCloseBtn) {
       });
     }
   }
+
+  // === 全体ロックボタン ===  ← 新規追加開始
+  function setupGlobalLockButton() {
+    if (!btnGlobalLock) return;
+
+    // ボタン表示を更新する関数
+    function updateGlobalLockButton() {
+      if (State.isGlobalLocked) {
+        btnGlobalLock.textContent = '🔒 4週間アンロック';
+        btnGlobalLock.title = '4週間のロックを解除（編集可能にする）';
+        btnGlobalLock.classList.add('btn-accent');
+        btnGlobalLock.classList.remove('btn-outline');
+        // 他のボタンを無効化
+        if (btnAutoAssign) btnAutoAssign.disabled = true;
+        if (btnCancel) btnCancel.disabled = true;
+        if (btnFullCancel) btnFullCancel.disabled = true;
+        if (btnLockRange) btnLockRange.disabled = true;
+        if (btnUnlockRange) btnUnlockRange.disabled = true;
+        if (btnHolidayAuto) btnHolidayAuto.disabled = true;
+      } else {
+        btnGlobalLock.textContent = '🔓 4週間ロック';
+        btnGlobalLock.title = '指定された4週間をロック（編集禁止）';
+        btnGlobalLock.classList.remove('btn-accent');
+        btnGlobalLock.classList.add('btn-outline');
+        // 他のボタンを有効化
+        if (btnAutoAssign) btnAutoAssign.disabled = false;
+        if (btnCancel) btnCancel.disabled = false;
+        if (btnFullCancel) btnFullCancel.disabled = false;
+        if (btnLockRange) btnLockRange.disabled = false;
+        if (btnUnlockRange) btnUnlockRange.disabled = false;
+        if (btnHolidayAuto) btnHolidayAuto.disabled = false;
+      }
+    }
+
+    // 初期表示を設定
+    updateGlobalLockButton();
+
+    // クリックイベント
+    btnGlobalLock.addEventListener('click', () => {
+      State.isGlobalLocked = !State.isGlobalLocked;
+      
+      // 4週間の全セルをロック/アンロック
+      const start = State.range4wStart;
+      const end = State.range4wStart + 27; // 28日間（4週間）
+      
+      for (let dayIdx = start; dayIdx <= end; dayIdx++) {
+        const dt = State.windowDates[dayIdx];
+        if (!dt) continue;
+        const ds = dateStr ? dateStr(dt) : 
+          (window.App && window.App.Dates && typeof window.App.Dates.dateStr === 'function'
+            ? window.App.Dates.dateStr(dt)
+            : null);
+        if (!ds) continue;
+        
+        for (let r = 0; r < State.employeeCount; r++) {
+          const key = `${r}|${ds}`;
+          if (State.isGlobalLocked) {
+            // ロック：セルをlockedCellsに追加
+            State.lockedCells.add(key);
+          } else {
+            // アンロック：セルをlockedCellsから削除
+            State.lockedCells.delete(key);
+          }
+        }
+      }
+      
+      updateGlobalLockButton();
+      renderGrid(); // グリッドを再描画してロック表示を更新
+      
+      const msg = State.isGlobalLocked 
+        ? '指定された4週間の全セルをロックしました（編集禁止）' 
+        : '4週間の全セルのロックを解除しました（編集可能）';
+      showToast(msg);
+      
+      // ロック状態を保存
+      saveMetaOnly();
+    });
+
+    // グローバルに公開（renderGridから呼べるように）
+    window.updateGlobalLockButton = updateGlobalLockButton;
+  }  
 
   // === Excel出力ボタン ===
   function setupExportButton() {

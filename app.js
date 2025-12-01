@@ -120,6 +120,7 @@ document.addEventListener('auth:logged-in', async (ev)=>{
     lockMode: null,             // 'lock' | 'unlock' | null（範囲選択モード）
     lockStart: null,            // { r, d }（開始セル）
     fullCancelCellMode: false,  // ★追加：完全キャンセル（1セル）モード
+    isGlobalLocked: false,      // ★追加：全体ロック状態
 
   };
  // ★追加：グローバル公開

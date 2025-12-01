@@ -241,6 +241,11 @@
   // === 特別休暇トグル ===
   function toggleLeave(r, d, td){
     const ds = dateStr(State.windowDates[d]);
+
+if (isLocked(r, ds)){ 
+  showToast('ロック中のセルは変更できません'); 
+  return; 
+}
     const code = State.leaveMode;
     
     if (!code && !hasOffByDate(r, ds)) return;
@@ -280,6 +285,12 @@
   // === 希望休トグル ===
   function toggleOff(r, d, td){
     const ds = dateStr(State.windowDates[d]);
+    
+    if (isLocked(r, ds)){ 
+      showToast('ロック中のセルは変更できません'); 
+      return; 
+    }
+    
     const lvHere = getLeaveType(r, ds);
     
     if (lvHere && lvHere !== '代'){ 
