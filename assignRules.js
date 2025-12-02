@@ -662,17 +662,16 @@ if (p.mark==='☆'){
             errors.push({ dayIndex:d, type:'DAY_WKD_ALLOWED', expected: allowed.join(' or '), actual:cnt.day });
           }
         } else {
-          const minDay =
-            (window.Counts && Number.isInteger(window.Counts.DAY_MIN_WEEKDAY))
-              ? window.Counts.DAY_MIN_WEEKDAY
-              : ((window.HolidayRules && typeof window.HolidayRules.minDayFor === 'function')
-                  ? window.HolidayRules.minDayFor(dt, p.isHoliday)
-                  : 10);
-          if (cnt.day < minDay) {
-            errors.push({ dayIndex:d, type:'DAY_MIN', expected:`>=${minDay}`, actual: cnt.day });
+          // 平日：許容リストチェック
+          const allowed = (window.Counts && Array.isArray(window.Counts.DAY_ALLOWED_WEEKDAY))
+              ? window. Counts.DAY_ALLOWED_WEEKDAY
+              : [15,16,17];
+          if (!allowed.includes(cnt. day)) {
+            errors.push({ dayIndex:d, type:'DAY_ALLOWED', expected:allowed.join(','), actual: cnt.day });
           }
         }
       }
+
 // ★新規：同一日の夜勤専従は最大2名まで（NF帯・NS帯それぞれ）
       const nightOnlyNF = countNightOnlyWorkers({ 
         dates: p.dates, 
