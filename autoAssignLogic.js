@@ -1215,14 +1215,23 @@ function autoAssignRange(startDayIdx, endDayIdx){
       if (day < target){
         const pushDay = fillDayShift(d);
         pushDay(target - day);
-        ({ day } = countDayStats(d));
+      ({ day } = countDayStats(d));
 
       }
 
-      const capWkHol = (window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY))
-        ? window.Counts.DAY_TARGET_WEEKEND_HOLIDAY : 6;
+      // 許容リスト（配列）があればその最大値を cap とする。なければ従来の target 値をフォールバック。
+      const capWeekday = (window.Counts && Array.isArray(window.Counts.DAY_ALLOWED_WEEKDAY) && window.Counts.DAY_ALLOWED_WEEKDAY.length > 0)
+        ? Math.max(...window.Counts.DAY_ALLOWED_WEEKDAY.map(n => parseInt(n, 10)).filter(Number.isFinite))
+        : ((window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKDAY)) ? window.Counts.DAY_TARGET_WEEKDAY : 16);
+
+      const capWkHol = (window.Counts && Array.isArray(window.Counts.DAY_ALLOWED_WEEKEND_HOLIDAY) && window.Counts.DAY_ALLOWED_WEEKEND_HOLIDAY.length > 0)
+        ? Math.max(...window.Counts.DAY_ALLOWED_WEEKEND_HOLIDAY.map(n => parseInt(n, 10)).filter(Number.isFinite))
+        : ((window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY)) ? window.Counts.DAY_TARGET_WEEKEND_HOLIDAY : 6);
+
       if (isWeekendOrHoliday(State.windowDates[d]) && day > capWkHol){
         reduceDayShiftTo(d, capWkHol);
+      } else if (!isWeekendOrHoliday(State.windowDates[d]) && day > capWeekday){
+        reduceDayShiftTo(d, capWeekday);
       }
     }
 
