@@ -664,9 +664,9 @@ if (p.mark==='☆'){
         } else {
           // 平日：許容リストチェック
           const allowed = (window.Counts && Array.isArray(window.Counts.DAY_ALLOWED_WEEKDAY))
-              ? window. Counts.DAY_ALLOWED_WEEKDAY
+              ? window.Counts.DAY_ALLOWED_WEEKDAY
               : [15,16,17];
-          if (!allowed.includes(cnt. day)) {
+          if (!allowed.includes(cnt.day)) {
             errors.push({ dayIndex:d, type:'DAY_ALLOWED', expected:allowed.join(','), actual: cnt.day });
           }
         }
