@@ -333,12 +333,39 @@
         }
         return c;
       };
+
+      // --- 公平化ソート（追加） ---
+      // グループ（候補の中）ごとの勤務形態別平均を先に計算し、各人の「勤務形態内での偏差」を用いる
+      const avgByWorkType = {};
+      ['two','three'].forEach(wt=>{
+        let sum=0, n=0;
+        for(const r of cand){
+          if (((State.employeesAttr[r]?.workType) || 'three') === wt){
+            sum += dayCount4w(r);
+            n++;
+          }
+        }
+        avgByWorkType[wt] = n ? (sum / n) : 0;
+      });
+      const relativeDay = (r)=>{
+        const wt = (State.employeesAttr[r]?.workType) || 'three';
+        return dayCount4w(r) - (avgByWorkType[wt] || 0);
+      };
+
       cand.sort((a, b) => {
         const diffWh = whCount(a) - whCount(b);
         if (diffWh !== 0) return diffWh;
-        // 二部制/三部制の日勤間隔（〇と〇の間隔）が均等になるよう、直近の〇から遠い人を優先
-        return daysSinceLastDay4w(b) - daysSinceLastDay4w(a);
+        // (1) 勤務形態内での「直近4週〇回数の偏差」を小さい方を優先（偏りが大きい人は後回し）
+        const relA = relativeDay(a), relB = relativeDay(b);
+        if (relA !== relB) return relA - relB;
+        // (2) それでも同等なら最近の〇から遠い人を優先（間隔の均等化）
+        const gap = daysSinceLastDay4w(a) - daysSinceLastDay4w(b);
+        if (gap !== 0) return gap;
+        return 0;
       });
+
+
+
       // ★追加：同じカウントの人たちをシャッフル（公平性を保ちつつランダム性向上）
       let i = 0;
       while (i < cand.length) {
@@ -475,13 +502,28 @@
     return (w===0 || w===6) || State.holidaySet.has(ds);
   }
 
-  function targetDayForIndex(dayIdx){
-    const dt = State.windowDates[dayIdx];
-    if (window.Counts && typeof window.Counts.getDayTarget === 'function'){
-      return window.Counts.getDayTarget(dt, (ds)=> State.holidaySet.has(ds));
-    }
-    return isWeekendOrHoliday(dt) ? 6 : 10;
+function targetDayForIndex(dayIdx){
+  const dt = State.windowDates[dayIdx];
+
+  // 1) カスタム関数があれば優先して利用
+  if (window.Counts && typeof window.Counts.getDayTarget === 'function'){
+    return window.Counts.getDayTarget(dt, (ds)=> State.holidaySet.has(ds));
   }
+
+  // 2) カウント設定オブジェクトに明示的なターゲットがあれば利用（ここを追加）
+  if (window.Counts){
+    const isWH = isWeekendOrHoliday(dt);
+    if (isWH && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY)){
+      return window.Counts.DAY_TARGET_WEEKEND_HOLIDAY;
+    }
+    if (!isWH && Number.isInteger(window.Counts.DAY_TARGET_WEEKDAY)){
+      return window.Counts.DAY_TARGET_WEEKDAY;
+    }
+  }
+
+  // 3) 最終フォールバック（既存の既定値）
+  return isWeekendOrHoliday(dt) ? 6 : 10;
+}
 
   function reduceDayShiftTo(dayIdx, target){
     const ds = dateStr(State.windowDates[dayIdx]);
@@ -548,14 +590,28 @@
       removal = shuffleArray(removal);
     }
 
+    // --- 勤務形態別平均を計算して「相対偏差」を用いる ---
+    const avgByWorkType = {};
+    ['two','three'].forEach(wt=>{
+      let sum=0, n=0;
+      for(const it of removal){
+        if (it.workType === wt){ sum += it.dayCount; n++; }
+      }
+      avgByWorkType[wt] = n ? (sum / n) : 0;
+    });
+    const rel = (it) => it.dayCount - (avgByWorkType[it.workType] || 0);
+
     // 優先順位：
     // 1) Bかどうか（Bを先に削る）
-    // 2) 直近4週間の〇回数（多い人から削る）
+    // 2) 勤務形態内での相対偏差（偏差が大きい=多めの人を先に削る）
+    // 3) 直近4週間の日勤回数（多い人を先に削る）
     removal.sort((a, b) => {
       if (a.isB !== b.isB){
         return (b.isB ? 1 : 0) - (a.isB ? 1 : 0); // B=true を先に
       }
-      const diff = b.dayCount - a.dayCount;       // 多い方を先に削る
+      const rdiff = rel(b) - rel(a);
+      if (rdiff !== 0) return rdiff;
+      const diff = b.dayCount - a.dayCount;       // 多い方を先に削る（保険）
       if (diff !== 0) return diff;
       return 0;
     });
@@ -614,8 +670,47 @@
 
     const countRemovableNF = () => nfRows.filter(x => !x.isNightOnly).length;
     
-    // ★追加：NF帯の削除候補をシャッフル（偏り防止）
-    nfRows.sort(() => Math.random() - 0.5);
+    // --- NF帯：勤務形態内の相対偏差を考慮した優先順位付け ---
+    // 各候補について直近28日間の NF 回数（☆または◆）を数える
+    const last28ForNF = (r) => {
+      let c = 0;
+      const end = State.windowDates[State.range4wStart + 27];
+      for (let i = 0; i < 28; i++){
+        const dt = addDays(end, -27 + i);
+        const ds2 = dateStr(dt);
+        const mk2 = window.globalGetAssign ? window.globalGetAssign(r, ds2) : getAssign(r, ds2);
+        if (mk2 === '☆' || mk2 === '◆') c++;
+      }
+      return c;
+    };
+    // 勤務形態別平均を計算
+    const avgByWorkTypeNF = {};
+    ['two','three'].forEach(wt=>{
+      let sum = 0, n = 0;
+      for (const x of nfRows){
+        const wt0 = (State.employeesAttr[x.r]?.workType) || 'three';
+        if (wt0 === wt){ sum += last28ForNF(x.r); n++; }
+      }
+      avgByWorkTypeNF[wt] = n ? (sum / n) : 0;
+    });
+    // relative score
+    nfRows.forEach(x => {
+      const wt0 = (State.employeesAttr[x.r]?.workType) || 'three';
+      x.last28nf = last28ForNF(x.r);
+      x.relNF = x.last28nf - (avgByWorkTypeNF[wt0] || 0);
+    });
+    // 優先ソート： (1) 非A/非Night が先、(2) 勤務形態内相対偏差（大きい人=多めを先に削る）、(3) 最終的に乱択で安定化
+    nfRows.sort((a,b) => {
+      if (a.isNightOnly !== b.isNightOnly) return (a.isNightOnly ? 1 : -1); // 夜勤専従は後ろ
+      if (a.isA !== b.isA) return (a.isA ? 1 : -1); // Aは残す→Aが true なら後ろ
+      if (a.isLocked !== b.isLocked) return (a.isLocked ? 1 : -1); // ロックは後ろ
+      const rdiff = b.relNF - a.relNF;
+      if (rdiff !== 0) return rdiff;
+      // tie-breaker: 直近NF回数が多い人を先に
+      if (b.last28nf !== a.last28nf) return b.last28nf - a.last28nf;
+      // 最後にランダムで安定化
+      return (Math.random() > 0.5) ? 1 : -1;
+    });
     
     // NF帯の超過分を削除（ロックされていない非Aから優先）
     while (nfRows.length > targetNF && countRemovableNF() > 0) {
