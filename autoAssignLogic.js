@@ -525,37 +525,36 @@ function targetDayForIndex(dayIdx){
   return isWeekendOrHoliday(dt) ? 6 : 10;
 }
 
-  function reduceDayShiftTo(dayIdx, target){
+function reduceDayShiftTo(dayIdx, target) { // target は土日祝/特定日用として引き続き受け取る
     const ds = dateStr(State.windowDates[dayIdx]);
+    const dt = State.windowDates[dayIdx];
+    const isWH = isWeekendOrHoliday(dt);
 
-    // 直近4週間の〇回数（職員ごと）
-    const dayCount4w = (r)=>{
-      let c = 0;
-      const startIdx = Number.isInteger(State.range4wStart) ? State.range4wStart : 0;
-      const endIdx   = startIdx + 27;
-      for (let i = startIdx; i <= endIdx && i < State.windowDates.length; i++){
-        const ds2 = dateStr(State.windowDates[i]);
-        const mk2 = getAssign(r, ds2);
-        if (mk2 === '〇') c++;
-      }
-      return c;
-    };
+    // target が引数で渡されなかった場合（平日の呼び出し）、許容リストから上限値を動的に取得する
+    if (target === undefined && !isWH) {
+      const allowed = (window.Counts && Array.isArray(window.Counts.DAY_ALLOWED_WEEKDAY))
+          ? window.Counts.DAY_ALLOWED_WEEKDAY
+          : [15, 16, 17]; // 安全のためのフォールバック
 
-    // 当日〇が入っている職員一覧
+      // 許容リストに有効な数値があればその最大値を上限とし、なければデフォルト値を使う
+      const validAllowed = allowed.map(n => parseInt(n, 10)).filter(Number.isFinite);
+      target = validAllowed.length > 0 ? Math.max(...validAllowed) : 17;
+    }
+
+    // target が未定義（＝呼び出し元も上限を把握できない）なら何もしない
+    if (target === undefined) return;
+
+    // 当日〇が入っている職員一覧を取得
     const info = [];
     for (let r = 0; r < State.employeeCount; r++){
       if (getAssign(r, ds) === '〇'){
         const lv = (State.employeesAttr[r]?.level) || 'B';
-        info.push({
-          r,
-          level: lv,
-          isA: lv === 'A',
-          isB: lv === 'B'
-        });
+        info.push({ r, level: lv, isA: lv === 'A', isB: lv === 'B' });
       }
     }
 
     let day = info.length;
+    // 計算または引数で得られた上限値 `target` を使って判定
     if (day <= target) return;
 
     // Aがいれば「直近4週間で〇が最も少ないA」を1人保護（Aゼロ日防止＋A内の公平化）
@@ -1220,18 +1219,19 @@ function autoAssignRange(startDayIdx, endDayIdx){
       }
 
       // 許容リスト（配列）があればその最大値を cap とする。なければ従来の target 値をフォールバック。
-      const capWeekday = (window.Counts && Array.isArray(window.Counts.DAY_ALLOWED_WEEKDAY) && window.Counts.DAY_ALLOWED_WEEKDAY.length > 0)
-        ? Math.max(...window.Counts.DAY_ALLOWED_WEEKDAY.map(n => parseInt(n, 10)).filter(Number.isFinite))
-        : ((window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKDAY)) ? window.Counts.DAY_TARGET_WEEKDAY : 16);
-
+      // 土日祝の上限値取得ロジックは変更なし
       const capWkHol = (window.Counts && Array.isArray(window.Counts.DAY_ALLOWED_WEEKEND_HOLIDAY) && window.Counts.DAY_ALLOWED_WEEKEND_HOLIDAY.length > 0)
         ? Math.max(...window.Counts.DAY_ALLOWED_WEEKEND_HOLIDAY.map(n => parseInt(n, 10)).filter(Number.isFinite))
         : ((window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY)) ? window.Counts.DAY_TARGET_WEEKEND_HOLIDAY : 6);
 
-      if (isWeekendOrHoliday(State.windowDates[d]) && day > capWkHol){
-        reduceDayShiftTo(d, capWkHol);
-      } else if (!isWeekendOrHoliday(State.windowDates[d]) && day > capWeekday){
-        reduceDayShiftTo(d, capWeekday);
+      if (isWeekendOrHoliday(State.windowDates[d])) {
+        // 土日祝は、上限を超えている場合のみ、上限値を渡して呼び出す
+        if (day > capWkHol) {
+            reduceDayShiftTo(d, capWkHol);
+        }
+      } else {
+        // 平日は、上限判定と削減を reduceDayShiftTo 関数自身に任せる
+        reduceDayShiftTo(d);
       }
     }
 
