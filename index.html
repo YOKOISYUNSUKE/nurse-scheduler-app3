@@ -160,18 +160,11 @@
 <dialog id="countsDlg" class="attr">
   <header>人数設定</header>
   <div class="content">
-    <div class="row">
-      <label>平日の日勤（許容リスト）</label>
-      <input id="cfgDayAllowed" type="text" class="txt" placeholder="15,16,17">
-    </div>
-    <div class="row">
-      <label>土日祝の日勤（許容リスト）</label>
-      <input id="cfgDayAllowedWkHol" type="text" class="txt" placeholder="5,6">
-    </div>
-    <div class="row">
-      <label>平日の日勤（目標）</label>
-      <input id="cfgDayTarget" type="number" class="txt" min="0" step="1">
-    </div>
+<div class="row">
+  <label>平日の日勤（目標）</label>
+  <input id="cfgDayTarget" type="number" class="txt" min="0" step="1">
+</div>
+
     <div class="row">
       <label>土日祝の日勤（目標）</label>
       <input id="cfgDayTargetWkHol" type="number" class="txt" min="0" step="1">
@@ -234,6 +227,3 @@
   <script src="autoAssignLogic.js"></script>
 </body>
 </html>
-
-
-

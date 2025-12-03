@@ -655,22 +655,22 @@ if (p.mark==='☆'){
       } else {
         const isWkEndOrHol = ((dt.getDay() === 0 || dt.getDay() === 6) || (p.isHoliday && p.isHoliday(ds)));
         if (isWkEndOrHol){
-          const allowed = (window.Counts && Array.isArray(window.Counts.DAY_ALLOWED_WEEKEND_HOLIDAY))
-            ? window.Counts.DAY_ALLOWED_WEEKEND_HOLIDAY
-            : [5,6];
-          if (!allowed.includes(cnt.day)){
-            errors.push({ dayIndex:d, type:'DAY_WKD_ALLOWED', expected: allowed.join(' or '), actual:cnt.day });
+          const target = (window.Counts && typeof window.Counts.getDayTarget === 'function')
+            ? window.Counts.getDayTarget(dt, p.isHoliday)
+            : 6;
+          if (cnt.day !== target){
+            errors.push({ dayIndex:d, type:'DAY_WKD_ALLOWED', expected:String(target), actual:cnt.day });
           }
         } else {
-          // 平日：許容リストチェック
-          const allowed = (window.Counts && Array.isArray(window.Counts.DAY_ALLOWED_WEEKDAY))
-              ? window.Counts.DAY_ALLOWED_WEEKDAY
-              : [15,16,17];
-          if (!allowed.includes(cnt.day)) {
-            errors.push({ dayIndex:d, type:'DAY_ALLOWED', expected:allowed.join(','), actual: cnt.day });
+          const target = (window.Counts && typeof window.Counts.getDayTarget === 'function')
+            ? window.Counts.getDayTarget(dt, p.isHoliday)
+            : 16;
+          if (cnt.day !== target) {
+            errors.push({ dayIndex:d, type:'DAY_ALLOWED', expected:String(target), actual:cnt.day });
           }
         }
       }
+
 
 // ★新規：同一日の夜勤専従は最大2名まで（NF帯・NS帯それぞれ）
       const nightOnlyNF = countNightOnlyWorkers({ 

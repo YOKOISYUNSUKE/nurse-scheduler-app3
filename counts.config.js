@@ -1,8 +1,6 @@
 /* counts.config.js */
 (function(global){
   const Counts = {
-    DAY_ALLOWED_WEEKDAY: [15,16,17],
-    DAY_ALLOWED_WEEKEND_HOLIDAY: [5,6,7],
     DAY_TARGET_WEEKDAY: 16,
     DAY_TARGET_WEEKEND_HOLIDAY: 6,
     FIXED_NF: 3,
@@ -90,34 +88,31 @@
   function apply(cfg){
     if (!cfg) return;
     const keys = [
-      'DAY_ALLOWED_WEEKDAY','DAY_ALLOWED_WEEKEND_HOLIDAY',
       'DAY_TARGET_WEEKDAY','DAY_TARGET_WEEKEND_HOLIDAY',
       'FIXED_NF','FIXED_NS'
     ];
     for (const k of keys){
       if (!(k in cfg)) continue;
-      Counts[k] = (k === 'DAY_ALLOWED_WEEKDAY' || k === 'DAY_ALLOWED_WEEKEND_HOLIDAY')
-        ? (Array.isArray(cfg[k]) ? cfg[k].map(n=>parseInt(n,10)).filter(Number.isFinite) : Counts[k])
-        : parseInt(cfg[k],10);
+      Counts[k] = parseInt(cfg[k],10);
     }
     // 特定日固定条件
+
     if ('FIXED_BY_DATE' in cfg){
       Counts.FIXED_BY_DATE = normalizeFixedMap(cfg.FIXED_BY_DATE);
     }
   }
   function load(){ apply(read()); return {...Counts}; }
-function save(partial){
+  function save(partial){
     const next = { ...read(), ...(partial||{}) };
     apply(next);
     localStorage.setItem(STORAGE_KEY, JSON. stringify({
-      DAY_ALLOWED_WEEKDAY: Counts.DAY_ALLOWED_WEEKDAY,
-      DAY_ALLOWED_WEEKEND_HOLIDAY: Counts.DAY_ALLOWED_WEEKEND_HOLIDAY,
       DAY_TARGET_WEEKDAY: Counts.DAY_TARGET_WEEKDAY,
       DAY_TARGET_WEEKEND_HOLIDAY: Counts.DAY_TARGET_WEEKEND_HOLIDAY,
       FIXED_NF: Counts.FIXED_NF,
       FIXED_NS: Counts.FIXED_NS,
       FIXED_BY_DATE: Counts.FIXED_BY_DATE
     }));
+
 
     // 人数設定もクラウドへ同期（ログイン済みかつpushToRemoteがあれば）
     try{
@@ -189,8 +184,6 @@ function save(partial){
     const dlg = document.getElementById('countsDlg');
     if (!btn || !dlg) return;
     const $ = id => dlg.querySelector(`#${id}`);
-    const inpDayAllowed     = $('cfgDayAllowed');
-    const inpAllowedWkHol   = $('cfgDayAllowedWkHol');
     const inpTWeek       = $('cfgDayTarget');
     const inpTWH         = $('cfgDayTargetWkHol');
     const inpNF          = $('cfgFixedNF');
@@ -204,13 +197,12 @@ function save(partial){
 
 
     function populate(){
-      inpDayAllowed.value     = Counts.DAY_ALLOWED_WEEKDAY. join(',');
-      inpAllowedWkHol.value   = Counts.DAY_ALLOWED_WEEKEND_HOLIDAY.join(',');
       inpTWeek.value   = String(Counts.DAY_TARGET_WEEKDAY);
       inpTWH.value     = String(Counts.DAY_TARGET_WEEKEND_HOLIDAY);
       inpNF.value      = String(Counts.FIXED_NF);
       inpNS.value      = String(Counts.FIXED_NS);
       if (inpFixedByDate){
+
         inpFixedByDate.value = Counts.exportFixedByDateText
           ? Counts.exportFixedByDateText()
           : '';
@@ -292,15 +284,14 @@ function save(partial){
         ? parseFixedByDateText(inpFixedByDate.value || '')
         : {};
 
-      const cfg = {
-        DAY_ALLOWED_WEEKDAY: inpDayAllowed.value. split(',').map(s=>parseInt(s.trim(),10)).filter(Number.isFinite),
-        DAY_ALLOWED_WEEKEND_HOLIDAY: inpAllowedWkHol.value.split(',').map(s=>parseInt(s.trim(),10)). filter(Number.isFinite),
-        DAY_TARGET_WEEKDAY: parseInt(inpTWeek.value,10),
-        DAY_TARGET_WEEKEND_HOLIDAY: parseInt(inpTWH.value,10),
-        FIXED_NF: parseInt(inpNF.value,10),
-        FIXED_NS: parseInt(inpNS. value,10),
-        FIXED_BY_DATE: fixedMap
-      };
+const cfg = {
+  DAY_TARGET_WEEKDAY: parseInt(inpTWeek.value,10),
+  DAY_TARGET_WEEKEND_HOLIDAY: parseInt(inpTWH.value,10),
+  FIXED_NF: parseInt(inpNF.value,10),
+  FIXED_NS: parseInt(inpNS.value,10),
+  FIXED_BY_DATE: fixedMap
+};
+
       save(cfg);
 
       dlg.close ?  dlg.close() : (dlg.open = false);
@@ -311,4 +302,3 @@ function save(partial){
   });
 
 })(window);
-

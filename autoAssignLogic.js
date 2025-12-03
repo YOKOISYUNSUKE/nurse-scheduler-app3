@@ -1,4 +1,3 @@
-
 // ====== 自動割り当てアルゴリズム ======
 // app.jsから切り出した自動割り当てロジック
 
@@ -468,11 +467,17 @@
           if (need<=0) break;
 
           const dt = State.windowDates[d];
+          const { day } = countDayStats(d);
+          
           if (isWeekendOrHoliday(dt)) {
-            const { day } = countDayStats(d);
             const capWkHol = (window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY))
               ? window.Counts.DAY_TARGET_WEEKEND_HOLIDAY : 6;
             if (day >= capWkHol) continue;
+          } else {
+            // 平日の上限チェック
+            const capWeekday = (window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKDAY))
+              ? window.Counts.DAY_TARGET_WEEKDAY : 16;
+            if (day >= capWeekday) continue;
           }
 
           const empAttr = State.employeesAttr[r] || { level:'B', workType:'three' };
@@ -872,13 +877,21 @@ function reduceDayShiftTo(dayIdx, target) { // target は土日祝/特定日用�
       if (isLocked(r, ds)) return false;
       clearAssign(r, ds);
 
-      let { day, hasADay } = countDayStats(r);
-      const minDay = isWeekendOrHoliday(State.windowDates[dayIdx]) ? 5 : 10;
+      let { day, hasADay } = countDayStats(dayIdx);
+      const dt = State.windowDates[dayIdx];
+      const isWH = isWeekendOrHoliday(dt);
+      const minDay = isWH ? 5 : 10;
+      const maxDay = isWH 
+        ? ((window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY)) ? window.Counts.DAY_TARGET_WEEKEND_HOLIDAY : 6)
+        : ((window.Counts && Number.isInteger(window.Counts.DAY_TARGET_WEEKDAY)) ? window.Counts.DAY_TARGET_WEEKDAY : 16);
+      
       if (day < minDay || !hasADay){
         const need = Math.max(1, minDay - day);
         fillWith(dayIdx, need, ['〇'], !hasADay);
         ({ day, hasADay } = countDayStats(dayIdx));
-        if (day < minDay || !hasADay){
+        
+        // 上限チェック：上限を超えた場合または最低条件を満たせない場合は元に戻す
+        if (day > maxDay || day < minDay || !hasADay){
           setAssign(r, ds, '〇');
           return false;
         }
@@ -1249,6 +1262,18 @@ function autoAssignRange(startDayIdx, endDayIdx){
        const FIXED_NF = targetNFFor(ds);
        const FIXED_NS = targetNSFor(ds);
        enforceExactCount(d, FIXED_NF, FIXED_NS);
+       
+       // 日勤の厳格化：目標人数に合わせる
+       const dt = State.windowDates[d];
+       const target = targetDayForIndex(d);
+       let { day } = countDayStats(d);
+       
+       if (day > target) {
+         reduceDayShiftTo(d, target);
+       } else if (day < target) {
+         const pushDay = fillDayShift(d);
+         pushDay(target - day);
+       }
      }
 
   }

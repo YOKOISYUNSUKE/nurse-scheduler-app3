@@ -491,8 +491,6 @@ async function pushToRemote(){
     if (!countsCfg && window.Counts){
       const c = window.Counts;
       countsCfg = {
-        DAY_MIN_WEEKDAY: c.DAY_MIN_WEEKDAY,
-        DAY_ALLOWED_WEEKEND_HOLIDAY: c.DAY_ALLOWED_WEEKEND_HOLIDAY,
         DAY_TARGET_WEEKDAY: c.DAY_TARGET_WEEKDAY,
         DAY_TARGET_WEEKEND_HOLIDAY: c.DAY_TARGET_WEEKEND_HOLIDAY,
         FIXED_NF: c.FIXED_NF,
@@ -500,6 +498,7 @@ async function pushToRemote(){
         FIXED_BY_DATE: c.FIXED_BY_DATE
       };
     }
+
     for (const ck of keys){
       remotePut(`${ck}:meta`,  meta);
       remotePut(`${ck}:dates`, dates);
