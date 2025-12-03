@@ -269,18 +269,24 @@ window.setLocked = setLocked; // ★追加
         const { star, half, off, start } = countLast28Days(r, endDt);
         const rng = `${start.getMonth()+1}/${start.getDate()}〜${endDt.getMonth()+1}/${endDt.getDate()}`;
 
-    if (wt === 'night'){
-      if (star !== 10) return `${name} のローリング4週間（${rng}）の「☆」は10件ちょうどが必要：${star}/10`;
-    } else if (wt === 'two'){
-      if (star !== 4) return `${name} のローリング4週間（${rng}）の「☆」は4件必要：${star}/4`;
-    } else if (wt === 'three'){
-      if (half < 8 || half > 10) return `${name} のローリング4週間（${rng}）の（◆＋●）は8〜10件を許容（原則10件を目指す）：${half}/8〜10`;
-    }
+        if (wt === 'night'){
+          if (star !== 10) return `${name} のローリング4週間（${rng}）の「☆」は10件ちょうどが必要：${star}/10`;
+        } else if (wt === 'two'){
+          if (star !== 4) return `${name} のローリング4週間（${rng}）の「☆」は4件必要：${star}/4`;
+        } else if (wt === 'three'){
+          if (half < 8 || half > 10) return `${name} のローリング4週間（${rng}）の（◆＋●）は8〜10件を許容（原則10件を目指す）：${half}/8〜10`;
+        }
 
+        // ★追加：4週間の休日日数（希望休＋空白）を 7/8/9 日に強制
+        const required = requiredOffFor28(r, start, endDt);
+        if (off !== required){
+          return `${name} のローリング4週間（${rng}）の休日は${required}日必要：${off}/${required}`;
+        }
       }
     }
     return null; // OK
   }
+
 
   function countForDayLocal(dayIndex){
     let day=0, nf=0, ns=0;
@@ -1176,22 +1182,24 @@ window.updateFooterCounts = updateFooterCounts; // ★追加
 
 
 
-  function updatePeriodText(){
-    const s = State.windowDates[0];
-    const e = State.windowDates[30];
-    periodText.textContent = `${s.getFullYear()}年${s.getMonth()+1}月${s.getDate()}日 〜 ${e.getFullYear()}年${e.getMonth()+1}月${e.getDate()}日`;
-  }
+function updatePeriodText(){
+  const s = State.windowDates[0];
+  const e = State.windowDates[30];
+  periodText.textContent = `${s.getFullYear()}年${s.getMonth()+1}月${s.getDate()}日 〜 ${e.getFullYear()}年${e.getMonth()+1}月${e.getDate()}日`;
+}
 
 function updateRange4wLabel(){
   if (!range4wLabel) return;
   const s = State.windowDates[State.range4wStart];
   range4wLabel.textContent = `開始日：${s.getMonth()+1}/${s.getDate()}（28日間）`;
 }
+window.updateRange4wLabel = updateRange4wLabel;
 
 
-     // 追加：表示月（年月区切りのカレンダー月）をExcelで開けるCSVとして保存（UTF-8 BOM付き）
-    function exportExcelCsv(){
-      const rows = [];
+// 追加：表示月（年月区切りのカレンダー月）をExcelで開けるCSVとして保存（UTF-8 BOM付き）
+function exportExcelCsv(){
+  const rows = [];
+
 
       // カレンダー月の範囲を決定（表示ウィンドウの先頭日を基準に、その月の1日〜末日）
       const anchor = State.windowDates[0];

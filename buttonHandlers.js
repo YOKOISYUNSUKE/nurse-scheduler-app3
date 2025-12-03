@@ -124,13 +124,38 @@
       monthPicker.addEventListener('change', () => {
         const [y, m] = monthPicker.value.split('-').map(Number);
         if (!y || !m) return;
+
+        // 表示ウィンドウを指定月の1日にジャンプ
         switchAnchor(new Date(y, m - 1, 1)); // 月初にジャンプ
+
+        // 月ジャンプ後は 4週間スライダーも新しい月の先頭日に合わせる
+        if (State && Array.isArray(State.windowDates) && State.windowDates.length > 0) {
+          State.range4wStart = 0;
+
+          const range4w = document.getElementById('range4w');
+          if (range4w) {
+            range4w.value = String(State.range4wStart);
+          }
+
+          if (typeof window.updateRange4wLabel === 'function') {
+            window.updateRange4wLabel();
+          }
+
+          if (typeof paintRange4w === 'function') {
+            paintRange4w();
+          }
+
+          if (typeof saveMetaOnly === 'function') {
+            saveMetaOnly();
+          }
+        }
       });
     }
   }
 
   // === 日単位ナビゲーション ===
   function setupDayNavigation() {
+
     if (btnPrevDay) {
       btnPrevDay.addEventListener('click', () => shiftDays(-1)); // 1日戻る
     }
