@@ -509,7 +509,35 @@ if (p.mark==='☆'){
         }
       }
     }
+    // ★新規：「遅出（□）」の翌日は勤務マーク禁止
+    {
+      const r = p.rowIndex;
+      const idx = p.dayIndex;
 
+      // 1) 前日が「□」なら当日の勤務マークは禁止
+      if (p.mark){
+        const prev = idx - 1;
+        if (prev >= 0){
+          const dsPrev = dateStr(p.dates[prev]);
+          const mkPrev = p.getAssign(r, dsPrev);
+          if (mkPrev === '□'){
+            return { ok:false, message:'「□」の翌日には勤務マークを配置できません' };
+          }
+        }
+      }
+
+      // 2) 当日に「□」を置く場合、翌日は未割当であることを要求
+      if (p.mark === '□'){
+        const next = idx + 1;
+        if (next < p.dates.length){
+          const dsNext2 = dateStr(p.dates[next]);
+          const mkNext = p.getAssign(r, dsNext2);
+          if (mkNext){
+            return { ok:false, message:'「□」の翌日は未割当にしてください（先に翌日の勤務マークを外してください）' };
+          }
+        }
+      }
+    }
     // ★新規：「☆★」直後2日は休専用（配置禁止）
     {
       const prev1 = p.dayIndex - 1;
@@ -843,6 +871,18 @@ if (p.mark==='☆'){
         const mkN = p.getAssign(r, dsN);
         if (mk === '◆' && mkN === '〇'){
           errors.push({ rowIndex:r, dayIndex:d, type:'SEQ_NF_DAY', expected:'(休 or 非〇)', actual:'◆→〇' });
+        }
+      }
+    }
+    // ★新規：「遅出（□）」の翌日は勤務マーク禁止
+    for (let r = 0; r < p.employeeCount; r++){
+      for (let d = 0; d < p.dates.length - 1; d++){
+        const ds  = dateStr(p.dates[d]);
+        const dsN = dateStr(p.dates[d+1]);
+        const mk  = p.getAssign(r, ds);
+        const mkN = p.getAssign(r, dsN);
+        if (mk === '□' && mkN){
+          errors.push({ rowIndex:r, dayIndex:d+1, type:'LATE_NEXT_DAY_EMPTY', expected:'no mark', actual:mkN });
         }
       }
     }

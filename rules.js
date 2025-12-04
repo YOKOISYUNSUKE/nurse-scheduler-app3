@@ -30,7 +30,7 @@ function applyAfterAssign(p) {
       const lvNext = p.getLeaveType(p.rowIndex, nds);
       if (lvNext === '祝' || lvNext === '代') p.clearLeaveType(p.rowIndex, nds);
     }
-p.setAssign(p.rowIndex, nds, '★');
+if (p.getAssign(p.rowIndex, nds) !== '★') p.setAssign(p.rowIndex, nds, '★');
 if (p.gridEl) {
   const td = p.gridEl.querySelector(`td[data-row="${p.rowIndex}"][data-day="${next}"]`);
   if (td) {

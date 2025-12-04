@@ -5,7 +5,7 @@
   const WorkMap = {
     two:   { symbol:'②', label:'二部制' },
     three: { symbol:'③', label:'三部制' },
-    day:   { symbol:'日', label:'日勤のみ（平日・土日祝OK）' },
+    day:   { symbol:'日', label:'日勤のみ' },
     night: { symbol:'夜', label:'夜勤のみ' },
   };
   const WorkOrder = ['two','three','day','night'];
@@ -210,6 +210,10 @@ function initInternal(){
     // 初期は折りたたんでおく（ボタンで表示/非表示）
     durationsWrap.style.display = 'none';
 
+    // --- 重要: ここで遅出トグルを生成してから append する ---
+    const lateToggle = createLateShiftToggle(empAttr, selWt);
+
+
     // 勤務時間編集ボタン（表示/非表示のトグル）
     const btnDur = document.createElement('button');
     btnDur.type = 'button';
@@ -229,6 +233,7 @@ function initInternal(){
     row.appendChild(selLv);
     row.appendChild(selWt);
     row.appendChild(quotaWrap);
+    row.appendChild(lateToggle);
     row.appendChild(forbidWrap);
     row.appendChild(btnDur);        // ★追加：勤務時間編集ボタン
     row.appendChild(durationsWrap); // ★追加：勤務時間フィールド
@@ -518,6 +523,51 @@ function initInternal(){
 
     return quotaWrap;
   }
+  // --- 遅出（late shift）トグル作成 ---
+  function createLateShiftToggle(attr, selWt){
+    const wrap = document.createElement('div');
+    wrap.className = 'late-toggle';
+    wrap.style.display = (selWt && selWt.value === 'night') ? 'none' : 'flex';
+    wrap.style.alignItems = 'center';
+    wrap.style.gap = '6px';
+    wrap.style.padding = '4px';
+
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.className = 'late-checkbox';
+    chk.checked = !!(attr && attr.hasLateShift);
+    chk.title = '遅出あり';
+
+    const lbl = document.createElement('label');
+    lbl.style.fontSize = '0.9em';
+    lbl.style.cursor = 'pointer';
+    lbl.textContent = '遅出';
+    // ラベルの先頭にチェックボックスを入れる（見た目の順）
+    lbl.prepend(chk);
+
+    // 勤務形態変更時に表示切替（night の場合は非表示）
+    if (selWt) {
+      selWt.addEventListener('change', () => {
+        wrap.style.display = (selWt.value === 'night') ? 'none' : 'flex';
+      });
+    }
+
+    // チェック変更で attr を更新（即時保存・描画反映）
+    chk.addEventListener('change', () => {
+      if (!attr) attr = {};
+      attr.hasLateShift = chk.checked;
+      if (typeof window.saveMetaOnly === 'function') window.saveMetaOnly();
+      if (typeof window.renderGrid === 'function') window.renderGrid();
+      if (typeof window.showToast === 'function') {
+        window.showToast(chk.checked ? '遅出を有効にしました' : '遅出を無効にしました');
+      }
+    });
+
+    wrap.appendChild(lbl);
+    return wrap;
+  }
+
+
 // --- employeeDialog.js に追加（createQuotaInput関数の後） ---
 
   function createForbiddenPairsSelect(i, State){
@@ -787,6 +837,11 @@ function readAttrDialogToState(){
         workType: selWt ? selWt.value : (prev.workType || 'three'),
         nightQuota: (selWt && selWt.value === 'night' && Number.isInteger(nightQuota)) ? nightQuota : (prev.nightQuota)
       });
+
+      // 読み取り：遅出トグルの状態を取り込む（当該行に存在する場合）
+      const lateChk = row.querySelector('.late-toggle input[type="checkbox"]');
+      merged.hasLateShift = lateChk ? Boolean(lateChk.checked) : (prev.hasLateShift || false);
+
 
       // 更新：duration selects の値を読み取って empAttr.shiftDurations を更新
       if (!merged.shiftDurations) merged.shiftDurations = {};

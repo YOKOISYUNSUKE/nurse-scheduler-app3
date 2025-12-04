@@ -82,7 +82,7 @@
     const cur = getAssign(r, dsNext);
     if (cur === '★' || (cur && cur !== '')) return;
 
-    setAssign(r, dsNext, '★');
+   if (getAssign(r, dsNext) !== '★' && getAssign(r, dateStr(State.windowDates[dayIdx])) === '☆') setAssign(r, dsNext, '★');
     const nextCell = grid.querySelector(`td[data-row="${r}"][data-day="${nextIndex}"]`);
     if (nextCell){
       nextCell.textContent = '';
@@ -93,11 +93,11 @@
     }
 
     // 28日目の翌日★は自動ロック
-    if (dayIdx === State.range4wStart + 27){
-      setLocked(r, dsNext, true);
-      const nc = grid.querySelector(`td[data-row="${r}"][data-day="${nextIndex}"]`);
-      if (nc) nc.classList.add('locked');
-    }
+if (getAssign(r, dsNext) === '★' && dayIdx === State.range4wStart + 27){
+  setLocked(r, dsNext, true);
+  const nc = grid.querySelector(`td[data-row="${r}"][data-day="${nextIndex}"]`);
+  if (nc) nc.classList.add('locked');
+}
 
     if (typeof updateFooterCounts === 'function') updateFooterCounts();
     if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);

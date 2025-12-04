@@ -1150,7 +1150,7 @@ function autoAssignRange(startDayIdx, endDayIdx){
             const rA = findAFor('☆');
             if (rA !== null){ placed = true; break; }
             setAssign(r, ds, '☆');
-            if (hadNext) setAssign(r, nextDs, '★');
+            if (hadNext && getAssign(r, nextDs) !== '★') setAssign(r, nextDs, '★');
           }
         }
         {
@@ -1179,7 +1179,7 @@ function autoAssignRange(startDayIdx, endDayIdx){
             fillWith(d, 1, ['★'], true);
             const after = countDayStats(d);
             if (after.hasANs){ placed2 = true; break; }
-            setAssign(r, ds, '★');
+            if (!(prevDs && getAssign(r, prevDs) === '★')) setAssign(r, ds, '★');
             if (hadPrev) setAssign(r, prevDs, '☆');
           }
         }
