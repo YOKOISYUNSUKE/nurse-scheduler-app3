@@ -234,7 +234,7 @@ window.setLocked = setLocked; // ★追加
         } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
           minutes = Number(window.ShiftDurations.getDefaultForMark(mk) || 0);
         } else {
-          const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240};
+          const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240,'□':540};
           minutes = fallback[mk] || 0;
         }
         workMinutes += minutes;
@@ -294,7 +294,7 @@ window.setLocked = setLocked; // ★追加
     const prevDs = dateStr(addDays(State.windowDates[dayIndex], -1));
     for(let r=0; r<State.employeeCount; r++){
       const mk = getAssign(r, ds);
-      if (mk === '〇') day++;
+      if (mk === '〇' || mk === '□') day++;
       if (mk === '☆' || mk === '◆') nf++;
 
       // NS＝当日の「★ or ●」。★未反映の旧データ対策として前日の☆もフォールバック
@@ -303,6 +303,7 @@ window.setLocked = setLocked; // ★追加
     }
     return { day, nf, ns };
   }
+
 
 
   function buildWindowDates(anchor){
@@ -1151,7 +1152,7 @@ window.updateFooterCounts = updateFooterCounts; // ★追加
         } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
           minutes = Number(window.ShiftDurations.getDefaultForMark(mk4) || 0);
         } else {
-          const fallback = { '〇':480, '☆':480, '★':480, '◆':240, '●':240 };
+          const fallback = { '〇':480, '☆':480, '★':480, '◆':240, '●':240,'□':540 };
           minutes = fallback[mk4] || 0;
         }
         totalMin += minutes;
@@ -1264,7 +1265,7 @@ function exportExcelCsv(){
             } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
               minutes = Number(window.ShiftDurations.getDefaultForMark(mk4) || 0);
             } else {
-              const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240};
+              const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240,'□':540};
               minutes = fallback[mk4] || 0;
             }
             totalMin += minutes;
@@ -1539,7 +1540,7 @@ function exportExcelCsv(){
             } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
               minutes = Number(window.ShiftDurations.getDefaultForMark(mk4) || 0);
             } else {
-              const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240};
+              const fallback = {'〇':480,'☆':480,'★':480,'◆':240,'●':240,'□':540};
               minutes = fallback[mk4] || 0;
             }
             totalMin += minutes;
@@ -1587,6 +1588,7 @@ function exportExcelCsv(){
 
 function markToClass(mk){
   if (window.MARK_MAP && window.MARK_MAP[mk]) return window.MARK_MAP[mk].className;
+  if (mk === '□') return 'mk-late';
   return '';
 }
 

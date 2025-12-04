@@ -11,7 +11,7 @@
     for(let r=0; r<ctx.employeeCount; r++){
       const mk = ctx.getAssign(r, ds);
       const isA = (ctx.getEmpAttr(r)?.level) === 'A';
-      if (mk === '〇'){ day++; if (isA) hasADay = true; }
+      if (mk === '〇' || mk === '□'){ day++; if (isA) hasADay = true; }
       if (mk === '☆' || mk === '◆'){ nf++; if (isA) hasANf = true; }
 
       // NS＝当日の「★ or ●」。★未反映の旧データ対策として前日の☆もフォールバックで許容
@@ -24,6 +24,7 @@
     }
     return { day, nf, ns, hasADay, hasANf, hasANs };
   }
+
 
 
 

@@ -3,13 +3,14 @@
 ;(function (global) {
   // 勤務形態ごとの許可マーク
   const ALLOW = {
-    two:   new Set(['〇','☆','★']), // 二部制：○ or ☆★
-    three: new Set(['〇','◆','●']), // 三部制：○ or ◆ or ●
-    day:   new Set(['〇']),          // 日専：○ only
+    two:   new Set(['〇','□','☆','★']), // 二部制：○ or □ or ☆★
+    three: new Set(['〇','□','◆','●']), // 三部制：○ or □ or ◆ or ●
+    day:   new Set(['〇','□']),          // 日専：○ or □
     night: new Set(['☆','★']),      // 夜専：☆★ only
   };
 
   // ---- 単一セルの「勤務形態」チェック ----
+
   function canAssign(ctx){
     if (!ctx || !ctx.mark) return { ok:true }; // 空（消去）は常に可
     const wt = (ctx.empAttr && ctx.empAttr.workType) || 'three';

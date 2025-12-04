@@ -244,7 +244,7 @@
         const isA = empAttr.level === 'A';
 
         // 日勤
-        if (mk === '〇'){
+        if (mk === '〇' || mk === '□'){
           dayCount++;
           if (isA) hasADay = true;
         }
@@ -253,12 +253,6 @@
         if (mk === '☆' || mk === '◆'){
           nfCount++;
           if (isA) hasANf = true;
-        }
-
-        // 夜勤後半（NS：★ / ●）
-        if (mk === '★' || mk === '●'){
-          nsCount++;
-          if (isA) hasANs = true;
         }
       }
 
