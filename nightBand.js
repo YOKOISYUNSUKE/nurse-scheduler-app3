@@ -354,16 +354,15 @@ out = out
 
 
 
-    // 4週間の夜勤ノルマ充足判定
+// 4週間の夜勤ノルマ充足判定（厳格化：ノルマ完全一致を要求）
     function nightQuotasOK(ctx, startIdx, endIdx){
       for (let r = 0; r < ctx.employeeCount; r++){
         const wt = (ctx.getEmpAttr(r)?.workType) || 'three';
         const { star, half } = countNightStatsForEmp(ctx, r, startIdx, endIdx);
         if (wt === 'night'){
-          // ★修正：個別の夜勤ノルマを参照（未設定なら10）
+          // ★厳格化：個別の夜勤ノルマと完全一致を要求（許容範囲なし）
           const quota = ctx.getEmpAttr(r)?.nightQuota || 10;
-          const minQuota = Math.max(0, quota - 2); // 下限はノルマ-2
-          if (star < minQuota || star > quota) return false;
+          if (star !== quota) return false;
         } else if (wt === 'two'){
           if (star < 4) return false; // 二部制：4週間で☆≦4（下限も4）
         } else { // three

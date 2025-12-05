@@ -97,9 +97,9 @@ document.addEventListener('auth:logged-in', async (ev)=>{
   const today = new Date();
   const State = {
     userId: null,
-    // 連続31日ウィンドウの開始日（任意の日付）
+    // 連続28日ウィンドウの開始日（任意の日付）
     anchor: new Date(today.getFullYear(), today.getMonth(), 1),
-    windowDates: [],            // [Date x31]
+    windowDates: [],            // [Date x28]
     employees: [],
     employeeCount: 20,
     employeesAttr: [],          // [{level:'A'|'B'|'C', workType:'two'|'three'|'day'|'night'}]
@@ -308,7 +308,7 @@ window.setLocked = setLocked; // ★追加
 
   function buildWindowDates(anchor){
     const arr = [];
-    for(let i=0;i<31;i++) arr.push(addDays(anchor, i));
+    for(let i=0;i<28;i++) arr.push(addDays(anchor, i));
     return arr;
   }
 
@@ -536,6 +536,8 @@ function saveMetaOnly(){
     workType: attr.workType,
     nightQuota: attr.nightQuota,
     shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
+    hasEarlyShift: attr.hasEarlyShift,      // ★追加：早出フラグ
+    earlyShiftType: attr.earlyShiftType,    // ★追加：早出種別（all/weekday/holiday）
     hasLateShift: attr.hasLateShift,        // ★追加：遅出フラグ
     lateShiftType: attr.lateShiftType       // ★追加：遅出種別（all/weekday/holiday）
   }));
@@ -643,16 +645,20 @@ if (Array.isArray(meta.employees) && meta.employees.length){
     workType: attr.workType || 'three',
     nightQuota: attr.nightQuota,
     shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
-    hasLateShift: attr.hasLateShift || false,               // ★追加：遅出フラグ復元
-    lateShiftType: attr.lateShiftType || 'all'              // ★追加：遅出種別復元（デフォルトは全日）
+    hasEarlyShift: attr.hasEarlyShift || false,             // 早出フラグ復元
+    earlyShiftType: attr.earlyShiftType || 'all',           // 早出種別復元（デフォルトは全日）
+    hasLateShift: attr.hasLateShift || false,               // 遅出フラグ復元
+    lateShiftType: attr.lateShiftType || 'all'              // 遅出種別復元（デフォルトは全日）
   }));
  } else {
    State.employeesAttr = State.employees.map(()=> ({ 
      level:'B', 
      workType:'three', 
      shiftDurations:{},
-     hasLateShift: false,    // ★追加：デフォルト値
-     lateShiftType: 'all'    // ★追加：デフォルト値
+     hasEarlyShift: false,   
+     earlyShiftType: 'all',
+     hasLateShift: false,  
+     lateShiftType: 'all'   
    }));
  }
    // employeeCount は保存値があれば優先、なければ配列長
@@ -1053,7 +1059,7 @@ function handleClearCell(r, dayIdx, td){
       th.textContent = row.label;
       tr.appendChild(th);
 
-      for(let d=0; d<31; d++){
+      for(let d=0; d<28; d++){
         const td = document.createElement('td');
         td.dataset.day = String(d);
         td.dataset.sum = row.key;
@@ -1071,7 +1077,7 @@ function handleClearCell(r, dayIdx, td){
   function updateFooterCounts(){
     const tfoot = grid.querySelector('tfoot');
     if (!tfoot){ renderFooterCounts(); return; }
-    for(let d=0; d<31; d++){
+    for(let d=0; d<State.windowDates.length; d++){
       const c = countForDayLocal(d);
       const tdDay = tfoot.querySelector(`td[data-day="${d}"][data-sum="day"]`);
       const tdNf  = tfoot.querySelector(`td[data-day="${d}"][data-sum="nf"]`);
@@ -1081,18 +1087,17 @@ function handleClearCell(r, dayIdx, td){
       if (tdNs)  tdNs.textContent  = String(c.ns);
     }
   }
-window.updateFooterCounts = updateFooterCounts; // ★追加
+window.updateFooterCounts = updateFooterCounts; //
 
   // ★追加：指定行の4週間マーク・休日・時間セルだけ再計算（手動操作用）
   function refresh4wSummaryForRow(r){
     if (!grid || typeof r !== 'number') return;
 
-    const start4w = State.range4wStart;
-    if (typeof start4w !== 'number') return;
-
     const maxIdx = State.windowDates.length - 1;
-    const end4w  = Math.min(start4w + 27, maxIdx);
-    if (end4w < start4w) return;
+    if (maxIdx < 0) return;
+
+    const start4w = 0;
+    const end4w   = maxIdx;
 
     const tdMarks = grid.querySelector(`td.month-marks[data-row="${r}"]`);
     const tdOff   = grid.querySelector(`td.month-off[data-row="${r}"]`);
@@ -1132,6 +1137,7 @@ window.updateFooterCounts = updateFooterCounts; // ★追加
           cntNS++;
         }
       }
+
       const lineTop = `〇${cntO}☆★${cntNightPair}`;
       const lineBottom = `◆${cntNF}●${cntNS}`;
       tdMarks.innerHTML = `
@@ -1140,25 +1146,29 @@ window.updateFooterCounts = updateFooterCounts; // ★追加
       `.trim();
     }
 
-    // ---- 休日数と4週間勤務時間 ----
-    if (tdOff || tdTotal){
-      let cntHoliday = 0;
-      let totalMin   = 0;
+    // ---- 休日集計＆勤務時間合計（表示4週間） ----
+    let cntHoliday = 0;
+    let totalMin   = 0;
 
+    if (tdOff || tdTotal){
       for (let d4 = start4w; d4 <= end4w; d4++){
         const dt4 = State.windowDates[d4];
         if (!dt4) continue;
         const ds4 = dateStr(dt4);
+        const isOff4 = globalHasOffByDate(r, ds4);
+        const lv4 = globalHasLeave(r, ds4) ? (getLeaveType(r, ds4) || '') : undefined;
+        const mk4 = globalGetAssign(r, ds4);
 
-        const mk4   = globalGetAssign(r, ds4);
-        const hasLv = globalHasLeave(r, ds4);
-        const isOff4 = (globalHasOffByDate(r, ds4) || !mk4) && !hasLv;
+     // 特別休暇がある日は休日扱いしない（勤務日としてカウント）
+    const hasLeave = !!lv4;
+    // 休日判定：希望休フラグがあるか、マークがなく特別休暇もない
+    const isRest = (isOff4 || !mk4) && !hasLeave;
 
-        if (isOff4){
-          cntHoliday++;
-          continue;
-        }
-        if (!mk4) continue;
+    if (isRest){
+      cntHoliday++;
+      continue;
+    }
+    if (!mk4) continue;
 
         let minutes = 0;
         if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
@@ -1166,7 +1176,7 @@ window.updateFooterCounts = updateFooterCounts; // ★追加
         } else if (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function') {
           minutes = Number(window.ShiftDurations.getDefaultForMark(mk4) || 0);
         } else {
-          const fallback = { '〇':480, '☆':480, '★':480, '◆':240, '●':240,'□':540 };
+          const fallback = { '〇':480, '早': 480, '遅': 540, '☆':480, '★':480, '◆':240, '●':240 };
           minutes = fallback[mk4] || 0;
         }
         totalMin += minutes;
@@ -1197,9 +1207,10 @@ window.updateFooterCounts = updateFooterCounts; // ★追加
 
 
 
+
 function updatePeriodText(){
   const s = State.windowDates[0];
-  const e = State.windowDates[30];
+  const e = State.windowDates[27];
   periodText.textContent = `${s.getFullYear()}年${s.getMonth()+1}月${s.getDate()}日 〜 ${e.getFullYear()}年${e.getMonth()+1}月${e.getDate()}日`;
 }
 
@@ -1334,7 +1345,8 @@ function exportExcelCsv(){
       trh.appendChild(thEmp);
 
       // 日付ヘッダ（0〜30日ぶん）
-      for (let d = 0; d < 31; d++){
+     for(let d=0; d<State.windowDates.length; d++)
+{
         const th = document.createElement('th');
         const dt = State.windowDates[d];
         if (dt){
@@ -1394,7 +1406,8 @@ function exportExcelCsv(){
         tr.appendChild(tdName);
 
         // 各日セル
-        for(let d=0; d<31; d++){
+        for(let d=0; d<State.windowDates.length; d++)
+{
           const dt = State.windowDates[d];
           const ds = dateStr(dt);
           const td = document.createElement('td');
@@ -1468,12 +1481,9 @@ function exportExcelCsv(){
 
           tr.appendChild(td);
         }
-        // 4週間（網掛け範囲）のマーク集計を算出して行末に追加（労働時間の左隣）
-        let start4w = (typeof State.range4wStart === 'number') ? State.range4wStart : 0;
-        if (start4w < 0) start4w = 0;
-        let end4w = start4w + 27;
-        const maxDayIdx4w = State.windowDates.length - 1;
-        if (end4w > maxDayIdx4w) end4w = maxDayIdx4w;
+        // 4週間（表示範囲）のマーク集計
+        const start4w = 0;
+        const end4w   = State.windowDates.length - 1;
 
         let cntO = 0, cntNightPair = 0, cntNF = 0, cntNS = 0, cntHoliday = 0;
         if (end4w >= start4w){
@@ -1518,35 +1528,34 @@ function exportExcelCsv(){
         `.trim();
         tr.appendChild(tdMarks);
 
-        // 休日集計セル（4週間）
+        // 休日集計セル（表示4週間）
         const tdOff = document.createElement('td');
         tdOff.className = 'month-off';
         tdOff.dataset.row = String(r);
 
-        // === ここで各従業員の4週間（網掛け範囲）の勤務時間合計と休日数を算出して行の末尾に追加 ===
+        // === ここで各従業員の「表示4週間」の勤務時間合計と休日数を算出して行の末尾に追加 ===
         cntHoliday = 0; 
         let totalMin = 0;
-        if (typeof start4w === 'number' && end4w >= start4w){
+        if (end4w >= start4w){
           for (let d4 = start4w; d4 <= end4w; d4++){
             const dt4 = State.windowDates[d4];
             if (!dt4) continue;
             const ds4 = dateStr(dt4);
 
+            // 4週内の日付について、
+            // 「マークなし or 希望休」かつ「特別休暇なし」を休日としてカウント
+            const mk4   = globalGetAssign(r, ds4);
+            const hasLv = globalHasLeave(r, ds4);
+            const isOff4 = (globalHasOffByDate(r, ds4) || !mk4) && !hasLv;
 
-    // 4週内の日付について、
-    // 「マークなし or 希望休」かつ「特別休暇なし」を休日としてカウント
-    const mk4   = globalGetAssign(r, ds4);
-    const hasLv = globalHasLeave(r, ds4);
-    const isOff4 = (globalHasOffByDate(r, ds4) || !mk4) && !hasLv;
+            if (isOff4){
+              cntHoliday++;
+              continue;
+            }
 
-    if (isOff4){
-      cntHoliday++;
-      continue;
-    }
-
-    // ここまでで休日でないことが確定しているので、
-    // 勤務マークが無ければ勤務時間は 0 分としてスキップ
-    if (!mk4) continue;
+            // ここまでで休日でないことが確定しているので、
+            // 勤務マークが無ければ勤務時間は 0 分としてスキップ
+            if (!mk4) continue;
 
             let minutes = 0;
             if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
@@ -1571,6 +1580,7 @@ function exportExcelCsv(){
         const formatted = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
           ? window.ShiftDurations.formatMinutes(totalMin)
           : `${Math.floor(totalMin/60)}:${String(totalMin%60).padStart(2,'0')}`;
+
 
         tdTotal.textContent = formatted;
 
@@ -1794,8 +1804,8 @@ function setAssign(r, ds, mk){
   if(!m){ m = new Map(); State.assignments.set(r,m); }
   if(mk) m.set(ds, mk);
 
-  // ★追加：当日が「〇」になったら、翌日の「★」（ロック含む）を強制消去
-  if (mk === '〇') removeNextStarByDs(r, ds);
+  // ★追加：当日が「〇」または「□」になったら、翌日の「★」（ロック含む）を強制消去
+  if (mk === '〇' || mk === '□') removeNextStarByDs(r, ds);
 }
 window.setAssign = setAssign; // ★追加
   function clearAssign(r, ds){

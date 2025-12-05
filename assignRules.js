@@ -17,9 +17,9 @@
     const allow = ALLOW[wt] || ALLOW.three;
     if (!allow.has(ctx.mark)){
       const msg =
-        wt==='two'   ? '二部制は「〇,☆,★」のみ可' :
-        wt==='three' ? '三部制は「〇,◆,●」のみ可' :
-        wt==='day'   ? '日勤専属は「〇」のみ可' :
+        wt==='two'   ? '二部制は「〇,□,☆,★」のみ可' :
+        wt==='three' ? '三部制は「〇,□,◆,●」のみ可' :
+        wt==='day'   ? '日勤専属は「〇,□」のみ可' :
         wt==='night' ? '夜勤専属は「☆,★」のみ可' :
         '勤務形態に合いません';
       return { ok:false, message: msg };
@@ -30,12 +30,12 @@
   // ---- 日単位のカウント（全従業員） ----
   function countForDay(dayIndex, dates, employeeCount, getAssign, override){
     // override: {rowIndex, mark} を当該日の仮置きに反映（optional）
-    let day=0, nf=0, ns=0; // day=〇, nf=(☆+◆), ns=(★+●)
+    let day=0, nf=0, ns=0; // day=〇+□, nf=(☆+◆), ns=(★+●)
     const ds = dateStr(dates[dayIndex]);
     for(let r=0; r<employeeCount; r++){
       let mk = getAssign(r, ds);
       if (override && override.rowIndex===r) mk = override.mark || undefined;
-      if (mk==='〇') day++;
+      if (mk==='〇' || mk==='□') day++;
       if (mk==='☆' || mk==='◆') nf++;
       if (mk==='★' || mk==='●') ns++;
     }
@@ -198,10 +198,11 @@ function precheckPlace(p){
         let allDay = true;
         for(let i=1;i<=need;i++){
           const ds = dateStr(p.dates[d - i]);
-          if (p.getAssign(p.rowIndex, ds) !== '〇'){ allDay = false; break; }
+          const mk = p.getAssign(p.rowIndex, ds);
+          if (mk !== '〇' && mk !== '□'){ allDay = false; break; }
         }
         if (allDay){
-          return { ok:false, message:'「〇」5連続の翌日は必ず休（未割り当て/希望休）です' };
+          return { ok:false, message:'日勤（〇/□）5連続の翌日は必ず休（未割り当て/希望休）です' };
         }
       }
       return { ok:true };
@@ -209,47 +210,49 @@ function precheckPlace(p){
 
     if (!restChk.ok) return restChk;
 
-    // ★追加：〇×5 の2日目も休（＝連休必須）。前日が「休（希望休 or 未割当）」で、
-    //         その前5日が全て「〇」なら当日も配置禁止
+    // ★追加：日勤×5 の2日目も休（＝連休必須）。前日が「休（希望休 or 未割当）」で、
+    //         その前5日が全て「〇/□」なら当日も配置禁止
     {
       const need = 5;
       const prev1 = d - 1;
-      const start = d - 1 - need; // d-6 〜 d-2 が 〇×5
+      const start = d - 1 - need; // d-6 〜 d-2 が 日勤×5
       if (start >= 0 && prev1 >= 0){
         let allPrev5Day = true;
         for (let i = start; i < start + need; i++){
           const ds5 = dateStr(p.dates[i]);
-          if (p.getAssign(p.rowIndex, ds5) !== '〇'){ allPrev5Day = false; break; }
+          const mk5 = p.getAssign(p.rowIndex, ds5);
+          if (mk5 !== '〇' && mk5 !== '□'){ allPrev5Day = false; break; }
         }
         if (allPrev5Day){
           const dsPrev1 = dateStr(p.dates[prev1]);
           const mkPrev1 = p.getAssign(p.rowIndex, dsPrev1);
           const prev1IsRest = (!mkPrev1) || (p.hasOffByDate && p.hasOffByDate(p.rowIndex, dsPrev1));
           if (prev1IsRest){
-            return { ok:false, message:'「〇×5」後は連休必須（2日目も休）。配置できません' };
+            return { ok:false, message:'日勤（〇/□）×5後は連休必須（2日目も休）。配置できません' };
           }
         }
       }
     }
 
-    // ★追加：NG並び「◆→〇」
-    // 1) 前日が◆なら当日の「〇」は不可
-    if (p.mark === '〇'){
+    // ★追加：NG並び「◆→〇」「◆→□」
+    // 1) 前日が◆なら当日の「〇」「□」は不可
+    if (p.mark === '〇' || p.mark === '□'){
       const prev = d - 1;
       if (prev >= 0){
         const dsPrev = dateStr(p.dates[prev]);
         if (p.getAssign(p.rowIndex, dsPrev) === '◆'){
-          return { ok:false, message:'「◆」の翌日に「〇」は不可（十分な休息を確保してください）' };
+          return { ok:false, message:'「◆」の翌日に日勤（〇/□）は不可（十分な休息を確保してください）' };
         }
       }
     }
-    // 2) 当日が◆で、翌日に既に「〇」があるなら不可
+    // 2) 当日が◆で、翌日に既に「〇」「□」があるなら不可
     if (p.mark === '◆'){
       const next = d + 1;
       if (next < p.dates.length){
         const dsNext2 = dateStr(p.dates[next]);
-        if (p.getAssign(p.rowIndex, dsNext2) === '〇'){
-          return { ok:false, message:'「◆→〇」の並びは不可です（翌日は休を確保）' };
+        const mkNext2 = p.getAssign(p.rowIndex, dsNext2);
+        if (mkNext2 === '〇' || mkNext2 === '□'){
+          return { ok:false, message:'「◆→〇/□」の並びは不可です（翌日は休を確保）' };
         }
       }
     }
@@ -439,12 +442,12 @@ if (p.mark==='☆'){
 
 
 
-    // 追加：〇連続≦5（6個目の〇は不可／前後合算）
-    if (p.mark === '〇'){
-      const countPrev = (()=>{ let c=0; for(let i=d-1;i>=0;i--){ const ds=dateStr(p.dates[i]); if (p.getAssign(p.rowIndex, ds)==='〇') c++; else break; } return c; })();
-      const countNext = (()=>{ let c=0; for(let i=d+1;i<p.dates.length;i++){ const ds=dateStr(p.dates[i]); if (p.getAssign(p.rowIndex, ds)==='〇') c++; else break; } return c; })();
+    // 追加：日勤連続≦5（6個目の〇/□は不可／前後合算）
+    if (p.mark === '〇' || p.mark === '□'){
+      const countPrev = (()=>{ let c=0; for(let i=d-1;i>=0;i--){ const ds=dateStr(p.dates[i]); const mk=p.getAssign(p.rowIndex, ds); if (mk==='〇'||mk==='□') c++; else break; } return c; })();
+      const countNext = (()=>{ let c=0; for(let i=d+1;i<p.dates.length;i++){ const ds=dateStr(p.dates[i]); const mk=p.getAssign(p.rowIndex, ds); if (mk==='〇'||mk==='□') c++; else break; } return c; })();
       const total = countPrev + 1 + countNext;
-      if (total > 5) return { ok:false, message:'「〇」の連続は最大5日までです' };
+      if (total > 5) return { ok:false, message:'日勤（〇/□）の連続は最大5日までです' };
     }
 
     // ★新規：休日と休日のインターバル≦5日（＝6連勤禁止）
@@ -740,7 +743,7 @@ if (p.mark==='☆'){
         
         if (!mk) continue;
         
-        if (mk === '〇'){
+        if (mk === '〇' || mk === '□'){
           countDay++;
           if (isA) hasADay = true;
           if (isNonNight) hasNonNightDay = true;
@@ -826,16 +829,16 @@ if (p.mark==='☆'){
     for (let r = 0; r < p.employeeCount; r++){
       let d = 0;
       while (d < p.dates.length){
-        // 〇の連続長を測る
+        // 日勤（〇/□）の連続長を測る
         const start = d;
         let run = 0;
         while (d < p.dates.length){
           const ds = dateStr(p.dates[d]);
           const mk = p.getAssign(r, ds);
-          if (mk === '〇') { run++; d++; } else break;
+          if (mk === '〇' || mk === '□') { run++; d++; } else break;
         }
         if (run > 0){
-          // 〇連続≦5
+          // 日勤連続≦5
           if (run > 5){
             errors.push({ rowIndex:r, dayIndex:(start + run - 1), type:'DAY_STREAK_GT5', expected:'<=5', actual:run });
           }
@@ -862,15 +865,15 @@ if (p.mark==='☆'){
         d = (run > 0) ? d : d + 1;
       }
     }
-    // ★追加：隣接禁止パターン「◆→〇」
+    // ★追加：隣接禁止パターン「◆→〇」「◆→□」
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 1; d++){
         const ds = dateStr(p.dates[d]);
         const dsN = dateStr(p.dates[d+1]);
         const mk  = p.getAssign(r, ds);
         const mkN = p.getAssign(r, dsN);
-        if (mk === '◆' && mkN === '〇'){
-          errors.push({ rowIndex:r, dayIndex:d, type:'SEQ_NF_DAY', expected:'(休 or 非〇)', actual:'◆→〇' });
+        if (mk === '◆' && (mkN === '〇' || mkN === '□')){
+          errors.push({ rowIndex:r, dayIndex:d, type:'SEQ_NF_DAY', expected:'(休 or 非日勤)', actual:`◆→${mkN}` });
         }
       }
     }

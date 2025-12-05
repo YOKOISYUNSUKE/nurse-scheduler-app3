@@ -59,10 +59,10 @@
   function cycleOrderFor(r){
     const wt = (State.employeesAttr[r]?.workType) || 'three';
     switch (wt){
-      case 'two':   return ['', '〇', '□', '☆', ''];                // 二部制＋遅出
-      case 'three': return ['', '〇', '□', '◆', '●', ''];           // 三部制＋遅出
-      case 'day':   return ['', '〇', '□', '☆', '◆', '●', ''];      // 日勤専従＋遅出
-      case 'night': return ['', '☆', ''];                           // 夜勤専従（遅出なし）
+      case 'two':   return ['', '〇', '早', '遅', '☆', ''];                
+      case 'three': return ['', '〇', '早', '遅', '◆', '●', ''];            
+      case 'day':   return ['', '〇', '早', '遅', '☆', '◆', '●', ''];   
+      case 'night': return ['', '☆', ''];                           
       default:      return ['', '〇', '□', '◆', '●', ''];
     }
   }

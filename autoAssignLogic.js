@@ -56,9 +56,30 @@
   }
 
   function countDayStats(dayIdx){
-    return (window.NightBand && window.NightBand.countDayStats)
-      ? window.NightBand.countDayStats(nbCtx(), dayIdx)
-      : { day:0, nf:0, ns:0, hasADay:false, hasANf:false, hasANs:false };
+    if (window.NightBand && window.NightBand.countDayStats){
+      return window.NightBand.countDayStats(nbCtx(), dayIdx);
+    }
+    // フォールバック：自前でカウント（遅も日勤としてカウント）
+    const ds = dateStr(State.windowDates[dayIdx]);
+    let day = 0, nf = 0, ns = 0;
+    let hasADay = false, hasANf = false, hasANs = false;
+    for (let r = 0; r < State.employeeCount; r++){
+      const mk = getAssign(r, ds);
+      const lvl = (State.employeesAttr[r]?.level) || 'B';
+      if (mk === '〇' || mk2==='早' || mk === '遅'){
+        day++;
+        if (lvl === 'A') hasADay = true;
+      }
+      if (mk === '☆' || mk === '◆'){
+        nf++;
+        if (lvl === 'A') hasANf = true;
+      }
+      if (mk === '★' || mk === '●'){
+        ns++;
+        if (lvl === 'A') hasANs = true;
+      }
+    }
+    return { day, nf, ns, hasADay, hasANf, hasANs };
   }
 
   function candidatesFor(dayIdx, mark){
@@ -281,7 +302,7 @@
     }
 
 
-    // 直近4週間の〇回数（職員ごと）
+    // 直近4週間の〇+早+遅回数（職員ごと）：早・遅も日勤カウント
     const dayCount4w = (r)=>{
       let c = 0;
       const startIdx = State.range4wStart;
@@ -289,12 +310,12 @@
       for (let i = startIdx; i <= endIdx && i < State.windowDates.length; i++){
         const ds2 = dateStr(State.windowDates[i]);
         const mk2 = getAssign(r, ds2);
-        if (mk2 === '〇') c++;
+        if (mk2 === '〇' || mk2 === '早' || mk2 === '遅') c++;
       }
       return c;
     };
 
-    // 直近の〇からの経過日数（2部制/3部制は〇のみで計算）
+    // 直近の〇/早/遅からの経過日数（2部制/3部制は〇/早/遅のみで計算）
     const daysSinceLastDay4w = (r)=>{
       const startIdx = State.range4wStart;
       const attr = State.employeesAttr[r] || { workType:'three' };
@@ -305,15 +326,16 @@
         const ds2 = dateStr(State.windowDates[i]);
         const mk2 = getAssign(r, ds2);
         if (useDayOnly){
-          if (mk2 === '〇') lastIdx = i;
+          if (mk2 === '〇' || mk2 === '早' || mk2 === '遅') lastIdx = i;
         } else {
-          if (mk2 === '〇' || mk2 === '☆' || mk2 === '★' || mk2 === '◆' || mk2 === '●') {
+          if (mk2 === '〇' || mk2 === '早' || mk2 === '遅' || mk2 === '☆' || mk2 === '★' || mk2 === '◆' || mk2 === '●') {
             lastIdx = i;
           }
         }
       }
       return lastIdx === -1 ? 9999 : (dayIdx - lastIdx);
     };
+
 
     const dt = State.windowDates[dayIdx];
     const isWH = isWeekendOrHoliday(dt);
@@ -328,7 +350,7 @@
           if (!isWeekendOrHoliday(dt2)) continue;
           const ds2 = dateStr(dt2);
           const mk2 = getAssign(r, ds2);
-          if (mk2==='〇' || mk2==='☆' || mk2==='★' || mk2==='◆' || mk2==='●') c++;
+          if (mk2==='〇' || mk2==='早' ||　mk2==='遅' || mk2==='☆' || mk2==='★' || mk2==='◆' || mk2==='●') c++;
         }
         return c;
       };
@@ -425,14 +447,74 @@
         i = j;
       }
     }
+
+    // ★追加：遅出（遅）対象者を分離
+    const lateShiftCand = cand.filter(r => canAssignLateShift(r, dayIdx));
+    
     return (need)=>{
       let placed=0;
+      
+      // 1日あたりの遅出目標人数を取得（デフォルト：平日1名、土日祝0名）
+      const dt = State.windowDates[dayIdx];
+      const isWH = isWeekendOrHoliday(dt);
+      const lateTarget = (function(){
+        if (window.Counts && typeof window.Counts.getLateShiftTarget === 'function'){
+          return window.Counts.getLateShiftTarget(dt, (ds)=> State.holidaySet.has(ds));
+        }
+
+        // ★修正：土日祝日に遅出可能な従業員がいる場合、土日祝日も遅出枠を確保
+        if (isWH) {
+          // 土日祝日に遅出可能な従業員（lateShiftType='holiday' または 'all'）の人数をカウント
+          let holidayLateCount = 0;
+          for (let r = 0; r < State.employeeCount; r++) {
+            const empAttr = State.employeesAttr[r] || {};
+            if (empAttr.hasLateShift && (empAttr.lateShiftType === 'holiday' || empAttr.lateShiftType === 'all')) {
+              holidayLateCount++;
+            }
+          }
+          // 土日祝日に遅出可能な従業員がいる場合は、その人数分の枠を確保（最大1名）
+          return Math.min(holidayLateCount, 1);
+        }
+        // デフォルト：平日1名
+        return 1;
+      })();
+      
+      let latePlaced = 0;
+      
       for(const r of cand){
         if (placed>=need) break;
+        
+        // 遅出対象者で遅出枠が残っている場合は遅を優先割り当て
+        if (latePlaced < lateTarget && lateShiftCand.includes(r)){
+          if (tryPlace(dayIdx, r, '遅')){
+            placed++;
+            latePlaced++;
+            continue;
+          }
+        }
+        
+        // 通常の日勤（〇）を割り当て
         if (tryPlace(dayIdx, r, '〇')) placed++;
       }
       return placed;
     };
+  }
+
+  // ★追加: 遅出（遅）対象者かチェック（fillDayShift用のローカル関数）
+  function canAssignLateShift(r, dayIdx){
+    const empAttr = State.employeesAttr[r] || {};
+    if (!empAttr.hasLateShift) return false;
+    
+    const dt = State.windowDates[dayIdx];
+    const lateType = empAttr.lateShiftType || 'all';
+    
+    if (lateType === 'all') return true;
+    
+    const isWH = isWeekendOrHoliday(dt);
+    if (lateType === 'weekday') return !isWH;
+    if (lateType === 'holiday') return isWH;
+    
+    return false;
   }
 
   function normalizeOffToEight(startDayIdx, endDayIdx){
@@ -947,7 +1029,7 @@ function reduceDayShiftTo(dayIdx, target) { // target は土日祝/特定日用�
     }
   }
 
-  // === メイン自動割当関数 ===
+// === メイン自動割当関数 ===
 function autoAssignRange(startDayIdx, endDayIdx){
   function targetNFFor(ds){
     if (window.Counts && typeof window.Counts.getFixedNF === 'function'){
@@ -960,6 +1042,23 @@ function autoAssignRange(startDayIdx, endDayIdx){
       return window.Counts.getFixedNS(ds);
     }
     return (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
+  }
+
+  // ★追加: 遅出（遅）対象者かチェック
+  function canAssignLateShift(r, dayIdx){
+    const empAttr = State.employeesAttr[r] || {};
+    if (!empAttr.hasLateShift) return false;
+    
+    const dt = State.windowDates[dayIdx];
+    const lateType = empAttr.lateShiftType || 'all';
+    
+    if (lateType === 'all') return true;
+    
+    const isWH = isWeekendOrHoliday(dt);
+    if (lateType === 'weekday') return !isWH;
+    if (lateType === 'holiday') return isWH;
+    
+    return false;
   }
 
     // ★日付順序をランダム化（夜勤割り当て用）
@@ -1060,31 +1159,80 @@ function autoAssignRange(startDayIdx, endDayIdx){
       enforceExactCount(d, FIXED_NF, FIXED_NS);
     }
 
+// ========================================
+  // ★厳格化：夜勤専従をノルマ完全達成まで繰り返し割り当て
   // ========================================
-  // ★修正：夜勤専従をノルマ満たすまで割り当て
-  // ========================================
-  (function ensureNightToTen(){
-    // ★従業員順序をランダム化
+  (function ensureNightToQuotaStrict(){
+    const MAX_ATTEMPTS = 100; // 無限ループ防止
+    
+    // 夜勤専従の従業員リスト
     let nightEmpOrder = [];
     for (let r = 0; r < State.employeeCount; r++){
       if ((State.employeesAttr[r]?.workType) === 'night') nightEmpOrder.push(r);
     }
-     nightEmpOrder = shuffleArray(nightEmpOrder);
     
-    for (const r of nightEmpOrder){
+    if (nightEmpOrder.length === 0) return;
+    
+    let attempts = 0;
+    let allSatisfied = false;
+    
+    // 全員がノルマを満たすまで繰り返す
+    while (!allSatisfied && attempts < MAX_ATTEMPTS) {
+      attempts++;
+      allSatisfied = true;
+      nightEmpOrder = shuffleArray(nightEmpOrder);
+      
+      for (const r of nightEmpOrder){
+        const now = countLast28Days(r, State.windowDates[State.range4wStart+27]).star;
+        const quota = State.employeesAttr[r]?.nightQuota || 10;
+        let need = Math.max(0, quota - now);
+        
+        if (need === 0) continue;
+        
+        allSatisfied = false; // まだ満たしていない人がいる
+        
+        // 日付順をシャッフルして配置を試みる
+        let dayOrder = [];
+        for (let d = startDayIdx; d <= endDayIdx - 1; d++) {
+          dayOrder.push(d);
+        }
+        dayOrder = shuffleArray(dayOrder);
+        
+        for (const d of dayOrder) {
+          if (need <= 0) break;
+          
+          const ds = dateStr(State.windowDates[d]);
+          const dsNext = dateStr(State.windowDates[d+1]);
+          
+          // 既に割当がある場合はスキップ
+          if (getAssign(r, ds) || getAssign(r, dsNext)) continue;
+          // 希望休・特別休暇がある場合はスキップ
+          if (isRestByDate(r, ds) || isRestByDate(r, dsNext)) continue;
+          // ロック済みはスキップ
+          if (isLocked(r, ds) || isLocked(r, dsNext)) continue;
+          
+          if (tryPlace(d, r, '☆')) {
+            need--;
+          }
+        }
+      }
+    }
+    
+    // ノルマ未達の場合は警告をコンソールに出力
+    const unmetList = [];
+    for (const r of nightEmpOrder) {
       const now = countLast28Days(r, State.windowDates[State.range4wStart+27]).star;
       const quota = State.employeesAttr[r]?.nightQuota || 10;
-      let need = Math.max(0, quota - now);
-      
-      if (need === 0) continue;
-
-      for (let d = startDayIdx; d <= endDayIdx - 1 && need > 0; d++){
-        const ds = dateStr(State.windowDates[d]);
-        const dsNext = dateStr(State.windowDates[d+1]);
-        if (getAssign(r, ds) || getAssign(r, dsNext)) continue;
-        if (isRestByDate(r, ds) || isRestByDate(r, dsNext)) continue;
-        if (tryPlace(d, r, '☆')) need--;
+      if (now < quota) {
+        const name = State.employees[r] || `職員${r+1}`;
+        unmetList.push(`${name}: ${now}/${quota}`);
+        console.warn(`夜勤専従 ${name} のノルマ未達: ${now}/${quota}`);
       }
+    }
+    
+    // ノルマ未達がある場合はトーストで通知
+    if (unmetList.length > 0 && typeof showToast === 'function') {
+      showToast(`⚠️ 夜勤専従ノルマ未達: ${unmetList.join(', ')}`);
     }
   })();
 
