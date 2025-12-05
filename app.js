@@ -526,27 +526,29 @@ async function pushToRemote(){
   function writeMeta(meta){
     localStorage.setItem(storageKey('meta'), JSON.stringify(meta));
   }
-    function saveMetaOnly(){
-      const meta = readMeta();
-      meta.employeeCount = State.employeeCount;
-      meta.employees     = State.employees;
-      // 勤務時間を含む完全な属性を保存
-      meta.employeesAttr = State.employeesAttr.map(attr => ({
-        level: attr.level,
-        workType: attr.workType,
-        nightQuota: attr.nightQuota,
-        shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {}
-      }));
-      meta.range4wStart  = State.range4wStart;
-      meta.forbiddenPairs = Array.from(State.forbiddenPairs.entries()).map(([k, set]) => [k, Array.from(set)]);
-      // ★追加：ShiftDurations のグローバル既定を保存（存在すれば）
-      if (window.ShiftDurations && typeof window.ShiftDurations.getAllGlobalDefaults === 'function') {
-        meta.shiftDurationsDefaults = window.ShiftDurations.getAllGlobalDefaults();
-      }
-      writeMeta(meta);
-      // 追加：クラウドへ非同期送信（失敗は無視）
-      pushToRemote();
-    }
+function saveMetaOnly(){
+  const meta = readMeta();
+  meta.employeeCount = State.employeeCount;
+  meta.employees     = State.employees;
+  // 勤務時間を含む完全な属性を保存
+  meta.employeesAttr = State.employeesAttr.map(attr => ({
+    level: attr.level,
+    workType: attr.workType,
+    nightQuota: attr.nightQuota,
+    shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
+    hasLateShift: attr.hasLateShift,        // ★追加：遅出フラグ
+    lateShiftType: attr.lateShiftType       // ★追加：遅出種別（all/weekday/holiday）
+  }));
+  meta.range4wStart  = State.range4wStart;
+  meta.forbiddenPairs = Array.from(State.forbiddenPairs.entries()).map(([k, set]) => [k, Array.from(set)]);
+  // ★追加：ShiftDurations のグローバル既定を保存（存在すれば）
+  if (window.ShiftDurations && typeof window.ShiftDurations.getAllGlobalDefaults === 'function') {
+    meta.shiftDurationsDefaults = window.ShiftDurations.getAllGlobalDefaults();
+  }
+  writeMeta(meta);
+  // 追加：クラウドへ非同期送信（失敗は無視）
+  pushToRemote();
+}
 window.saveMetaOnly = saveMetaOnly; // ★追加
 
   function readDatesStore(){
@@ -573,22 +575,27 @@ window.saveMetaOnly = saveMetaOnly; // ★追加
 
 
   // ---- データロード/保存 ----
-  function ensureEmployees(){
-    const need = State.employeeCount;
-    const cur = State.employees.length;
-    if(cur < need){
-      for(let i=cur;i<need;i++){
-        State.employees.push(`職員${pad2(i+1)}`);
-        State.employeesAttr.push({ level:'B', workType:'three' });
-      }
-    } else if(cur > need){
-      State.employees.length = need;
-      State.employeesAttr.length = need;
+function ensureEmployees(){
+  const need = State.employeeCount;
+  const cur = State.employees.length;
+  if(cur < need){
+    for(let i=cur;i<need;i++){
+      State.employees.push(`職員${pad2(i+1)}`);
+      State.employeesAttr.push({ 
+        level:'B', 
+        workType:'three',
+        hasLateShift: false,    // ★追加：デフォルト値
+        lateShiftType: 'all'    // ★追加：デフォルト値
+      });
     }
-    // off/assignも範囲内に丸める
-    [...State.offRequests.keys()].forEach(idx=>{ if(idx >= need) State.offRequests.delete(idx); });
-    [...State.assignments.keys()].forEach(idx=>{ if(idx >= need) State.assignments.delete(idx); });
+  } else if(cur > need){
+    State.employees.length = need;
+    State.employeesAttr.length = need;
   }
+  // off/assignも範囲内に丸める
+  [...State.offRequests.keys()].forEach(idx=>{ if(idx >= need) State.offRequests.delete(idx); });
+  [...State.assignments.keys()].forEach(idx=>{ if(idx >= need) State.assignments.delete(idx); });
+}
 
   // レベルA同士をすべて禁忌ペアにする初期値生成
   function buildDefaultForbiddenPairsForA(){
@@ -624,23 +631,30 @@ window.saveMetaOnly = saveMetaOnly; // ★追加
     State.windowDates = buildWindowDates(State.anchor);
 
 
-  // メタ（従業員・スライダ位置・属性）
-  const meta = readMeta();
-  if (Array.isArray(meta.employees) && meta.employees.length){
-   // 保存されたメタをそのまま復元
-   State.employees = meta.employees.slice();
-   // 属性長が合わない・未定義の場合は安全に補完
-   if (Array.isArray(meta.employeesAttr) && meta.employeesAttr.length === State.employees.length){
-    // 勤務時間を含む完全な属性を復元
-    State.employeesAttr = meta.employeesAttr.map(attr => ({
-      level: attr.level || 'B',
-      workType: attr.workType || 'three',
-      nightQuota: attr.nightQuota,
-      shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {}
-    }));
-   } else {
-     State.employeesAttr = State.employees.map(()=> ({ level:'B', workType:'three', shiftDurations:{} }));
-   }
+const meta = readMeta();
+if (Array.isArray(meta.employees) && meta.employees.length){
+ // 保存されたメタをそのまま復元
+ State.employees = meta.employees.slice();
+ // 属性長が合わない・未定義の場合は安全に補完
+ if (Array.isArray(meta.employeesAttr) && meta.employeesAttr.length === State.employees.length){
+  // 勤務時間を含む完全な属性を復元
+  State.employeesAttr = meta.employeesAttr.map(attr => ({
+    level: attr.level || 'B',
+    workType: attr.workType || 'three',
+    nightQuota: attr.nightQuota,
+    shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
+    hasLateShift: attr.hasLateShift || false,               // ★追加：遅出フラグ復元
+    lateShiftType: attr.lateShiftType || 'all'              // ★追加：遅出種別復元（デフォルトは全日）
+  }));
+ } else {
+   State.employeesAttr = State.employees.map(()=> ({ 
+     level:'B', 
+     workType:'three', 
+     shiftDurations:{},
+     hasLateShift: false,    // ★追加：デフォルト値
+     lateShiftType: 'all'    // ★追加：デフォルト値
+   }));
+ }
    // employeeCount は保存値があれば優先、なければ配列長
   State.employeeCount = Number.isInteger(meta.employeeCount) ? meta.employeeCount :              State.employees.length;
   State.range4wStart  = meta.range4wStart ?? State.range4wStart;
