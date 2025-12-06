@@ -317,18 +317,16 @@ function countForDayLocal(dayIndex){
     const mk = getAssign(r, ds);
 
     // 日勤
-    if (mk === '〇' || mk === '□') day++;
+    if (mk === '〇') day++;
 
     // 早出
     if (mk === '早') {
       early++;
-      day++;   // 既存仕様どおり「日勤扱い」
     }
 
     // 遅出
     if (mk === '遅') {
       late++;
-      day++;   // 同上
     }
 
     // 夜勤前半

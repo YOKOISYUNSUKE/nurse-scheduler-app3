@@ -453,17 +453,16 @@
     const earlyShiftCand = cand.filter(r => canAssignEarlyShift(r, dayIdx));
     const lateShiftCand  = cand.filter(r => canAssignLateShift(r, dayIdx));
     
+// autoAssignLogic.js 約310行目〜370行目付近を修正
+
     return (need)=>{
       let placed = 0;
-      
-
       
       let earlyPlaced = 0;
       let latePlaced  = 0;
       
       // 1日あたりの早出・遅出目標人数を取得（設定から動的に取得）
       const dt = State.windowDates[dayIdx];
-      const isWH = isWeekendOrHoliday(dt);
 
       // 早出目標人数（設定から取得）
       const earlyTarget = (window.Counts && typeof window.Counts.getEarlyShiftTarget === 'function')
@@ -475,31 +474,75 @@
         ? window.Counts.getLateShiftTarget(dt, (ds)=> State.holidaySet.has(ds))
         : 1; // デフォルト1名
 
+      // 早出・遅出の割り当て確率（個人に着目した30%）
+      const EARLY_LATE_PROBABILITY = 0.30;
 
-      for (const r of cand){
+      // ★ Phase 1: 早出・遅出対象者に30%の確率で割り当て（目標人数まで）
+      // 早出候補をシャッフルして順に処理
+      const shuffledEarlyCand = shuffleArray(earlyShiftCand.slice());
+      for (const r of shuffledEarlyCand){
         if (placed >= need) break;
-        
-        // 早出対象者で早出枠が残っている場合は早を優先割り当て
-        if (earlyPlaced < earlyTarget && earlyShiftCand.includes(r)){
+        if (earlyPlaced >= earlyTarget) break;
+        // 30%の確率で早出を割り当て
+        if (Math.random() < EARLY_LATE_PROBABILITY){
           if (tryPlace(dayIdx, r, '早')){
             placed++;
             earlyPlaced++;
-            continue;
           }
         }
+      }
 
-        // 遅出対象者で遅出枠が残っている場合は遅を優先割り当て
-        if (latePlaced < lateTarget && lateShiftCand.includes(r)){
+      // 遅出候補をシャッフルして順に処理
+      const shuffledLateCand = shuffleArray(lateShiftCand.slice());
+      for (const r of shuffledLateCand){
+        if (placed >= need) break;
+        if (latePlaced >= lateTarget) break;
+        // 30%の確率で遅出を割り当て
+        if (Math.random() < EARLY_LATE_PROBABILITY){
           if (tryPlace(dayIdx, r, '遅')){
             placed++;
             latePlaced++;
-            continue;
           }
         }
-        
-        // 通常の日勤（〇）を割り当て
+      }
+
+      // ★ Phase 2: 目標人数に達していない場合、残りの候補から埋める
+      // 早出が目標に達していない場合
+      if (earlyPlaced < earlyTarget){
+        for (const r of shuffledEarlyCand){
+          if (placed >= need) break;
+          if (earlyPlaced >= earlyTarget) break;
+          const ds = dateStr(State.windowDates[dayIdx]);
+          if (getAssign(r, ds)) continue; // 既に割り当て済みならスキップ
+          if (tryPlace(dayIdx, r, '早')){
+            placed++;
+            earlyPlaced++;
+          }
+        }
+      }
+
+      // 遅出が目標に達していない場合
+      if (latePlaced < lateTarget){
+        for (const r of shuffledLateCand){
+          if (placed >= need) break;
+          if (latePlaced >= lateTarget) break;
+          const ds = dateStr(State.windowDates[dayIdx]);
+          if (getAssign(r, ds)) continue; // 既に割り当て済みならスキップ
+          if (tryPlace(dayIdx, r, '遅')){
+            placed++;
+            latePlaced++;
+          }
+        }
+      }
+
+      // ★ Phase 3: 残りの日勤（〇）を割り当て
+      for (const r of cand){
+        if (placed >= need) break;
+        const ds = dateStr(State.windowDates[dayIdx]);
+        if (getAssign(r, ds)) continue; // 既に割り当て済みならスキップ
         if (tryPlace(dayIdx, r, '〇')) placed++;
       }
+
       return placed;
     };
   }
