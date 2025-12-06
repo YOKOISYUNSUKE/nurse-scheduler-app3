@@ -66,7 +66,7 @@
     for (let r = 0; r < State.employeeCount; r++){
       const mk = getAssign(r, ds);
       const lvl = (State.employeesAttr[r]?.level) || 'B';
-      if (mk === '〇' || mk2==='早' || mk === '遅'){
+      if (mk === '〇' || mk ==='早' || mk === '遅'){
         day++;
         if (lvl === 'A') hasADay = true;
       }
@@ -350,7 +350,7 @@
           if (!isWeekendOrHoliday(dt2)) continue;
           const ds2 = dateStr(dt2);
           const mk2 = getAssign(r, ds2);
-          if (mk2==='〇' || mk2==='早' ||　mk2==='遅' || mk2==='☆' || mk2==='★' || mk2==='◆' || mk2==='●') c++;
+          if (mk2==='〇' || mk2==='早' || mk2==='遅' || mk2==='☆' || mk2==='★' || mk2==='◆' || mk2==='●') c++;
         }
         return c;
       };

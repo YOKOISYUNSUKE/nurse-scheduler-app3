@@ -70,25 +70,37 @@ window.updateFooterCounts = null;
 
   const modeRadios = $$('input[name="mode"]');
   // auth.js からのログイン完了通知（クラウド→ローカル同期を先に）
+// （エラーハンドリングを追加）
 document.addEventListener('auth:logged-in', async (ev)=>{
-  State.userId = (ev?.detail?.userId) || 'user';
-  
-  // 接続テストを実行
-  const testResult = await testRemoteConnection();
-  if (!testResult.success) {
-    console.warn('Cloud connection test failed:', testResult.message);
-    // ユーザーに通知（オプション）
-    // showToast(testResult.message);
-  }
-  
-  // クラウドからデータを同期
-  try { 
-    await syncFromRemote(); 
+  try {
+    State.userId = (ev?.detail?.userId) || 'user';
+    
+    // 接続テストを実行
+    const testResult = await testRemoteConnection();
+    if (!testResult.success) {
+      console.warn('Cloud connection test failed:', testResult.message);
+    }
+    
+    // クラウドからデータを同期
+    try { 
+      await syncFromRemote(); 
+    } catch(error) {
+      console.error('Sync from remote failed:', error);
+    }
+    
+    // 画面遷移を実行
+    await enterApp();
+    
   } catch(error) {
-    console.error('Sync from remote failed:', error);
+    console.error('Login process failed:', error);
+    // ログイン画面に戻す
+    const loginView = document.getElementById('loginView');
+    const appView = document.getElementById('appView');
+    const loginError = document.getElementById('loginError');
+    if (loginView) loginView.classList.add('active');
+    if (appView) appView.classList.remove('active');
+    if (loginError) loginError.textContent = 'ログイン処理中にエラーが発生しました。再度お試しください。';
   }
-  
-  enterApp();
 });
 
 
@@ -123,20 +135,29 @@ document.addEventListener('auth:logged-in', async (ev)=>{
     isGlobalLocked: false,      // ★追加：全体ロック状態
 
   };
- // ★追加：グローバル公開
+ // グローバル公開
   window.SchedulerState = State;
 
   // ---- 起動 ----
-  // ★ 自動ログインはIIFE全体の初期化完了後に再試行（描画準備が整ってから）
-  if (window.Auth && typeof window.Auth.tryAutoLogin === 'function') {
-    setTimeout(() => window.Auth.tryAutoLogin(), 0);
+  // ★ DOMが完全に準備された後に自動ログインを試行
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.Auth && typeof window.Auth.tryAutoLogin === 'function') {
+        setTimeout(() => window.Auth.tryAutoLogin(), 100);
+      }
+    });
+  } else {
+    // 既にDOMが準備されている場合
+    if (window.Auth && typeof window.Auth.tryAutoLogin === 'function') {
+      setTimeout(() => window.Auth.tryAutoLogin(), 100);
+    }
   }
 
   // ---- Util ----
-  // ★追加：手動割り当てはルール無視で通す（canAssign / precheckPlace / applyAfterAssign をスキップ）
+  // 手動割り当てはルール無視で通す（canAssign / precheckPlace / applyAfterAssign をスキップ）
   const IGNORE_RULES_ON_MANUAL = true;
 
-  // ★追加：ユーザー別localStorageキーとクラウドキー群
+  // ユーザー別localStorageキーとクラウドキー群
   function storageKey(k){
     const uid = sessionStorage.getItem('sched:userId') || 'user';
     return `sched:${uid}:${k}`;
@@ -215,12 +236,12 @@ window.setLocked = setLocked; // ★追加
   function countLast28Days(r, endDt){
     const start = addDays(endDt, -27);
     let star=0, half=0, off=0;
-    let workMinutes = 0; // ★追加：直近4週間の実労働時間（分）
+    let workMinutes = 0;
     for (let i=0;i<28;i++){
       const dt = addDays(start, i);
       const ds = dateStr(dt);
       const mk = globalGetAssign(r, ds);
-      const hasLv = globalHasLeave(r, ds); // 特別休暇
+      const hasLv = globalHasLeave(r, ds);
       const isOff = (globalHasOffByDate(r, ds) || !mk) && !hasLv; // 特別休暇日は“勤務扱い”
       if (mk === '☆') star++;
       if (mk === '◆' || mk === '●') half++;
@@ -288,21 +309,38 @@ window.setLocked = setLocked; // ★追加
   }
 
 
-  function countForDayLocal(dayIndex){
-    let day=0, nf=0, ns=0;
-    const ds = dateStr(State.windowDates[dayIndex]);
-    const prevDs = dateStr(addDays(State.windowDates[dayIndex], -1));
-    for(let r=0; r<State.employeeCount; r++){
-      const mk = getAssign(r, ds);
-      if (mk === '〇' || mk === '□') day++;
-      if (mk === '☆' || mk === '◆') nf++;
+function countForDayLocal(dayIndex){
+  let day=0, nf=0, ns=0, early=0, late=0;
+  const ds = dateStr(State.windowDates[dayIndex]);
+  const prevDs = dateStr(addDays(State.windowDates[dayIndex], -1));
+  for(let r=0; r<State.employeeCount; r++){
+    const mk = getAssign(r, ds);
 
-      // NS＝当日の「★ or ●」。★未反映の旧データ対策として前日の☆もフォールバック
-      const prevMk = getAssign(r, prevDs);
-      if (mk === '★' || mk === '●' || prevMk === '☆') ns++;
+    // 日勤
+    if (mk === '〇' || mk === '□') day++;
+
+    // 早出
+    if (mk === '早') {
+      early++;
+      day++;   // 既存仕様どおり「日勤扱い」
     }
-    return { day, nf, ns };
+
+    // 遅出
+    if (mk === '遅') {
+      late++;
+      day++;   // 同上
+    }
+
+    // 夜勤前半
+    if (mk === '☆' || mk === '◆') nf++;
+
+    // 夜勤後半（前日☆フォールバック）
+    const prevMk = getAssign(r, prevDs);
+    if (mk === '★' || mk === '●' || prevMk === '☆') ns++;
   }
+  return { day, nf, ns, early, late };
+}
+
 
 
 
@@ -332,7 +370,6 @@ window.setLocked = setLocked; // ★追加
   }
   $$('.btn').forEach(b=> b.addEventListener('click', addRipple));
 
-// 修正後（initControls の前に初期化）
 async function enterApp(){
     loginView.classList.remove('active');
     appView.classList.add('active');
@@ -340,17 +377,20 @@ async function enterApp(){
     const loginLoading = document.getElementById('loginLoading');
     if (loginLoading) loginLoading.classList.add('hidden');
 
-    // 従業員ダイアログを先に初期化（DOM要素が必要）
-    if (window.EmployeeDialog && typeof window.EmployeeDialog.init === 'function') {
-      window.EmployeeDialog.init();
-    } else {
-      console.warn('EmployeeDialog が読み込まれていません');
-    }
-
+    // まず画面の初期化を完了させる
     initControls();
     loadWindow(State.anchor);
     renderAll();
-  }
+    
+    // 従業員ダイアログは最後に初期化（DOM要素が完全に準備された後）
+    setTimeout(() => {
+      if (window.EmployeeDialog && typeof window.EmployeeDialog.init === 'function') {
+        window.EmployeeDialog.init();
+      } else {
+        console.warn('EmployeeDialog が読み込まれていません');
+      }
+    }, 100);
+}
 
 
 
@@ -379,17 +419,17 @@ function initControls(){
     window.ButtonHandlers.init();
   }
 
-  // ★追加：セル操作の初期化
+  // セル操作の初期化
   if (window.CellOperations && typeof window.CellOperations.init === 'function') {
     window.CellOperations.init();
   }
 
-  // ★追加：ドラッグスクロールの初期化
+  // ドラッグスクロールの初期化
   if (gridWrap) {
     dragDayNavigation(gridWrap);
  }
 
-  // ★追加：自動割当ロジックの初期化
+  // 自動割当ロジックの初期化
   if (window.AutoAssignLogic && typeof window.AutoAssignLogic.init === 'function') {
     window.AutoAssignLogic.init();
   }
@@ -1046,11 +1086,14 @@ function handleClearCell(r, dayIdx, td){
     if (old) old.remove();
 
     const tfoot = document.createElement('tfoot');
-    const rows = [
-      { label: '〇 合計',     key: 'day' },
-      { label: '（☆＋◆）合計', key: 'nf'  },
-      { label: '（★＋●）合計', key: 'ns'  },
-    ];
+const rows = [
+  { label: '〇 合計', key: 'day' },
+  { label: '早 合計', key: 'early' },
+  { label: '遅 合計', key: 'late' },
+  { label: '（☆＋◆）合計', key: 'nf' },
+  { label: '（★＋●）合計', key: 'ns' },
+];
+
 
     rows.forEach(row=>{
       const tr = document.createElement('tr');
@@ -1073,23 +1116,25 @@ function handleClearCell(r, dayIdx, td){
     grid.appendChild(tfoot);
   }
 
-  // ★追加：合計セルだけ更新（高速）
+  // 合計セルだけ更新（高速）
   function updateFooterCounts(){
     const tfoot = grid.querySelector('tfoot');
     if (!tfoot){ renderFooterCounts(); return; }
     for(let d=0; d<State.windowDates.length; d++){
-      const c = countForDayLocal(d);
-      const tdDay = tfoot.querySelector(`td[data-day="${d}"][data-sum="day"]`);
-      const tdNf  = tfoot.querySelector(`td[data-day="${d}"][data-sum="nf"]`);
-      const tdNs  = tfoot.querySelector(`td[data-day="${d}"][data-sum="ns"]`);
-      if (tdDay) tdDay.textContent = String(c.day);
-      if (tdNf)  tdNf.textContent  = String(c.nf);
-      if (tdNs)  tdNs.textContent  = String(c.ns);
+const c = countForDayLocal(d);
+
+tfoot.querySelector(`td[data-day="${d}"][data-sum="day"]`).textContent = c.day;
+tfoot.querySelector(`td[data-day="${d}"][data-sum="early"]`).textContent = c.early;
+tfoot.querySelector(`td[data-day="${d}"][data-sum="late"]`).textContent = c.late;
+tfoot.querySelector(`td[data-day="${d}"][data-sum="nf"]`).textContent = c.nf;
+tfoot.querySelector(`td[data-day="${d}"][data-sum="ns"]`).textContent = c.ns;
+
     }
   }
 window.updateFooterCounts = updateFooterCounts; //
 
-  // ★追加：指定行の4週間マーク・休日・時間セルだけ再計算（手動操作用）
+  // 指定行の4週間マーク・休日・時間セルだけ再計算（手動操作用）
+// 修正後
   function refresh4wSummaryForRow(r){
     if (!grid || typeof r !== 'number') return;
 
@@ -1100,10 +1145,12 @@ window.updateFooterCounts = updateFooterCounts; //
     const end4w   = maxIdx;
 
     const tdMarks = grid.querySelector(`td.month-marks[data-row="${r}"]`);
+    const tdEarly = grid.querySelector(`td.month-early[data-row="${r}"]`);
+    const tdLate  = grid.querySelector(`td.month-late[data-row="${r}"]`);
     const tdOff   = grid.querySelector(`td.month-off[data-row="${r}"]`);
     const tdTotal = grid.querySelector(`td.month-total[data-row="${r}"]`);
 
-    if (!tdMarks && !tdOff && !tdTotal) return;
+    if (!tdMarks && !tdEarly && !tdLate && !tdOff && !tdTotal) return;
 
     // ---- マーク集計（〇 / 通し夜勤ペア / NF / NS） ----
     if (tdMarks){
@@ -1140,10 +1187,27 @@ window.updateFooterCounts = updateFooterCounts; //
 
       const lineTop = `〇${cntO}☆★${cntNightPair}`;
       const lineBottom = `◆${cntNF}●${cntNS}`;
+
       tdMarks.innerHTML = `
         <div class="mm-row">${lineTop}</div>
         <div class="mm-row">${lineBottom}</div>
       `.trim();
+    }
+
+    // ---- 早出・遅出集計（表示4週間） ----
+    if (tdEarly || tdLate){
+      let cntEarly = 0;
+      let cntLate = 0;
+      for (let d4 = start4w; d4 <= end4w; d4++){
+        const dt4 = State.windowDates[d4];
+        if (!dt4) continue;
+        const ds4 = dateStr(dt4);
+        const mk4 = globalGetAssign(r, ds4);
+        if (mk4 === '早') cntEarly++;
+        if (mk4 === '遅') cntLate++;
+      }
+      if (tdEarly) tdEarly.textContent = String(cntEarly);
+      if (tdLate) tdLate.textContent = String(cntLate);
     }
 
     // ---- 休日集計＆勤務時間合計（表示4週間） ----
@@ -1371,11 +1435,21 @@ function exportExcelCsv(){
         trh.appendChild(th);
       }
 
-      // 右端：マーク集計・休日集計・4週間勤務時間ヘッダを追加
+      // 右端：マーク集計・早出・遅出・休日集計・4週間勤務時間ヘッダを追加
       const thMarks = document.createElement('th');
       thMarks.className = 'col-month-marks';
       thMarks.innerHTML = '4週<br>マーク';
       trh.appendChild(thMarks);
+
+      const thEarly = document.createElement('th');
+      thEarly.className = 'col-month-early';
+      thEarly.textContent = '早出';
+      trh.appendChild(thEarly);
+
+      const thLate = document.createElement('th');
+      thLate.className = 'col-month-late';
+      thLate.textContent = '遅出';
+      trh.appendChild(thLate);
 
       const thHoliday = document.createElement('th');
       thHoliday.className = 'col-month-off';
@@ -1527,6 +1601,40 @@ function exportExcelCsv(){
           <div class="mm-row">${lineBottom}</div>
         `.trim();
         tr.appendChild(tdMarks);
+
+        // 早出集計セル（表示4週間）
+        let cntEarly = 0;
+        if (end4w >= start4w){
+          for (let d = start4w; d <= end4w; d++){
+            const dt4 = State.windowDates[d];
+            if (!dt4) continue;
+            const ds4 = dateStr(dt4);
+            const mk4 = globalGetAssign(r, ds4);
+            if (mk4 === '早') cntEarly++;
+          }
+        }
+        const tdEarly = document.createElement('td');
+        tdEarly.className = 'month-early';
+        tdEarly.dataset.row = String(r);
+        tdEarly.textContent = String(cntEarly);
+        tr.appendChild(tdEarly);
+
+        // 遅出集計セル（表示4週間）
+        let cntLate = 0;
+        if (end4w >= start4w){
+          for (let d = start4w; d <= end4w; d++){
+            const dt4 = State.windowDates[d];
+            if (!dt4) continue;
+            const ds4 = dateStr(dt4);
+            const mk4 = globalGetAssign(r, ds4);
+            if (mk4 === '遅') cntLate++;
+          }
+        }
+        const tdLate = document.createElement('td');
+        tdLate.className = 'month-late';
+        tdLate.dataset.row = String(r);
+        tdLate.textContent = String(cntLate);
+        tr.appendChild(tdLate);
 
         // 休日集計セル（表示4週間）
         const tdOff = document.createElement('td');
@@ -2061,7 +2169,7 @@ function readAttrDialogToState(){
     const forbidSelect = row.querySelector('.forbid-select'); // ★追加
     const nm = (nameInput?.value || '').trim();
     State.employees[i] = nm || `職員${pad2(i+1)}`;
-    // ★修正：夜勤ノルマを追加
+    // 夜勤ノルマを追加
     const nightQuota = quotaInput ? parseInt(quotaInput.value, 10) : undefined;
     State.employeesAttr[i] = { 
       level: selLv.value, 
@@ -2069,7 +2177,7 @@ function readAttrDialogToState(){
       nightQuota: (selWt.value === 'night' && Number.isInteger(nightQuota)) ? nightQuota : undefined
     };
     
-    // ★追加：禁忌ペアの保存（複数選択対応）
+    // 禁忌ペアの保存（複数選択対応）
     if (forbidSelect) {
       const selected = Array.from(forbidSelect.selectedOptions).map(opt => Number(opt.value));
       if (selected.length > 0) State.forbiddenPairs.set(i, new Set(selected));
@@ -2233,7 +2341,6 @@ function deleteEmployee(idx){
   window.exportExcelCsv = exportExcelCsv;
   window.cancelChanges = cancelChanges;
   window.makeCancelBackup = makeCancelBackup;
-  window.undoCancelRange = undoCancelRange;
   
   // ★autoAssignLogic.js から参照される関数（委譲）
   window.autoAssignRange = function(s, e){ 
@@ -2243,7 +2350,7 @@ function deleteEmployee(idx){
     if(window.AutoAssignLogic) return window.AutoAssignLogic.applyHolidayLeaveFlags(s, e); 
   };
   
-  // ★追加：祝日自動取得関数
+  // 祝日自動取得関数
   window.autoLoadJapanHolidays = async function(){
     try{
       if (!window.HolidayRules || typeof window.HolidayRules.fetchJapanHolidays !== 'function'){

@@ -130,7 +130,7 @@
   function save(partial){
     const next = { ...read(), ...(partial||{}) };
     apply(next);
-    localStorage.setItem(STORAGE_KEY, JSON. stringify({
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
       DAY_TARGET_WEEKDAY: Counts.DAY_TARGET_WEEKDAY,
       DAY_TARGET_WEEKEND_HOLIDAY: Counts.DAY_TARGET_WEEKEND_HOLIDAY,
       EARLY_TARGET_WEEKDAY: Counts.EARLY_TARGET_WEEKDAY,            

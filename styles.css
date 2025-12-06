@@ -163,12 +163,35 @@ html, body { height: 100%; }                 /* ビューポート基準を安�
   white-space:normal;
   min-width:90px;
 }
+/* 修正後 */
 .grid .col-month-marks{
   min-width:90px;
 }
 .month-marks .mm-row{
   display:block;
   text-align:center;
+}
+
+/* 4週早出集計セル */
+.grid td.month-early{
+  padding:4px 6px;
+  font-size:12px;
+  min-width:50px;
+  white-space:normal;
+}
+.grid .col-month-early{
+  min-width:50px;
+}
+
+/* 4週遅出集計セル */
+.grid td.month-late{
+  padding:4px 6px;
+  font-size:12px;
+  min-width:50px;
+  white-space:normal;
+}
+.grid .col-month-late{
+  min-width:50px;
 }
 
 /* 4週休日集計セル */
