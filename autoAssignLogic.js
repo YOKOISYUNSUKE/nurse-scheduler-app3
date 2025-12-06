@@ -125,6 +125,7 @@
       if (isLocked(r, nds)) return false;
     }
 
+
     const pre = window.AssignRules?.precheckPlace?.({
       rowIndex:r, dayIndex:dayIdx, mark,
       dates:State.windowDates, employeeCount:State.employeeCount,

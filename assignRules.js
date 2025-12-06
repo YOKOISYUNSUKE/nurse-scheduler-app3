@@ -166,6 +166,7 @@ function precheckPlace(p){
       }
     }
   }
+  
 
 
 // ★単独禁止：前日に同一職員の「☆」が無い場合は不可
@@ -176,6 +177,17 @@ function precheckPlace(p){
     if (p.getAssign(p.rowIndex, dsPrev) !== '☆'){
       return { ok:false, message:'「★」は前日に「☆」がある場合のみ可' };
     }
+
+  // 前日が「★」なら不可（★★の並びを禁止）
+  if (prevMk === '★'){
+    return { ok:false, message:'「★」は連続して配置できません' };
+  }
+  
+  if (prevMk !== '☆'){
+    return { ok:false, message:'「★」は前日に「☆」がある場合のみ可' };
+  }
+
+
     // ★から次の☆までの“間”が規定未満なら不可
     {
       let nextStart = -1;
@@ -865,7 +877,7 @@ if (p.mark==='☆'){
         d = (run > 0) ? d : d + 1;
       }
     }
-    // ★追加：隣接禁止パターン「◆→〇」「◆→□」
+    // 隣接禁止パターン「◆→〇」「◆→□」
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 1; d++){
         const ds = dateStr(p.dates[d]);
@@ -877,7 +889,7 @@ if (p.mark==='☆'){
         }
       }
     }
-    // ★新規：「遅出（□）」の翌日は勤務マーク禁止
+    // 「遅出（□）」の翌日は勤務マーク禁止
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 1; d++){
         const ds  = dateStr(p.dates[d]);
@@ -890,7 +902,7 @@ if (p.mark==='☆'){
       }
     }
 
-    // ★新規：NG「◆→●」（☆★と同義のため禁止）
+    // NG「◆→●」（☆★と同義のため禁止）
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 1; d++){
         const ds  = dateStr(p.dates[d]);
@@ -902,8 +914,28 @@ if (p.mark==='☆'){
         }
       }
     }
+// 「★★」の並びを禁止
+for (let r = 0; r < p.employeeCount; r++){
+  for (let d = 0; d < p.dates.length - 1; d++){
+    const ds  = dateStr(p.dates[d]);
+    const dsN = dateStr(p.dates[d+1]);
+    const mk  = p.getAssign(r, ds);
+    const mkN = p.getAssign(r, dsN);
+    if (mk === '★' && mkN === '★'){
+      errors.push({ 
+        rowIndex: r, 
+        dayIndex: d, 
+        type: 'SEQ_STAR_STAR', 
+        expected: 'NG', 
+        actual: '★→★' 
+      });
+    }
+  }
+}
 
-    // ★新規：「●→◆」は月内2回まで & インターバル≧3日
+
+
+    // 「●→◆」は月内2回まで & インターバル≧3日
     for (let r = 0; r < p.employeeCount; r++){
       const starts = [];
       for (let d = 0; d < p.dates.length - 1; d++){

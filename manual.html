@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>勤務スケジュールアプリ 使用説明書</title>
+  <!-- アプリ本体と同じデザインを利用 -->
+  <link rel="stylesheet" href="styles.css?v=20251031">
+  <style>
+    /* 説明書用の軽めのレイアウト調整だけ追加 */
+    body{
+      background:#f8fafc;
+    }
+    .manual-container{
+      max-width: 960px;
+      margin: 24px auto 40px;
+      padding: 24px 20px 40px;
+      background:#fff;
+      border-radius: 14px;
+      border:1px solid #e5e7eb;
+      box-shadow: 0 8px 24px rgba(0,0,0,.04);
+    }
+    .manual-header-title{
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .manual-header-sub{
+      font-size: 14px;
+      color:#64748b;
+      margin-bottom: 16px;
+    }
+    .manual-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 10px;
+      border-radius:999px;
+      border:1px solid #e5e7eb;
+      font-size:12px;
+      color:#475569;
+      background:#f9fafb;
+      margin-bottom:16px;
+    }
+    .manual-section{
+      margin-top: 28px;
+    }
+    .manual-section h2{
+      font-size: 18px;
+      margin-bottom: 8px;
+      border-left:4px solid #2563eb;
+      padding-left:8px;
+    }
+    .manual-section h3{
+      font-size: 16px;
+      margin: 18px 0 6px;
+    }
+    .manual-note{
+      background:#eff6ff;
+      border:1px solid #bfdbfe;
+      border-radius:10px;
+      padding:10px 12px;
+      font-size:13px;
+      color:#1d4ed8;
+      margin-top:8px;
+    }
+    .manual-warn{
+      background:#fef2f2;
+      border:1px solid #fecaca;
+      border-radius:10px;
+      padding:10px 12px;
+      font-size:13px;
+      color:#b91c1c;
+      margin-top:8px;
+    }
+    .kbd{
+      display:inline-block;
+      padding:2px 6px;
+      border-radius:4px;
+      border:1px solid #cbd5e1;
+      background:#f8fafc;
+      font-size:12px;
+      font-family:monospace;
+    }
+    .toc{
+      padding:12px 14px;
+      background:#f9fafb;
+      border-radius:10px;
+      border:1px solid #e5e7eb;
+      font-size:14px;
+    }
+    .toc ul{
+      margin:0;
+      padding-left:20px;
+    }
+    .toc a{
+      color:#2563eb;
+      text-decoration:none;
+    }
+    .toc a:hover{
+      text-decoration:underline;
+    }
+    .manual-table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:13px;
+      margin-top:8px;
+    }
+    .manual-table th,
+    .manual-table td{
+      border:1px solid #e5e7eb;
+      padding:6px 8px;
+    }
+    .manual-table th{
+      background:#f9fafb;
+      text-align:left;
+      white-space:nowrap;
+    }
+    .tag{
+      display:inline-block;
+      padding:2px 6px;
+      border-radius:999px;
+      font-size:11px;
+      border:1px solid #e5e7eb;
+      background:#f9fafb;
+      color:#475569;
+    }
+    .tag-mode{ border-color:#93c5fd; background:#eff6ff; color:#1d4ed8; }
+    .tag-btn{ border-color:#6ee7b7; background:#ecfdf5; color:#047857; }
+    .tag-adv{ border-color:#fbbf24; background:#fffbeb; color:#92400e; }
+    .manual-footer{
+      margin-top:32px;
+      padding-top:18px;
+      border-top:1px solid #e5e7eb;
+      font-size:13px;
+      color:#64748b;
+    }
+  </style>
+</head>
+<body>
+  <main class="manual-container">
+    <header>
+      <div class="manual-header-title">勤務スケジュールアプリ 使用説明書</div>
+      <div class="manual-header-sub">
+        看護師・コメディカル向け｜「日勤・夜勤・希望休・特別休暇」をミスなく割り当てるためのガイド
+      </div>
+      <div class="manual-badge">
+        <span>📅 常に 31 日表示</span>
+        <span>／</span>
+        <span>4週間単位で自動割当・チェック</span>
+      </div>
+    </header>
+
+    <!-- 目次 -->
+    <section class="toc">
+      <strong>目次</strong>
+      <ul>
+        <li><a href="#sec-login">1. ログインと基本画面</a></li>
+        <li><a href="#sec-flow">2. 1か月勤務表の基本フロー</a></li>
+        <li><a href="#sec-modes">3. モード別のセル操作</a></li>
+        <li><a href="#sec-leave">4. 特別休暇（祝・代・年・リ）の扱い</a></li>
+        <li><a href="#sec-auto">5. 自動割り当てとキャンセル／アンドゥ</a></li>
+        <li><a href="#sec-lock">6. ロック機能（範囲ロック・4週間ロック）</a></li>
+        <li><a href="#sec-attr">7. 従業員編集と人数設定</a></li>
+        <li><a href="#sec-export">8. Excel ダウンロード</a></li>
+        <li><a href="#sec-trouble">9. よくある質問（FAQ）</a></li>
+      </ul>
+    </section>
+
+    <!-- 1. ログインと基本画面 -->
+    <section id="sec-login" class="manual-section">
+      <h2>1. ログインと基本画面</h2>
+
+      <h3>1-1. ログイン方法</h3>
+      <ol>
+        <li>ログイン画面で <strong>ID</strong> と <strong>Password</strong> を入力します。</li>
+        <li><kbd class="kbd">Enter</kbd> キーを押すとログインできます（ボタンは非表示）。</li>
+        <li>ログイン中は「🩺 勤務表を準備中…」の表示が出ます。</li>
+      </ol>
+
+      <div class="manual-note">
+        ※ 一度ログインすると、自動ログインが有効になる場合があります（ブラウザ・設定による）。
+      </div>
+
+      <h3>1-2. ログイン後の画面構成</h3>
+      <p>ログイン後は、上から順に以下のエリアが表示されます。</p>
+      <ul>
+        <li><strong>トップバー</strong>：月移動・日移動・自動割当・キャンセル・ロック・Excel・ログアウト</li>
+        <li><strong>ツールバー</strong>：従業員数、祝日自動取得、範囲ロック、モード切替、特別休暇ボタン、人員設定など</li>
+        <li><strong>勤務表（グリッド）</strong>：左に職員、上に日付が並ぶ 31 日分の表</li>
+      </ul>
+
+      <table class="manual-table">
+        <tr>
+          <th>エリア</th><th>主な役割</th>
+        </tr>
+        <tr>
+          <td>トップバー</td>
+          <td>表示期間のコントロール、自動割当、データ保存・出力</td>
+        </tr>
+        <tr>
+          <td>ツールバー</td>
+          <td>モード・特別休暇選択、従業員数、人員設定など</td>
+        </tr>
+        <tr>
+          <td>勤務表（グリッド）</td>
+          <td>実際の勤務を入力するメインの表</td>
+        </tr>
+      </table>
+    </section>
+
+    <!-- 2. 基本フロー -->
+    <section id="sec-flow" class="manual-section">
+      <h2>2. 1か月勤務表の基本フロー</h2>
+      <ol>
+        <li><strong>月を選ぶ</strong>  
+          トップバーの「任意の月に移動」から対象の月を選びます。
+        </li>
+        <li><strong>従業員数・属性を確認</strong>  
+          「従業員数」と「従業員編集」で、メンバーとレベル（A/B/C）、勤務形態（二部制・三部制など）を確認します。
+        </li>
+        <li><strong>希望休を入れる</strong>  
+          <span class="tag tag-mode">モード：希望休</span> にして、休み希望の日をクリックします。
+        </li>
+        <li><strong>特別休暇（祝・代・年・リ）が決まっている日を入力</strong></li>
+        <li><strong>自動割り当て</strong>  
+          「自動割り当て」で 4週間分の候補を作成します。
+        </li>
+        <li><strong>必要な調整（手動割当・クリア・ロック）</strong> を行います。</li>
+        <li><strong>保存＆Excel 出力</strong>（必要に応じて）</li>
+      </ol>
+
+      <div class="manual-note">
+        アプリは「4週間」のルール（4週8休・夜勤回数など）を自動チェックする設計です。  
+        まず 4週間単位で整える → 月全体を微調整、という流れを想定しています。
+      </div>
+    </section>
+
+    <!-- 3. モード別のセル操作 -->
+    <section id="sec-modes" class="manual-section">
+      <h2>3. モード別のセル操作</h2>
+
+      <h3>3-1. 上部モード切替（希望休／割当／クリア）</h3>
+      <table class="manual-table">
+        <tr>
+          <th>モード</th><th>操作方法</th><th>結果</th>
+        </tr>
+        <tr>
+          <td><span class="tag tag-mode">希望休</span></td>
+          <td>セルをクリック</td>
+          <td>その日のマスが「希望休」としてマークされます（背景が薄い色に）。<br>
+              再度クリックで解除されます。</td>
+        </tr>
+        <tr>
+          <td><span class="tag tag-mode">割当</span></td>
+          <td>セルをクリックするたびにマークが切り替わる</td>
+          <td>
+            職員の勤務形態ごとに、<br>
+            「〇 → 早 → 遅 → ☆/◆/● → （空）」のように順番に変わります。<br>
+            通し夜勤 <strong>☆</strong> を入れると、自動で翌日に <strong>★</strong> が付きます。
+          </td>
+        </tr>
+        <tr>
+          <td><span class="tag tag-mode">クリア</span></td>
+          <td>セルをクリック</td>
+          <td>希望休・勤務マーク・特別休暇をまとめて削除します（ロックも解除）。</td>
+        </tr>
+      </table>
+
+      <h3>3-2. 日付ヘッダーのクリック（祝日トグル）</h3>
+      <ul>
+        <li>勤務表の一番上の「日付セル（列ヘッダー）」をクリックすると、<strong>その日を祝日扱いにする／解除する</strong> ことができます。</li>
+        <li>祝日は赤い背景になり、人数計算などで「土日祝」として扱われます。</li>
+      </ul>
+
+      <div class="manual-note">
+        日本の祝日を一括で取得したい場合は、ツールバーの  
+        <span class="tag tag-btn">祝日自動取得</span> ボタンを使います。
+      </div>
+    </section>
+
+    <!-- 4. 特別休暇 -->
+    <section id="sec-leave" class="manual-section">
+      <h2>4. 特別休暇（祝・代・年・リ）の扱い</h2>
+
+      <h3>4-1. 特別休暇の意味</h3>
+      <table class="manual-table">
+        <tr>
+          <th>ボタン</th><th>表示</th><th>意味</th>
+        </tr>
+        <tr>
+          <td><span class="tag tag-btn">祝</span></td>
+          <td>祝</td>
+          <td>祝日に勤務した代わりの「祝日出勤扱い」。4週8休では「勤務日」としてカウント。</td>
+        </tr>
+        <tr>
+          <td><span class="tag tag-btn">代</span></td>
+          <td>代</td>
+          <td>代休。4週8休では「勤務日」として扱います。</td>
+        </tr>
+        <tr>
+          <td><span class="tag tag-btn">年</span></td>
+          <td>年</td>
+          <td>有給休暇。4週8休では「勤務日」としてカウント。</td>
+        </tr>
+        <tr>
+          <td><span class="tag tag-btn">リ</span></td>
+          <td>リ</td>
+          <td>リフレッシュ休暇など。4週8休では「勤務日」としてカウント。</td>
+        </tr>
+      </table>
+
+      <h3>4-2. 入力の手順</h3>
+      <ol>
+        <li>ツールバーの「特別休暇」から、設定したい種類（祝／代／年／リ）ボタンをクリックします。</li>
+        <li>勤務表のセルをクリックすると、その日にマークが付きます。</li>
+        <li>もう一度同じセルをクリックすると解除されます。</li>
+      </ol>
+
+      <div class="manual-warn">
+        特別休暇が入っているセルには、通常の勤務マークは入れられません。<br>
+        （逆に、先に勤務マークが入っている場合は、特別休暇を入れると勤務マークが消えます）
+      </div>
+    </section>
+
+    <!-- 5. 自動割り当て -->
+    <section id="sec-auto" class="manual-section">
+      <h2>5. 自動割り当てとキャンセル／アンドゥ</h2>
+
+      <h3>5-1. 自動割り当て（4週間分）</h3>
+      <ol>
+        <li>表示中の 31 日のうち、「4週間スライダー」で対象範囲（28 日）を決めます。</li>
+        <li>必要な希望休・特別休暇を先に設定しておきます。</li>
+        <li><span class="tag tag-btn">自動割り当て</span> ボタンをクリックします。</li>
+        <li>アプリがルールに沿って、<strong>4週間ぶんの勤務（〇／☆★／◆／●など）を自動配置</strong> します。</li>
+      </ol>
+
+      <div class="manual-note">
+        自動割り当て前に、アプリは一度4週間の勤務をクリアします（希望休は残ります／祝・代は消えます）。
+      </div>
+
+      <h3>5-2. キャンセル（4週間の割当だけを元に戻す）</h3>
+      <ul>
+        <li><span class="tag tag-btn">キャンセル</span> ボタン  
+          → 対象4週間について、「希望休は残し、勤務マークだけを削除」します。
+        </li>
+        <li>この操作は <span class="tag tag-btn">元に戻す（Undo）</span> が 1 回だけ可能です。</li>
+      </ul>
+
+      <h3>5-3. 完全クリア（4週間の全データ削除）</h3>
+      <ul>
+        <li><span class="tag tag-btn">完全クリア</span> ボタン  
+          → ダイアログで確認後、対象4週間の
+          <strong>勤務マーク／希望休／特別休暇／ロックをすべて削除</strong> します。
+        </li>
+        <li>完全クリアは「元に戻す」はできません。</li>
+      </ul>
+
+      <div class="manual-warn">
+        完全クリアは「全部消して作り直したいとき」専用です。誤操作に注意してください。
+      </div>
+    </section>
+
+    <!-- 6. ロック機能 -->
+    <section id="sec-lock" class="manual-section">
+      <h2>6. ロック機能（範囲ロック・4週間ロック）</h2>
+
+      <h3>6-1. 範囲ロック / 範囲ロック解除</h3>
+      <ol>
+        <li><span class="tag tag-btn">範囲ロック</span> ボタンを押します。</li>
+        <li>ロックを始めたいセルをクリック → 終わりのセルをクリック  
+            → 選択範囲が「自動割当で上書きされない」ように保護されます。</li>
+        <li>解除したい場合は <span class="tag tag-btn">範囲ロック解除</span> ボタンから同様に指定します。</li>
+      </ol>
+
+      <div class="manual-note">
+        ロックされたセルには、薄いハッチングと「🔒」マークがつきます。  
+        手動操作では上書きできますが、自動割当では守られます。
+      </div>
+
+      <h3>6-2. 4週間ロック（全体ロック）</h3>
+      <ul>
+        <li><span class="tag tag-btn">🔓 4週間ロック</span> ボタン  
+          → クリックすると、現在の4週間範囲を一括ロック／アンロックします。
+        </li>
+        <li>4週間ロック中は、勤務表に大きな変更を加えないようにするための「完成版保護」として使います。</li>
+      </ul>
+    </section>
+
+    <!-- 7. 従業員編集・人数設定 -->
+    <section id="sec-attr" class="manual-section">
+      <h2>7. 従業員編集と人数設定</h2>
+
+      <h3>7-1. 従業員数の変更</h3>
+      <ul>
+        <li>ツールバーの「従業員数」プルダウンで 1〜60 人まで変更できます。</li>
+        <li>人数を増やすと、下に新しい行が追加されます。</li>
+      </ul>
+
+      <h3>7-2. 従業員編集ダイアログ</h3>
+      <p><span class="tag tag-btn">従業員編集</span> ボタンで、職員ごとの情報をまとめて設定できます。</p>
+      <ul>
+        <li><strong>名前</strong>（職員名）</li>
+        <li><strong>レベル A / B / C</strong>  
+          → A 同士は自動的に「禁忌ペア」に登録され、夜勤が被らないように配慮されます。
+        </li>
+        <li><strong>勤務形態</strong>（二部制 / 三部制 / 日勤のみ / 夜勤のみ）</li>
+        <li><strong>夜勤専従の☆ノルマ</strong>（4週間あたりの目標回数）</li>
+        <li><strong>早出・遅出の担当パターン</strong>（全日 / 平日のみ / 土日祝のみ / なし）</li>
+        <li><strong>マーク別の勤務時間</strong>（〇 / ☆ / ★ / ◆ / ●など、15分刻みで設定）</li>
+      </ul>
+
+      <p>全体の既定勤務時間（例：〇=8時間など）は、ダイアログ上部の「勤務時間（全体）一括設定」で変更し、  
+      職員ごとの差は、各行の「勤務時間編集」から調整します。</p>
+
+      <h3>7-3. 人数設定（Counts）</h3>
+      <p><span class="tag tag-btn">人数設定</span> ボタンで、以下の条件を設定できます。</p>
+      <ul>
+        <li>平日の日勤人数（目標）</li>
+        <li>土日祝の日勤人数（目標）</li>
+        <li>平日・土日祝の早出 / 遅出の目標人数</li>
+        <li>夜勤 NF（☆＋◆）の固定人数</li>
+        <li>夜勤 NS（★＋●）の固定人数</li>
+        <li>特定日ごとの固定人数（「YYYY-MM-DD 〇 早 遅 ☆＋◆ ★＋●」形式）</li>
+      </ul>
+
+      <div class="manual-note">
+        これらの設定は、自動割当の際の基準値として使用されます。  
+        「この日は日勤 20 人にしたい」といった特定日指定も可能です。
+      </div>
+    </section>
+
+    <!-- 8. Excel -->
+    <section id="sec-export" class="manual-section">
+      <h2>8. Excel ダウンロード</h2>
+
+      <ul>
+        <li><span class="tag tag-btn">Excelダウンロード</span> ボタンを押すと、<strong>表示中の31日分</strong>が CSV 形式で出力されます。</li>
+        <li>Excel で開けば、そのまま印刷・加工が可能です。</li>
+      </ul>
+
+      <div class="manual-note">
+        CSV は「文字だけ」のシンプルな形式ですが、Excel に読み込ませることで、
+        院内の様式にコピー＆ペーストしやすくなっています。
+      </div>
+    </section>
+
+    <!-- 9. FAQ -->
+    <section id="sec-trouble" class="manual-section">
+      <h2>9. よくある質問（FAQ）</h2>
+
+      <h3>Q1. 自動割当が「エラー」と表示される</h3>
+      <p>
+        4週間のルール（夜勤回数・4週8休など）に違反している場合、  
+        自動割当が途中で止まり、メッセージが表示されます。
+      </p>
+      <ul>
+        <li>従業員の勤務形態・レベル設定が正しいか（従業員編集）</li>
+        <li>人数設定（Counts）の目標値が極端でないか</li>
+        <li>希望休・特別休暇が多すぎないか</li>
+      </ul>
+
+      <h3>Q2. 特定の日だけ「人数が足りない」ように見える</h3>
+      <p>
+        4週間としては適正でも、ある1日に偏りが出ることがあります。  
+        その場合は、<span class="tag tag-mode">割当</span> モードで、数日分を手動で微調整してください。
+      </p>
+
+      <h3>Q3. 誤って全部消してしまった</h3>
+      <ul>
+        <li><strong>キャンセル</strong> の場合：1回だけ「元に戻す」ボタンで復元できます。</li>
+        <li><strong>完全クリア</strong> の場合：元に戻せません。  
+            その場合は、再度自動割当を行い、手動調整をお願いします。</li>
+      </ul>
+
+      <h3>Q4. ログインできない</h3>
+      <ul>
+        <li>ID / パスワードに誤りがないかご確認ください。</li>
+        <li>Caps Lock（大文字固定）が ON になっていないか確認してください。</li>
+        <li>ブラウザを一度閉じて再起動し、それでもだめな場合はシステム担当者へお問い合わせください。</li>
+      </ul>
+    </section>
+
+    <div class="manual-footer">
+      本説明書は、勤務割当の現場担当者（看護師長・主任・リーダー）向けに作成されています。<br>
+      現場の運用ルールが変わった場合は、院内の責任者と相談のうえ内容を更新してください。
+    </div>
+  </main>
+</body>
+</html>
