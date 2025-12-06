@@ -455,57 +455,26 @@
     return (need)=>{
       let placed = 0;
       
-      // 1日あたりの早出・遅出目標人数を取得（デフォルト：平日・土日祝ともに1名、ただし候補者がいない場合は0）
-      const dt = State.windowDates[dayIdx];
-      const isWH = isWeekendOrHoliday(dt);
 
-      // 早出目標人数
-      const earlyTarget = (function(){
-        if (window.Counts && typeof window.Counts.getEarlyShiftTarget === 'function'){
-          return window.Counts.getEarlyShiftTarget(dt, (ds)=> State.holidaySet.has(ds));
-        }
-
-        // 土日祝日は、早出可能な従業員がいなければ 0、人がいれば最大1名
-        if (isWH) {
-          let holidayEarlyCount = 0;
-          for (let r = 0; r < State.employeeCount; r++) {
-            const empAttr = State.employeesAttr[r] || {};
-            if (empAttr.hasEarlyShift && (empAttr.earlyShiftType === 'holiday' || empAttr.earlyShiftType === 'all')) {
-              holidayEarlyCount++;
-            }
-          }
-          return Math.min(holidayEarlyCount, 1);
-        }
-        // 平日はデフォルト1名
-        return 1;
-      })();
-
-      // 遅出目標人数
-      const lateTarget = (function(){
-        if (window.Counts && typeof window.Counts.getLateShiftTarget === 'function'){
-          return window.Counts.getLateShiftTarget(dt, (ds)=> State.holidaySet.has(ds));
-        }
-
-        // 土日祝日に遅出可能な従業員がいる場合、土日祝日も遅出枠を確保
-        if (isWH) {
-          // 土日祝日に遅出可能な従業員（lateShiftType='holiday' または 'all'）の人数をカウント
-          let holidayLateCount = 0;
-          for (let r = 0; r < State.employeeCount; r++) {
-            const empAttr = State.employeesAttr[r] || {};
-            if (empAttr.hasLateShift && (empAttr.lateShiftType === 'holiday' || empAttr.lateShiftType === 'all')) {
-              holidayLateCount++;
-            }
-          }
-          // 土日祝日に遅出可能な従業員がいる場合は、その人数分の枠を確保（最大1名）
-          return Math.min(holidayLateCount, 1);
-        }
-        // デフォルト：平日1名
-        return 1;
-      })();
       
       let earlyPlaced = 0;
       let latePlaced  = 0;
       
+      // 1日あたりの早出・遅出目標人数を取得（設定から動的に取得）
+      const dt = State.windowDates[dayIdx];
+      const isWH = isWeekendOrHoliday(dt);
+
+      // 早出目標人数（設定から取得）
+      const earlyTarget = (window.Counts && typeof window.Counts.getEarlyShiftTarget === 'function')
+        ? window.Counts.getEarlyShiftTarget(dt, (ds)=> State.holidaySet.has(ds))
+        : 1; // デフォルト1名
+
+      // 遅出目標人数（設定から取得）
+      const lateTarget = (window.Counts && typeof window.Counts.getLateShiftTarget === 'function')
+        ? window.Counts.getLateShiftTarget(dt, (ds)=> State.holidaySet.has(ds))
+        : 1; // デフォルト1名
+
+
       for (const r of cand){
         if (placed >= need) break;
         

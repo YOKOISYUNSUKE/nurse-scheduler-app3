@@ -6,7 +6,11 @@
     FIXED_NF: 3,
     FIXED_NS: 3,
     // 特定日ごとの固定条件 { 'YYYY-MM-DD': { day, nf, ns } }
-    FIXED_BY_DATE: {}
+    FIXED_BY_DATE: {},
+    EARLY_TARGET_WEEKDAY: 1,
+    EARLY_TARGET_WEEKEND_HOLIDAY: 1,
+    LATE_TARGET_WEEKDAY: 1,
+    LATE_TARGET_WEEKEND_HOLIDAY: 1
   };
 
   function pad2(n){ return String(n).padStart(2,'0'); }
@@ -48,6 +52,23 @@
     const cfg = Counts.getFixedConfigFor(ds);
     return (cfg && Number.isFinite(cfg.day)) ? cfg.day : null;
   };
+  // 早出目標人数取得関数
+  Counts.getEarlyShiftTarget = function(dt, isHolidayFn){
+    const ds = toDs(dt);
+    const isHol = isHolidayFn ? !!isHolidayFn(ds) : false;
+    const w = (dt instanceof Date) ? dt.getDay() : NaN;
+    const isWkEndOrHol = isHol || w === 0 || w === 6;
+    return isWkEndOrHol ? Counts.EARLY_TARGET_WEEKEND_HOLIDAY : Counts.EARLY_TARGET_WEEKDAY;
+  };
+
+  // 遅出目標人数取得関数
+  Counts.getLateShiftTarget = function(dt, isHolidayFn){
+    const ds = toDs(dt);
+    const isHol = isHolidayFn ? !!isHolidayFn(ds) : false;
+    const w = (dt instanceof Date) ? dt.getDay() : NaN;
+    const isWkEndOrHol = isHol || w === 0 || w === 6;
+    return isWkEndOrHol ? Counts.LATE_TARGET_WEEKEND_HOLIDAY : Counts.LATE_TARGET_WEEKDAY;
+  };
 
   // 「☆＋◆」固定人数（特定日設定 ＞ グローバル設定）
   Counts.getFixedNF = function(ds){
@@ -62,6 +83,8 @@
     if (cfg && Number.isFinite(cfg.ns)) return cfg.ns;
     return Counts.FIXED_NS;
   };
+
+
 
   // 自動割当用：その日の『〇』目標人数
   Counts.getDayTarget = function(dt, isHolidayFn){
@@ -89,6 +112,8 @@
     if (!cfg) return;
     const keys = [
       'DAY_TARGET_WEEKDAY','DAY_TARGET_WEEKEND_HOLIDAY',
+      'EARLY_TARGET_WEEKDAY','EARLY_TARGET_WEEKEND_HOLIDAY',  
+      'LATE_TARGET_WEEKDAY','LATE_TARGET_WEEKEND_HOLIDAY',     
       'FIXED_NF','FIXED_NS'
     ];
     for (const k of keys){
@@ -108,6 +133,10 @@
     localStorage.setItem(STORAGE_KEY, JSON. stringify({
       DAY_TARGET_WEEKDAY: Counts.DAY_TARGET_WEEKDAY,
       DAY_TARGET_WEEKEND_HOLIDAY: Counts.DAY_TARGET_WEEKEND_HOLIDAY,
+      EARLY_TARGET_WEEKDAY: Counts.EARLY_TARGET_WEEKDAY,            
+      EARLY_TARGET_WEEKEND_HOLIDAY: Counts.EARLY_TARGET_WEEKEND_HOLIDAY,  
+      LATE_TARGET_WEEKDAY: Counts.LATE_TARGET_WEEKDAY,               
+      LATE_TARGET_WEEKEND_HOLIDAY: Counts.LATE_TARGET_WEEKEND_HOLIDAY,   
       FIXED_NF: Counts.FIXED_NF,
       FIXED_NS: Counts.FIXED_NS,
       FIXED_BY_DATE: Counts.FIXED_BY_DATE
@@ -186,6 +215,10 @@
     const $ = id => dlg.querySelector(`#${id}`);
     const inpTWeek       = $('cfgDayTarget');
     const inpTWH         = $('cfgDayTargetWkHol');
+    const inpEarlyWeekday = $('cfgEarlyTargetWeekday');
+    const inpEarlyWkHol   = $('cfgEarlyTargetWkHol');
+    const inpLateWeekday  = $('cfgLateTargetWeekday');
+    const inpLateWkHol    = $('cfgLateTargetWkHol');
     const inpNF          = $('cfgFixedNF');
     const inpNS          = $('cfgFixedNS');
     const inpFixedByDate = $('cfgFixedByDate');
@@ -201,6 +234,10 @@
       inpTWH.value     = String(Counts.DAY_TARGET_WEEKEND_HOLIDAY);
       inpNF.value      = String(Counts.FIXED_NF);
       inpNS.value      = String(Counts.FIXED_NS);
+      if (inpEarlyWeekday) inpEarlyWeekday.value = String(Counts.EARLY_TARGET_WEEKDAY);
+      if (inpEarlyWkHol)   inpEarlyWkHol.value   = String(Counts.EARLY_TARGET_WEEKEND_HOLIDAY);
+      if (inpLateWeekday)  inpLateWeekday.value  = String(Counts.LATE_TARGET_WEEKDAY);
+      if (inpLateWkHol)    inpLateWkHol.value    = String(Counts.LATE_TARGET_WEEKEND_HOLIDAY);
       if (inpFixedByDate){
 
         inpFixedByDate.value = Counts.exportFixedByDateText
@@ -289,7 +326,11 @@ const cfg = {
   DAY_TARGET_WEEKEND_HOLIDAY: parseInt(inpTWH.value,10),
   FIXED_NF: parseInt(inpNF.value,10),
   FIXED_NS: parseInt(inpNS.value,10),
-  FIXED_BY_DATE: fixedMap
+  FIXED_BY_DATE: fixedMap,
+        EARLY_TARGET_WEEKDAY: inpEarlyWeekday ? parseInt(inpEarlyWeekday.value,10) : 1,
+        EARLY_TARGET_WEEKEND_HOLIDAY: inpEarlyWkHol ? parseInt(inpEarlyWkHol.value,10) : 1,
+        LATE_TARGET_WEEKDAY: inpLateWeekday ? parseInt(inpLateWeekday.value,10) : 1,
+        LATE_TARGET_WEEKEND_HOLIDAY: inpLateWkHol ? parseInt(inpLateWkHol.value,10) : 1
 };
 
       save(cfg);

@@ -167,12 +167,115 @@ function initInternal(){
       attrContent.appendChild(globalWrap);
     }
     // --- ここまで全体設定パネル ---
+    // --- 早出・遅出の一括選択パネル ---
+    {
+      const bulkWrap = document.createElement('div');
+      bulkWrap.style.display = 'flex';
+      bulkWrap.style.flexWrap = 'wrap';
+      bulkWrap.style.alignItems = 'center';
+      bulkWrap.style.gap = '8px';
+      bulkWrap.style.marginBottom = '12px';
+      bulkWrap.style.padding = '8px';
+      bulkWrap.style.backgroundColor = '#f9fafb';
+      bulkWrap.style.borderRadius = '8px';
+
+      const bulkTitle = document.createElement('div');
+      bulkTitle.textContent = '早出・遅出 一括設定';
+      bulkTitle.style.fontSize = '0.9em';
+      bulkTitle.style.fontWeight = '600';
+      bulkTitle.style.marginRight = '8px';
+      bulkWrap.appendChild(bulkTitle);
+
+      // 早出一括
+      const earlyBlock = document.createElement('div');
+      earlyBlock.style.display = 'flex';
+      earlyBlock.style.alignItems = 'center';
+      earlyBlock.style.gap = '4px';
+
+      const earlyLabel = document.createElement('span');
+      earlyLabel.textContent = '早出';
+      earlyLabel.style.fontSize = '0.85em';
+      earlyBlock.appendChild(earlyLabel);
+
+      const earlySel = document.createElement('select');
+      earlySel.className = 'select';
+      ['none','all','weekday','holiday'].forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent =
+          v === 'none'    ? 'なし' :
+          v === 'all'     ? '全日' :
+          v === 'weekday' ? '平日のみ' :
+                            '土日祝のみ';
+        earlySel.appendChild(opt);
+      });
+      earlySel.value = 'none';
+      earlyBlock.appendChild(earlySel);
+
+      const earlyBtn = document.createElement('button');
+      earlyBtn.type = 'button';
+      earlyBtn.className = 'btn btn-outline btn-sm';
+      earlyBtn.textContent = '早出を一括適用';
+      earlyBtn.addEventListener('click', () => {
+        applyBulkEarlyShift(earlySel.value);
+      });
+      earlyBlock.appendChild(earlyBtn);
+
+      bulkWrap.appendChild(earlyBlock);
+
+      // 遅出一括
+      const lateBlock = document.createElement('div');
+      lateBlock.style.display = 'flex';
+      lateBlock.style.alignItems = 'center';
+      lateBlock.style.gap = '4px';
+
+      const lateLabel = document.createElement('span');
+      lateLabel.textContent = '遅出';
+      lateLabel.style.fontSize = '0.85em';
+      lateBlock.appendChild(lateLabel);
+
+      const lateSel = document.createElement('select');
+      lateSel.className = 'select';
+      ['none','all','weekday','holiday'].forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent =
+          v === 'none'    ? 'なし' :
+          v === 'all'     ? '全日' :
+          v === 'weekday' ? '平日のみ' :
+                            '土日祝のみ';
+        lateSel.appendChild(opt);
+      });
+      lateSel.value = 'none';
+      lateBlock.appendChild(lateSel);
+
+      const lateBtn = document.createElement('button');
+      lateBtn.type = 'button';
+      lateBtn.className = 'btn btn-outline btn-sm';
+      lateBtn.textContent = '遅出を一括適用';
+      lateBtn.addEventListener('click', () => {
+        applyBulkLateShift(lateSel.value);
+      });
+      lateBlock.appendChild(lateBtn);
+
+      bulkWrap.appendChild(lateBlock);
+
+      const note = document.createElement('div');
+      note.textContent = '※夜勤専従（勤務形態：夜勤のみ）は対象外です。';
+      note.style.fontSize = '0.8em';
+      note.style.color = '#6b7280';
+      note.style.marginLeft = '4px';
+      bulkWrap.appendChild(note);
+
+      attrContent.appendChild(bulkWrap);
+    }
 
     // --- 従業員ごとの行を追加 ---
     for (let i = 0; i < State.employeeCount; i++){
       const row = createEmployeeRow(i, State);  // ← 今度は正しく参照できる
       attrContent.appendChild(row);
     }
+
   }
 
   // createEmployeeRow を buildAttrDialog の外に移動（関数スコープを修正）
@@ -696,6 +799,100 @@ function createLateShiftToggle(attr, selWt){
   wrap.appendChild(sel);
   return wrap;
 }
+
+// 早出・遅出の一括適用ロジック
+function applyBulkEarlyShift(value){
+  const State = getState();
+  if (!State) return;
+  if (!['none','all','weekday','holiday'].includes(value)) return;
+
+  for (let i = 0; i < State.employeeCount; i++){
+    const attr = State.employeesAttr[i] || (State.employeesAttr[i] = {});
+    const wt = attr.workType || 'three';
+    if (wt === 'night') continue;  // 夜勤専従は対象外
+
+    if (value === 'none'){
+      attr.hasEarlyShift = false;
+      delete attr.earlyShiftType;
+    } else {
+      attr.hasEarlyShift = true;
+      attr.earlyShiftType = value;
+    }
+  }
+
+  if (attrContent){
+    const rows = Array.from(attrContent.querySelectorAll('.row'));
+    rows.forEach(row => {
+      const idx = Number(row.dataset.idx);
+      if (!Number.isInteger(idx)) return;
+      const selWt = row.querySelector('select[data-role="worktype"]') || row.querySelector('select.worktype-select');
+      const wtVal = selWt ? selWt.value : (State.employeesAttr[idx]?.workType || 'three');
+      if (wtVal === 'night') return;
+      const sel = row.querySelector('select.early-select');
+      if (sel){
+        sel.value = value;
+      }
+    });
+  }
+
+  if (typeof window.saveMetaOnly === 'function') window.saveMetaOnly();
+  if (typeof window.renderGrid === 'function') window.renderGrid();
+  if (typeof window.showToast === 'function'){
+    const label =
+      value === 'none'    ? 'なし' :
+      value === 'all'     ? '全日' :
+      value === 'weekday' ? '平日のみ' :
+                            '土日祝のみ';
+    window.showToast(`早出を一括で「${label}」に設定しました`);
+  }
+}
+
+function applyBulkLateShift(value){
+  const State = getState();
+  if (!State) return;
+  if (!['none','all','weekday','holiday'].includes(value)) return;
+
+  for (let i = 0; i < State.employeeCount; i++){
+    const attr = State.employeesAttr[i] || (State.employeesAttr[i] = {});
+    const wt = attr.workType || 'three';
+    if (wt === 'night') continue;  // 夜勤専従は対象外
+
+    if (value === 'none'){
+      attr.hasLateShift = false;
+      delete attr.lateShiftType;
+    } else {
+      attr.hasLateShift = true;
+      attr.lateShiftType = value;
+    }
+  }
+
+  if (attrContent){
+    const rows = Array.from(attrContent.querySelectorAll('.row'));
+    rows.forEach(row => {
+      const idx = Number(row.dataset.idx);
+      if (!Number.isInteger(idx)) return;
+      const selWt = row.querySelector('select[data-role="worktype"]') || row.querySelector('select.worktype-select');
+      const wtVal = selWt ? selWt.value : (State.employeesAttr[idx]?.workType || 'three');
+      if (wtVal === 'night') return;
+      const sel = row.querySelector('select.late-select');
+      if (sel){
+        sel.value = value;
+      }
+    });
+  }
+
+  if (typeof window.saveMetaOnly === 'function') window.saveMetaOnly();
+  if (typeof window.renderGrid === 'function') window.renderGrid();
+  if (typeof window.showToast === 'function'){
+    const label =
+      value === 'none'    ? 'なし' :
+      value === 'all'     ? '全日' :
+      value === 'weekday' ? '平日のみ' :
+                            '土日祝のみ';
+    window.showToast(`遅出を一括で「${label}」に設定しました`);
+  }
+}
+
 
 
 
