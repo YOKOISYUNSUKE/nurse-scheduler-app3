@@ -201,24 +201,43 @@
       <label>NS（★＋●）固定人数</label>
       <input id="cfgFixedNS" type="number" class="txt" min="0" step="1">
     </div>
-    <div class="row">
+    <div class="row row-fixed-by-date">
       <label>特定日 固定条件</label>
-      <div>
-        <div style="display:flex; flex-wrap:wrap; gap:0.25rem; margin-bottom:0.25rem;">
+      <div class="fixed-block">
+        <div class="fixed-control-row">
           <input id="cfgFixedDate" type="date" class="txt">
-          <input id="cfgFixedDay" type="number" class="txt" min="0" step="1" placeholder="〇">
-          <input id="cfgFixedNFDate" type="number" class="txt" min="0" step="1" placeholder="NF">
-          <input id="cfgFixedNSDate" type="number" class="txt" min="0" step="1" placeholder="NS">
+          <div class="fixed-num">
+            <span class="fixed-mark">〇</span>
+            <input id="cfgFixedDay" type="number" class="txt" min="0" step="1">
+          </div>
+          <div class="fixed-num">
+            <span class="fixed-mark">早</span>
+            <input id="cfgFixedEarlyDate" type="number" class="txt" min="0" step="1">
+          </div>
+          <div class="fixed-num">
+            <span class="fixed-mark">遅</span>
+            <input id="cfgFixedLateDate" type="number" class="txt" min="0" step="1">
+          </div>
+          <div class="fixed-num">
+            <span class="fixed-mark">☆＋◆</span>
+            <input id="cfgFixedNFDate" type="number" class="txt" min="0" step="1">
+          </div>
+          <div class="fixed-num">
+            <span class="fixed-mark">★＋●</span>
+            <input id="cfgFixedNSDate" type="number" class="txt" min="0" step="1">
+          </div>
           <button id="btnFixedByDateAdd" class="btn btn-outline" type="button">追加</button>
         </div>
-        <textarea id="cfgFixedByDate" class="txt" rows="4"
-                  placeholder="2025-11-03 8 3 3&#10;2025-11-04 7 2 3"></textarea>
-        <div class="hint">
-          1行ごとに「日付 〇 NF NS」を入力（例: 2025-11-03 8 3 3）。
+        <textarea id="cfgFixedByDate" class="txt fixed-text" rows="4"
+                  placeholder="2025-11-03 8 1 1 3 3&#10;2025-11-04 7 1 1 2 3"></textarea>
+        <div class="fixed-hint">
+          1行ごとに「日付 〇 早 遅 ☆＋◆ ★＋●」を入力（例: 2025-11-03 8 1 1 3 3）。
           日付だけの行はその日の固定解除として扱われます。
         </div>
       </div>
     </div>
+
+
 
   <footer>
 

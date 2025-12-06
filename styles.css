@@ -280,8 +280,62 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
 
 .attr .row{ display:grid; grid-template-columns: 1fr 60px 110px 90px 90px; gap:4px; align-items:center; padding:6px 0; }
 
+#countsDlg .row-fixed-by-date{
+  display:block;
+}
+#countsDlg .row-fixed-by-date > label{
+  display:block;
+  margin-bottom:4px;
+}
+#countsDlg .fixed-block{
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:6px 8px;
+  background:#f9fafb;
+}
+#countsDlg .fixed-control-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px;
+  margin-bottom:4px;
+  align-items:center;
+}
+#countsDlg .fixed-control-row input#cfgFixedDate{
+  flex:0 0 auto;
+  min-width:140px;
+}
+#countsDlg .fixed-num{
+  display:flex;
+  align-items:center;
+  gap:2px;
+}
+#countsDlg .fixed-mark{
+  font-size:11px;
+  padding:0 2px;
+}
+#countsDlg .fixed-num input.txt{
+  width:52px;
+  text-align:right;
+}
+#countsDlg .fixed-control-row button{
+  margin-left:auto;
+}
+#countsDlg .fixed-text{
+  width:100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  font-size:12px;
+  min-height:4.5em;
+}
+#countsDlg .fixed-hint{
+  margin-top:4px;
+  font-size:11px;
+  color:var(--muted);
+}
+
 
 .attr footer{ display:flex; justify-content:flex-end; gap:10px; padding:12px 14px; border-top:1px solid var(--border); }
+
 
 
 /* ---- 名列のインライン属性セレクタ ---- */

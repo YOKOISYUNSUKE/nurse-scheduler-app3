@@ -29,17 +29,22 @@
     for (const [ds, v] of Object.entries(src)){
       if (!ds || typeof ds !== 'string') continue;
       if (!v || typeof v !== 'object') continue;
-      const day = Number.isFinite(v.day) ? Number(v.day) : null;
-      const nf  = Number.isFinite(v.nf)  ? Number(v.nf)  : null;
-      const ns  = Number.isFinite(v.ns)  ? Number(v.ns)  : null;
-      if (day==null && nf==null && ns==null) continue;
+      const day   = Number.isFinite(v.day)   ? Number(v.day)   : null;
+      const early = Number.isFinite(v.early) ? Number(v.early) : null;
+      const late  = Number.isFinite(v.late)  ? Number(v.late)  : null;
+      const nf    = Number.isFinite(v.nf)    ? Number(v.nf)    : null;
+      const ns    = Number.isFinite(v.ns)    ? Number(v.ns)    : null;
+      if (day==null && early==null && late==null && nf==null && ns==null) continue;
       out[ds] = {};
-      if (day!=null) out[ds].day = day;
-      if (nf!=null)  out[ds].nf  = nf;
-      if (ns!=null)  out[ds].ns  = ns;
+      if (day!=null)   out[ds].day   = day;
+      if (early!=null) out[ds].early = early;
+      if (late!=null)  out[ds].late  = late;
+      if (nf!=null)    out[ds].nf    = nf;
+      if (ns!=null)    out[ds].ns    = ns;
     }
     return out;
   }
+
 
   Counts.getFixedConfigFor = function(ds){
     const key = toDs(ds);
@@ -55,6 +60,9 @@
   // 早出目標人数取得関数
   Counts.getEarlyShiftTarget = function(dt, isHolidayFn){
     const ds = toDs(dt);
+    const cfg = Counts.getFixedConfigFor(ds);
+    if (cfg && Number.isFinite(cfg.early)) return cfg.early;
+
     const isHol = isHolidayFn ? !!isHolidayFn(ds) : false;
     const w = (dt instanceof Date) ? dt.getDay() : NaN;
     const isWkEndOrHol = isHol || w === 0 || w === 6;
@@ -64,11 +72,15 @@
   // 遅出目標人数取得関数
   Counts.getLateShiftTarget = function(dt, isHolidayFn){
     const ds = toDs(dt);
+    const cfg = Counts.getFixedConfigFor(ds);
+    if (cfg && Number.isFinite(cfg.late)) return cfg.late;
+
     const isHol = isHolidayFn ? !!isHolidayFn(ds) : false;
     const w = (dt instanceof Date) ? dt.getDay() : NaN;
     const isWkEndOrHol = isHol || w === 0 || w === 6;
     return isWkEndOrHol ? Counts.LATE_TARGET_WEEKEND_HOLIDAY : Counts.LATE_TARGET_WEEKDAY;
   };
+
 
   // 「☆＋◆」固定人数（特定日設定 ＞ グローバル設定）
   Counts.getFixedNF = function(ds){
@@ -157,7 +169,7 @@
   Counts.save = save;
 
 
-  // "YYYY-MM-DD 〇 NF NS" 形式テキスト ⇔ FIXED_BY_DATE マップ
+  // "YYYY-MM-DD 〇 早 遅 ☆＋◆ ★＋●" 形式テキスト ⇔ FIXED_BY_DATE マップ
   function parseFixedByDateText(text){
     const map = {};
     if (!text) return map;
@@ -168,14 +180,38 @@
       const parts = trimmed.split(/\s+/);
       const ds = parts[0];
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) continue;
-      const day = parts[1] ? parseInt(parts[1],10) : NaN;
-      const nf  = parts[2] ? parseInt(parts[2],10) : NaN;
-      const ns  = parts[3] ? parseInt(parts[3],10) : NaN;
+
+      const nums = parts.slice(1)
+        .map(v => parseInt(v,10))
+        .filter(v => !Number.isNaN(v));
+
       const entry = {};
-      if (Number.isFinite(day)) entry.day = day;
-      if (Number.isFinite(nf))  entry.nf  = nf;
-      if (Number.isFinite(ns))  entry.ns  = ns;
-      if (Object.keys(entry).length > 0) map[ds] = entry;
+
+      if (nums.length === 0){
+        // 日付のみの行：固定解除（＝何も記録しない／既定値を使用）
+        map[ds] = entry;
+        continue;
+      }
+
+      // 先頭は常に『〇』
+      if (Number.isFinite(nums[0])) entry.day = nums[0];
+
+      if (nums.length === 2){
+        // 旧形式（YYYY-MM-DD 〇 NF）
+        if (Number.isFinite(nums[1])) entry.nf = nums[1];
+      } else if (nums.length === 3){
+        // 旧形式（YYYY-MM-DD 〇 NF NS）
+        if (Number.isFinite(nums[1])) entry.nf = nums[1];
+        if (Number.isFinite(nums[2])) entry.ns = nums[2];
+      } else if (nums.length >= 4){
+        // 新形式（YYYY-MM-DD 〇 早 遅 ☆＋◆ [★＋●]）
+        if (Number.isFinite(nums[1])) entry.early = nums[1];
+        if (Number.isFinite(nums[2])) entry.late  = nums[2];
+        if (Number.isFinite(nums[3])) entry.nf    = nums[3];
+        if (nums.length >= 5 && Number.isFinite(nums[4])) entry.ns = nums[4];
+      }
+
+      map[ds] = entry;
     }
     return map;
   }
@@ -224,9 +260,12 @@
     const inpFixedByDate = $('cfgFixedByDate');
     const inpFixedDate   = $('cfgFixedDate');
     const inpFixedDay    = $('cfgFixedDay');
+    const inpFixedEarlyDate = $('cfgFixedEarlyDate');
+    const inpFixedLateDate  = $('cfgFixedLateDate');
     const inpFixedNFDate = $('cfgFixedNFDate');
     const inpFixedNSDate = $('cfgFixedNSDate');
     const btnFixedAdd    = $('btnFixedByDateAdd');
+
 
 
     function populate(){
@@ -246,9 +285,11 @@
       }
       if (inpFixedDate){
         inpFixedDate.value = '';
-        if (inpFixedDay)    inpFixedDay.value    = '';
-        if (inpFixedNFDate) inpFixedNFDate.value = '';
-        if (inpFixedNSDate) inpFixedNSDate.value = '';
+        if (inpFixedDay)        inpFixedDay.value        = '';
+        if (inpFixedEarlyDate)  inpFixedEarlyDate.value  = '';
+        if (inpFixedLateDate)   inpFixedLateDate.value   = '';
+        if (inpFixedNFDate)     inpFixedNFDate.value     = '';
+        if (inpFixedNSDate)     inpFixedNSDate.value     = '';
       }
     }
 
@@ -257,18 +298,23 @@
       inpFixedDate.addEventListener('change', ()=>{
         const ds = inpFixedDate.value;
         if (!ds){
-          if (inpFixedDay)    inpFixedDay.value    = '';
-          if (inpFixedNFDate) inpFixedNFDate.value = '';
-          if (inpFixedNSDate) inpFixedNSDate.value = '';
+          if (inpFixedDay)        inpFixedDay.value        = '';
+          if (inpFixedEarlyDate)  inpFixedEarlyDate.value  = '';
+          if (inpFixedLateDate)   inpFixedLateDate.value   = '';
+          if (inpFixedNFDate)     inpFixedNFDate.value     = '';
+          if (inpFixedNSDate)     inpFixedNSDate.value     = '';
           return;
         }
         const map = parseFixedByDateText(inpFixedByDate.value || '');
         const v = map[ds] || {};
-        if (inpFixedDay)    inpFixedDay.value    = Number.isFinite(v.day) ? String(v.day) : '';
-        if (inpFixedNFDate) inpFixedNFDate.value = Number.isFinite(v.nf)  ? String(v.nf)  : '';
-        if (inpFixedNSDate) inpFixedNSDate.value = Number.isFinite(v.ns)  ? String(v.ns)  : '';
+        if (inpFixedDay)        inpFixedDay.value        = Number.isFinite(v.day)   ? String(v.day)   : '';
+        if (inpFixedEarlyDate)  inpFixedEarlyDate.value  = Number.isFinite(v.early) ? String(v.early) : '';
+        if (inpFixedLateDate)   inpFixedLateDate.value   = Number.isFinite(v.late)  ? String(v.late)  : '';
+        if (inpFixedNFDate)     inpFixedNFDate.value     = Number.isFinite(v.nf)    ? String(v.nf)    : '';
+        if (inpFixedNSDate)     inpFixedNSDate.value     = Number.isFinite(v.ns)    ? String(v.ns)    : '';
       });
     }
+
 
     // 「追加」ボタン：テキストエリアの内容を（該当日行を）更新 or 追加
     if (btnFixedAdd && inpFixedByDate && inpFixedDate){
@@ -277,41 +323,46 @@
         if (!ds) return;
 
         const parts = [ds];
-        const dayStr = inpFixedDay    ? inpFixedDay.value.trim()    : '';
-        const nfStr  = inpFixedNFDate ? inpFixedNFDate.value.trim() : '';
-        const nsStr  = inpFixedNSDate ? inpFixedNSDate.value.trim() : '';
+        const dayStr   = inpFixedDay        ? inpFixedDay.value.trim()        : '';
+        const earlyStr = inpFixedEarlyDate  ? inpFixedEarlyDate.value.trim()  : '';
+        const lateStr  = inpFixedLateDate   ? inpFixedLateDate.value.trim()   : '';
+        const nfStr    = inpFixedNFDate     ? inpFixedNFDate.value.trim()     : '';
+        const nsStr    = inpFixedNSDate     ? inpFixedNSDate.value.trim()     : '';
 
-        if (dayStr) parts.push(dayStr);
-        if (nfStr)  parts.push(nfStr);
-        if (nsStr)  parts.push(nsStr);
+        if (dayStr)   parts.push(dayStr);
+        if (earlyStr) parts.push(earlyStr);
+        if (lateStr)  parts.push(lateStr);
+        if (nfStr)    parts.push(nfStr);
+        if (nsStr)    parts.push(nsStr);
 
         const line = parts.join(' ');
 
+
         const raw = inpFixedByDate.value || '';
         const lines = raw.split(/\r?\n/);
-        let found = false;
-        for (let i = 0; i < lines.length; i++){
-          const t = lines[i].trim();
+        const map = new Map();
+
+        // 既存行をマップ化（先頭のYYYY-MM-DDをキーにする）
+        for (const rawLine of lines){
+          const t = rawLine.trim();
           if (!t) continue;
           const first = t.split(/\s+/)[0];
-          if (first === ds){
-            lines[i] = line;
-            found = true;
-            break;
-          }
-        }
-        if (!found){
-          lines.push(line);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(first)) continue;
+          map.set(first, t);
         }
 
-        inpFixedByDate.value = lines
-          .map(s => s.trim())
-          .filter(s => s.length > 0)
+        // 今回の入力で上書き（同じ日付があれば置き換え）
+        map.set(ds, line);
+
+        const sortedDates = Array.from(map.keys()).sort();
+        inpFixedByDate.value = sortedDates
+          .map(key => map.get(key))
           .join('\n');
       });
     }
 
     btn.addEventListener('click', ()=>{
+
       populate();
       dlg.showModal ? dlg.showModal() : (dlg.open = true);
     });
