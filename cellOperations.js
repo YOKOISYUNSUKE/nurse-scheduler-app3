@@ -239,32 +239,47 @@ if (getAssign(r, dsNext) === '★' && dayIdx === State.range4wStart + 27){
   }
 
   // === 特別休暇トグル ===
-  function toggleLeave(r, d, td){
+function toggleLeave(r, d, td){
     const ds = dateStr(State.windowDates[d]);
 
-if (isLocked(r, ds)){ 
-  showToast('ロック中のセルは変更できません'); 
-  return; 
-}
-    const code = State.leaveMode;
+    if (isLocked(r, ds)){ 
+      showToast('ロック中のセルは変更できません'); 
+      return; 
+    }
     
-    if (!code && !hasOffByDate(r, ds)) return;
-
-    if (!code && hasOffByDate(r, ds)) {
+    const code = State.leaveMode;
+    if (!code) {
+      showToast('特別休暇ボタンを先に選択してください');
+      return;
+    }
+    
+    // 既に同じ特別休暇が設定されている場合は解除
+    const currentLeave = getLeaveType(r, ds);
+    if (currentLeave === code) {
       clearLeaveType(r, ds);
       td.textContent = '';
       td.classList.remove('off');
       updateFooterCounts(d);
       if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
-      showToast('希望休を解除しました');
+      showToast(`「${code}」を解除しました`);
       return;
     }
 
-
+    // 希望休がある場合は先にクリア
     if (hasOffByDate(r, ds)) {
-      clearLeaveType(r, ds);
+      const s = State.offRequests.get(r);
+      if (s) {
+        s.delete(ds);
+        if (s.size === 0) State.offRequests.delete(r);
+      }
     }
     
+    // 既存の割り当てをクリア（特別休暇は勤務マークと排他）
+    if (getAssign(r, ds)) {
+      clearAssign(r, ds);
+    }
+    
+    // 特別休暇を設定
     const ok = setLeaveType(r, ds, code);
     if (!ok) return;
 
@@ -278,8 +293,8 @@ if (isLocked(r, ds)){
     removeNextDayStarIfAny(r, d);
     updateFooterCounts(d);
     if (typeof refresh4wSummaryForRow === 'function') refresh4wSummaryForRow(r);
-    showToast('希望休を更新しました');
-  }
+    showToast(`「${code}」を設定しました`);
+}
 
 
   // === 希望休トグル ===

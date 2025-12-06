@@ -448,21 +448,45 @@
       }
     }
 
-    // ★追加：遅出（遅）対象者を分離
-    const lateShiftCand = cand.filter(r => canAssignLateShift(r, dayIdx));
+    // 早出（早）・遅出（遅）対象者を分離
+    const earlyShiftCand = cand.filter(r => canAssignEarlyShift(r, dayIdx));
+    const lateShiftCand  = cand.filter(r => canAssignLateShift(r, dayIdx));
     
     return (need)=>{
-      let placed=0;
+      let placed = 0;
       
-      // 1日あたりの遅出目標人数を取得（デフォルト：平日1名、土日祝0名）
+      // 1日あたりの早出・遅出目標人数を取得（デフォルト：平日・土日祝ともに1名、ただし候補者がいない場合は0）
       const dt = State.windowDates[dayIdx];
       const isWH = isWeekendOrHoliday(dt);
+
+      // 早出目標人数
+      const earlyTarget = (function(){
+        if (window.Counts && typeof window.Counts.getEarlyShiftTarget === 'function'){
+          return window.Counts.getEarlyShiftTarget(dt, (ds)=> State.holidaySet.has(ds));
+        }
+
+        // 土日祝日は、早出可能な従業員がいなければ 0、人がいれば最大1名
+        if (isWH) {
+          let holidayEarlyCount = 0;
+          for (let r = 0; r < State.employeeCount; r++) {
+            const empAttr = State.employeesAttr[r] || {};
+            if (empAttr.hasEarlyShift && (empAttr.earlyShiftType === 'holiday' || empAttr.earlyShiftType === 'all')) {
+              holidayEarlyCount++;
+            }
+          }
+          return Math.min(holidayEarlyCount, 1);
+        }
+        // 平日はデフォルト1名
+        return 1;
+      })();
+
+      // 遅出目標人数
       const lateTarget = (function(){
         if (window.Counts && typeof window.Counts.getLateShiftTarget === 'function'){
           return window.Counts.getLateShiftTarget(dt, (ds)=> State.holidaySet.has(ds));
         }
 
-        // ★修正：土日祝日に遅出可能な従業員がいる場合、土日祝日も遅出枠を確保
+        // 土日祝日に遅出可能な従業員がいる場合、土日祝日も遅出枠を確保
         if (isWH) {
           // 土日祝日に遅出可能な従業員（lateShiftType='holiday' または 'all'）の人数をカウント
           let holidayLateCount = 0;
@@ -479,11 +503,21 @@
         return 1;
       })();
       
-      let latePlaced = 0;
+      let earlyPlaced = 0;
+      let latePlaced  = 0;
       
-      for(const r of cand){
-        if (placed>=need) break;
+      for (const r of cand){
+        if (placed >= need) break;
         
+        // 早出対象者で早出枠が残っている場合は早を優先割り当て
+        if (earlyPlaced < earlyTarget && earlyShiftCand.includes(r)){
+          if (tryPlace(dayIdx, r, '早')){
+            placed++;
+            earlyPlaced++;
+            continue;
+          }
+        }
+
         // 遅出対象者で遅出枠が残っている場合は遅を優先割り当て
         if (latePlaced < lateTarget && lateShiftCand.includes(r)){
           if (tryPlace(dayIdx, r, '遅')){
@@ -500,7 +534,8 @@
     };
   }
 
-  // ★追加: 遅出（遅）対象者かチェック（fillDayShift用のローカル関数）
+
+  // 遅出（遅）対象者かチェック（fillDayShift用のローカル関数）
   function canAssignLateShift(r, dayIdx){
     const empAttr = State.employeesAttr[r] || {};
     if (!empAttr.hasLateShift) return false;
@@ -517,7 +552,25 @@
     return false;
   }
 
+  //  早出（早）対象者かチェック（fillDayShift用のローカル関数）
+  function canAssignEarlyShift(r, dayIdx){
+    const empAttr = State.employeesAttr[r] || {};
+    if (!empAttr.hasEarlyShift) return false;
+
+    const dt = State.windowDates[dayIdx];
+    const earlyType = empAttr.earlyShiftType || 'all';
+
+    if (earlyType === 'all') return true;
+
+    const isWH = isWeekendOrHoliday(dt);
+    if (earlyType === 'weekday') return !isWH;
+    if (earlyType === 'holiday') return isWH;
+
+    return false;
+  }
+
   function normalizeOffToEight(startDayIdx, endDayIdx){
+
     // ★従業員順序をランダム化
     let empOrder = [];
     for(let r=0; r<State.employeeCount; r++) empOrder.push(r);
