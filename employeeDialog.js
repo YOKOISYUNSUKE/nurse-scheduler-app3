@@ -233,14 +233,12 @@ function initInternal(){
     row.appendChild(name);
     row.appendChild(selLv);
     row.appendChild(selWt);
-　　row.appendChild(ctrls);
-    row.appendChild(quotaWrap);
     row.appendChild(earlyToggle);
     row.appendChild(lateToggle);
     row.appendChild(forbidWrap);
     row.appendChild(btnDur);        // ★追加：勤務時間編集ボタン
     row.appendChild(durationsWrap); // ★追加：勤務時間フィールド
-  
+    row.appendChild(ctrls);
 
     return row;
   }
@@ -526,284 +524,179 @@ function initInternal(){
 
     return quotaWrap;
   }
-// createLateShiftToggle 関数を以下のように置き換えてください
 
-
-// --- 早出(early shift)トグル作成 ---
+// --- 早出(early shift)・遅出(late shift) 選択（スクロール式セレクト） ---
 
 function createEarlyShiftToggle(attr, selWt){
   const wrap = document.createElement('div');
   wrap.className = 'early-toggle';
   wrap.style.display = (selWt && selWt.value === 'night') ? 'none' : 'flex';
-  wrap.style.flexDirection = 'column';
+  wrap.style.alignItems = 'center';
   wrap.style.gap = '8px';
-  wrap.style.padding = '4px';
+  wrap.style.padding = '4px 0';
 
-  // === 早出あり/なしチェックボックス ===
-  const chkWrap = document.createElement('div');
-  chkWrap.style.display = 'flex';
-  chkWrap.style.alignItems = 'center';
-  chkWrap.style.gap = '6px';
+  if (!attr) attr = {};
 
-  const chk = document.createElement('input');
-  chk.type = 'checkbox';
-  chk.className = 'early-checkbox';
-  chk.checked = !!(attr && attr.hasEarlyShift);
-  chk.title = '早出あり';
+  const label = document.createElement('span');
+  label.textContent = '早出';
+  label.style.fontSize = '0.9em';
 
-  const lbl = document.createElement('label');
-  lbl.style.fontSize = '0.9em';
-  lbl.style.cursor = 'pointer';
-  lbl.textContent = '早出';
-  lbl.prepend(chk);
-
-  chkWrap.appendChild(lbl);
-
-  // === 早出種別トグルボタン(全日/平日/土日祝日) ===
-  const toggleWrap = document.createElement('div');
-  toggleWrap.className = 'early-type-toggle';
-  toggleWrap.style.display = chk.checked ? 'flex' : 'none';
-  toggleWrap.style.gap = '4px';
-  toggleWrap.style.marginLeft = '24px';
-
-  // 現在の早出種別を取得(デフォルトは'all')
-  const currentType = (attr && attr.earlyShiftType) || 'all';
+  const sel = document.createElement('select');
+  sel.className = 'select early-select';
 
   const options = [
+    { value: 'none',    label: 'なし' },
     { value: 'all',     label: '全日' },
     { value: 'weekday', label: '平日のみ' },
-    { value: 'holiday', label: '土日祝日のみ' }
+    { value: 'holiday', label: '土日祝のみ' }
   ];
 
-  const buttons = [];
-
-  options.forEach(opt => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn btn-outline btn-early-type';
-    btn.dataset.value = opt.value;
-    btn.textContent = opt.label;
-    btn.style.padding = '4px 8px';
-    btn.style.fontSize = '0.85em';
-
-    // すでに有効＆現在種別ならハイライト
-    if (chk.checked && opt.value === currentType){
-      btn.classList.add('active');
-      btn.style.backgroundColor = '#3b82f6';
-      btn.style.color = '#fff';
-      btn.style.borderColor = '#3b82f6';
-    }
-
-    btn.addEventListener('click', () => {
-      // ボタンから操作した場合、未チェックなら有効化
-      if (!chk.checked){
-        chk.checked = true;
-        toggleWrap.style.display = 'flex';
-        if (!attr) attr = {};
-        attr.hasEarlyShift = true;
-      }
-
-      buttons.forEach(b => {
-        b.classList.remove('active');
-        b.style.backgroundColor = '';
-        b.style.color = '';
-        b.style.borderColor = '';
-      });
-
-      btn.classList.add('active');
-      btn.style.backgroundColor = '#3b82f6';
-      btn.style.color = '#fff';
-      btn.style.borderColor = '#3b82f6';
-
-      if (!attr) attr = {};
-      attr.earlyShiftType = opt.value;
-
-      if (typeof window.saveMetaOnly === 'function') window.saveMetaOnly();
-      if (typeof window.renderGrid === 'function') window.renderGrid();
-      if (typeof window.showToast === 'function') {
-        window.showToast(`早出種別を「${opt.label}」に変更しました`);
-      }
-    });
-
-    buttons.push(btn);
-    toggleWrap.appendChild(btn);
+  options.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.value;
+    opt.textContent = o.label;
+    sel.appendChild(opt);
   });
 
-  // チェックボックス変更時の処理
-  chk.addEventListener('change', () => {
-    toggleWrap.style.display = chk.checked ? 'flex' : 'none';
-    if (!attr) attr = {};
-    attr.hasEarlyShift = chk.checked;
+  let initValue = 'none';
+  if (attr.hasEarlyShift){
+    initValue = attr.earlyShiftType || 'all';
+  }
+  if (!options.some(o => o.value === initValue)){
+    initValue = 'none';
+  }
+  sel.value = initValue;
 
-    if (!chk.checked){
+  function applyValue(v){
+    if (v === 'none'){
+      attr.hasEarlyShift = false;
       delete attr.earlyShiftType;
-    } else if (!attr.earlyShiftType && buttons.length > 0){
-      attr.earlyShiftType = 'all';
-      const btn = buttons[0];
-      btn.classList.add('active');
-      btn.style.backgroundColor = '#3b82f6';
-      btn.style.color = '#fff';
-      btn.style.borderColor = '#3b82f6';
+    } else {
+      attr.hasEarlyShift = true;
+      attr.earlyShiftType = v;
     }
 
     if (typeof window.saveMetaOnly === 'function') window.saveMetaOnly();
     if (typeof window.renderGrid === 'function') window.renderGrid();
-    if (typeof window.showToast === 'function') {
-      window.showToast(chk.checked ? '早出を有効にしました' : '早出を無効にしました');
+  }
+
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    applyValue(v);
+    if (typeof window.showToast === 'function'){
+      const text =
+        v === 'none'    ? '早出なしに変更しました' :
+        v === 'all'     ? '早出：全日に変更しました' :
+        v === 'weekday' ? '早出：平日のみに変更しました' :
+                          '早出：土日祝のみに変更しました';
+      window.showToast(text);
     }
   });
 
-  // 勤務形態変更時の表示切替(night の場合は非表示)
-  if (selWt) {
-    selWt.addEventListener('change', () => {
-      wrap.style.display = (selWt.value === 'night') ? 'none' : 'flex';
-    });
+  if (selWt){
+    const syncByWorkType = () => {
+      const isNight = selWt.value === 'night';
+      wrap.style.display = isNight ? 'none' : 'flex';
+      sel.disabled = isNight;
+      if (isNight){
+        sel.value = 'none';
+        applyValue('none');
+      }
+    };
+    selWt.addEventListener('change', syncByWorkType);
+    syncByWorkType();
   }
 
-  wrap.appendChild(chkWrap);
-  wrap.appendChild(toggleWrap);
+  wrap.appendChild(label);
+  wrap.appendChild(sel);
   return wrap;
 }
 
-
-
-
-// --- 遅出(late shift)トグル作成 ---
 function createLateShiftToggle(attr, selWt){
   const wrap = document.createElement('div');
   wrap.className = 'late-toggle';
   wrap.style.display = (selWt && selWt.value === 'night') ? 'none' : 'flex';
-  wrap.style.flexDirection = 'column';
+  wrap.style.alignItems = 'center';
   wrap.style.gap = '8px';
-  wrap.style.padding = '4px';
+  wrap.style.padding = '4px 0';
 
-  // === 遅出あり/なしチェックボックス ===
-  const chkWrap = document.createElement('div');
-  chkWrap.style.display = 'flex';
-  chkWrap.style.alignItems = 'center';
-  chkWrap.style.gap = '6px';
+  if (!attr) attr = {};
 
-  const chk = document.createElement('input');
-  chk.type = 'checkbox';
-  chk.className = 'late-checkbox';
-  chk.checked = !!(attr && attr.hasLateShift);
-  chk.title = '遅出あり';
+  const label = document.createElement('span');
+  label.textContent = '遅出';
+  label.style.fontSize = '0.9em';
 
-  const lbl = document.createElement('label');
-  lbl.style.fontSize = '0.9em';
-  lbl.style.cursor = 'pointer';
-  lbl.textContent = '遅出';
-  lbl.prepend(chk);
-
-  chkWrap.appendChild(lbl);
-
-  // === 遅出種別トグルボタン(全日/平日/土日祝日) ===
-  const toggleWrap = document.createElement('div');
-  toggleWrap.className = 'late-type-toggle';
-  toggleWrap.style.display = chk.checked ? 'flex' : 'none';
-  toggleWrap.style.gap = '4px';
-  toggleWrap.style.marginLeft = '24px';
-
-  // 現在の遅出種別を取得(デフォルトは'all')
-  const currentType = (attr && attr.lateShiftType) || 'all';
+  const sel = document.createElement('select');
+  sel.className = 'select late-select';
 
   const options = [
-    { value: 'all', label: '全日' },
+    { value: 'none',    label: 'なし' },
+    { value: 'all',     label: '全日' },
     { value: 'weekday', label: '平日のみ' },
-    { value: 'holiday', label: '土日祝日のみ' }
+    { value: 'holiday', label: '土日祝のみ' }
   ];
 
-  const buttons = [];
-
-  options.forEach(opt => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn btn-outline btn-late-type';
-    btn.dataset.value = opt.value;
-    btn.textContent = opt.label;
-    btn.style.padding = '4px 8px';
-    btn.style.fontSize = '0.85em';
-    btn.style.minWidth = '70px';
-
-    // 選択状態の表示
-    if (opt.value === currentType) {
-      btn.classList.add('active');
-      btn.style.backgroundColor = '#3b82f6';
-      btn.style.color = '#fff';
-      btn.style.borderColor = '#3b82f6';
-    }
-
-    btn.addEventListener('click', () => {
-      // 他のボタンを非アクティブに
-      buttons.forEach(b => {
-        b.classList.remove('active');
-        b.style.backgroundColor = '';
-        b.style.color = '';
-        b.style.borderColor = '';
-      });
-
-      // このボタンをアクティブに
-      btn.classList.add('active');
-      btn.style.backgroundColor = '#3b82f6';
-      btn.style.color = '#fff';
-      btn.style.borderColor = '#3b82f6';
-
-      // attr に保存
-      if (!attr) attr = {};
-      attr.lateShiftType = opt.value;
-
-      // 即時保存・再描画
-      if (typeof window.saveMetaOnly === 'function') window.saveMetaOnly();
-      if (typeof window.renderGrid === 'function') window.renderGrid();
-      if (typeof window.showToast === 'function') {
-        window.showToast(`遅出種別を「${opt.label}」に変更しました`);
-      }
-    });
-
-    buttons.push(btn);
-    toggleWrap.appendChild(btn);
+  options.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.value;
+    opt.textContent = o.label;
+    sel.appendChild(opt);
   });
 
-  // チェックボックス変更時の処理
-  chk.addEventListener('change', () => {
-    if (!attr) attr = {};
-    attr.hasLateShift = chk.checked;
+  let initValue = 'none';
+  if (attr.hasLateShift){
+    initValue = attr.lateShiftType || 'all';
+  }
+  if (!options.some(o => o.value === initValue)){
+    initValue = 'none';
+  }
+  sel.value = initValue;
 
-    // トグルボタンの表示/非表示
-    toggleWrap.style.display = chk.checked ? 'flex' : 'none';
-
-    // チェックを外した場合は lateShiftType もリセット
-    if (!chk.checked) {
+  function applyValue(v){
+    if (v === 'none'){
+      attr.hasLateShift = false;
       delete attr.lateShiftType;
     } else {
-      // チェックを入れた場合、デフォルトで「全日」を選択
-      if (!attr.lateShiftType) {
-        attr.lateShiftType = 'all';
-        buttons[0].classList.add('active');
-        buttons[0].style.backgroundColor = '#3b82f6';
-        buttons[0].style.color = '#fff';
-        buttons[0].style.borderColor = '#3b82f6';
-      }
+      attr.hasLateShift = true;
+      attr.lateShiftType = v;
     }
 
     if (typeof window.saveMetaOnly === 'function') window.saveMetaOnly();
     if (typeof window.renderGrid === 'function') window.renderGrid();
-    if (typeof window.showToast === 'function') {
-      window.showToast(chk.checked ? '遅出を有効にしました' : '遅出を無効にしました');
+  }
+
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    applyValue(v);
+    if (typeof window.showToast === 'function'){
+      const text =
+        v === 'none'    ? '遅出なしに変更しました' :
+        v === 'all'     ? '遅出：全日に変更しました' :
+        v === 'weekday' ? '遅出：平日のみに変更しました' :
+                          '遅出：土日祝のみに変更しました';
+      window.showToast(text);
     }
   });
 
-  // 勤務形態変更時の表示切替(night の場合は非表示)
-  if (selWt) {
-    selWt.addEventListener('change', () => {
-      wrap.style.display = (selWt.value === 'night') ? 'none' : 'flex';
-    });
+  if (selWt){
+    const syncByWorkType = () => {
+      const isNight = selWt.value === 'night';
+      wrap.style.display = isNight ? 'none' : 'flex';
+      sel.disabled = isNight;
+      if (isNight){
+        sel.value = 'none';
+        applyValue('none');
+      }
+    };
+    selWt.addEventListener('change', syncByWorkType);
+    syncByWorkType();
   }
 
-  wrap.appendChild(chkWrap);
-  wrap.appendChild(toggleWrap);
+  wrap.appendChild(label);
+  wrap.appendChild(sel);
   return wrap;
 }
+
 
 
 // --- employeeDialog.js に追加（createQuotaInput関数の後） ---

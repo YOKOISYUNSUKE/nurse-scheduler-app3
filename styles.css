@@ -253,7 +253,11 @@ html, body { height: 100%; }                 /* ビューポート基準を安�
 dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; width:min(760px, calc(100% - 32px)); }
 .attr header{ padding:14px; border-bottom:1px solid var(--border); font-weight:700; }
 .attr .content{ max-height:60vh; overflow:auto; padding:10px 14px; }
-.attr .row{ display:grid; grid-template-columns: 1fr 120px 120px 180px; gap:8px; align-items:center; padding:6px 0; }
+
+
+.attr .row{ display:grid; grid-template-columns: 1fr 60px 110px 90px 90px; gap:4px; align-items:center; padding:6px 0; }
+
+
 .attr footer{ display:flex; justify-content:flex-end; gap:10px; padding:12px 14px; border-top:1px solid var(--border); }
 
 
@@ -263,8 +267,14 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
   padding:4px 6px; border:1px solid var(--border); border-radius:8px; background:#fff; font-size:12px;
 }
 .mini-select:focus{ border-color:var(--accent); box-shadow:0 0 0 2px rgba(37,99,235,.18); outline:none; }
-.mini-select.level{ min-width:52px; }
+.mini-select.level{ min-width:40px; } /* 幅を縮小 */
 .mini-select.work { min-width:60px; }
+
+.level-select{
+  width:50px;          /* 一文字分だけあればよい */
+  min-width:50px;
+  padding:4px 6px;
+}
 
 /* 追加：従業員編集ダイアログの操作ボタン */
 .attr .ctrls{ display:flex; justify-content:flex-end; gap:6px; }
