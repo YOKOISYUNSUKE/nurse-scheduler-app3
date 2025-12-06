@@ -336,6 +336,7 @@ function initInternal(){
     row.appendChild(name);
     row.appendChild(selLv);
     row.appendChild(selWt);
+    row.appendChild(quotaWrap);
     row.appendChild(earlyToggle);
     row.appendChild(lateToggle);
     row.appendChild(forbidWrap);
