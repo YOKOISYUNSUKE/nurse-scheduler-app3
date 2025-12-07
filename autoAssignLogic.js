@@ -582,12 +582,33 @@
     return false;
   }
 
+// autoAssignLogic.js 約470行目付近（normalizeOffToEight関数）
+
   function normalizeOffToEight(startDayIdx, endDayIdx){
 
     // ★従業員順序をランダム化
     let empOrder = [];
     for(let r=0; r<State.employeeCount; r++) empOrder.push(r);
     empOrder = shuffleArray(empOrder);
+    
+    // ★追加：休日超過の従業員を優先的に処理（休日が多い順にソート）
+    const getOffCount = (r) => {
+      let off = 0;
+      for(let d = startDayIdx; d <= endDayIdx; d++){
+        const ds = dateStr(State.windowDates[d]);
+        const mk = getAssign(r, ds);
+        const hasLv = !!getLeaveType(r, ds);
+        if (hasOffByDate(r, ds)){
+          off++;
+        } else if (!mk && !hasLv){
+          off++;
+        }
+      }
+      return off;
+    };
+    
+    // 休日が多い順にソート（厳格化のため超過者を先に処理）
+    empOrder.sort((a, b) => getOffCount(b) - getOffCount(a));
     
     for(const r of empOrder){
       let off=0;
@@ -611,7 +632,11 @@
 
       if (off > needOff){
         let need = off - needOff;
-        for(const d of blanks){
+        
+        // ★追加：空白日を日付順にシャッフルしてから処理（偏り防止）
+        const shuffledBlanks = shuffleArray(blanks.slice());
+        
+        for(const d of shuffledBlanks){
           if (need<=0) break;
 
           const dt = State.windowDates[d];
@@ -641,9 +666,69 @@
             need--;
           }
         }
+        
+        // ★追加：それでも超過している場合は早出・遅出も試す
+        if (need > 0){
+          for(const d of shuffledBlanks){
+            if (need <= 0) break;
+            const ds = dateStr(State.windowDates[d]);
+            if (getAssign(r, ds)) continue; // 既に割当済みならスキップ
+            
+            // 早出を試す
+            if (canAssignEarlyShiftForNormalize(r, d)){
+              if (tryPlace(d, r, '早')){
+                need--;
+                continue;
+              }
+            }
+            
+            // 遅出を試す
+            if (canAssignLateShiftForNormalize(r, d)){
+              if (tryPlace(d, r, '遅')){
+                need--;
+                continue;
+              }
+            }
+          }
+        }
       }
     }
   }
+  
+  // ★追加：normalizeOffToEight用の早出チェック
+  function canAssignEarlyShiftForNormalize(r, dayIdx){
+    const empAttr = State.employeesAttr[r] || {};
+    if (!empAttr.hasEarlyShift) return false;
+    
+    const dt = State.windowDates[dayIdx];
+    const earlyType = empAttr.earlyShiftType || 'all';
+    
+    if (earlyType === 'all') return true;
+    
+    const isWH = isWeekendOrHoliday(dt);
+    if (earlyType === 'weekday') return !isWH;
+    if (earlyType === 'holiday') return isWH;
+    
+    return false;
+  }
+  
+  // ★追加：normalizeOffToEight用の遅出チェック
+  function canAssignLateShiftForNormalize(r, dayIdx){
+    const empAttr = State.employeesAttr[r] || {};
+    if (!empAttr.hasLateShift) return false;
+    
+    const dt = State.windowDates[dayIdx];
+    const lateType = empAttr.lateShiftType || 'all';
+    
+    if (lateType === 'all') return true;
+    
+    const isWH = isWeekendOrHoliday(dt);
+    if (lateType === 'weekday') return !isWH;
+    if (lateType === 'holiday') return isWH;
+    
+    return false;
+  }
+
 
   function isWeekendOrHoliday(dt){
     if (window.HolidayRules && typeof window.HolidayRules.minDayFor === 'function'){
