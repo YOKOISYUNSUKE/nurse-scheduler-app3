@@ -522,34 +522,46 @@ async function syncFromRemote(){
 
 
 
-// 追加：保存のたびにクラウドへ送信（失敗は無視）
+// 保存のたびにクラウドへ送信（失敗は無視）
 async function pushToRemote(){
-  const keys = cloudKeys(); if(!keys.length) return;
+  const keys = cloudKeys(); 
+  if(!keys.length) return;
+  
   try{
     const meta  = readMeta();
     const dates = readDatesStore();
+    
+    // counts設定を確実に取得（早出・遅出含む全項目）
     let countsCfg = null;
     try{
       const raw = localStorage.getItem('sched:counts');
       if (raw) countsCfg = JSON.parse(raw);
     }catch(_){}
+    
+    // フォールバック：ローカルストレージになければwindow.Countsから全項目取得
     if (!countsCfg && window.Counts){
-      const c = window.Counts;
       countsCfg = {
-        DAY_TARGET_WEEKDAY: c.DAY_TARGET_WEEKDAY,
-        DAY_TARGET_WEEKEND_HOLIDAY: c.DAY_TARGET_WEEKEND_HOLIDAY,
-        FIXED_NF: c.FIXED_NF,
-        FIXED_NS: c.FIXED_NS,
-        FIXED_BY_DATE: c.FIXED_BY_DATE
+        DAY_TARGET_WEEKDAY: window.Counts.DAY_TARGET_WEEKDAY,
+        DAY_TARGET_WEEKEND_HOLIDAY: window.Counts.DAY_TARGET_WEEKEND_HOLIDAY,
+        EARLY_TARGET_WEEKDAY: window.Counts.EARLY_TARGET_WEEKDAY,
+        EARLY_TARGET_WEEKEND_HOLIDAY: window.Counts.EARLY_TARGET_WEEKEND_HOLIDAY,
+        LATE_TARGET_WEEKDAY: window.Counts.LATE_TARGET_WEEKDAY,
+        LATE_TARGET_WEEKEND_HOLIDAY: window.Counts.LATE_TARGET_WEEKEND_HOLIDAY,
+        FIXED_NF: window.Counts.FIXED_NF,
+        FIXED_NS: window.Counts.FIXED_NS,
+        FIXED_BY_DATE: window.Counts.FIXED_BY_DATE
       };
     }
 
+    // awaitで順次送信（エラーがあっても続行）
     for (const ck of keys){
-      remotePut(`${ck}:meta`,  meta);
-      remotePut(`${ck}:dates`, dates);
-      if (countsCfg) remotePut(`${ck}:counts`, countsCfg);
+      await remotePut(`${ck}:meta`,  meta).catch(()=>{});
+      await remotePut(`${ck}:dates`, dates).catch(()=>{});
+      if (countsCfg) await remotePut(`${ck}:counts`, countsCfg).catch(()=>{});
     }
-  }catch(_){}
+  }catch(e){
+    console.error('pushToRemote failed:', e);
+  }
 }
 
 
