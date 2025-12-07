@@ -196,14 +196,16 @@
 
       // 再自動割当（別パターン）
       autoAssignRange(start, end);
-      if (window.Rules && typeof window.Rules.applyHolidayLeaveFlags === 'function'){
-        window.Rules.applyHolidayLeaveFlags(State);
+      // 祝日・代休フラグの自動付与（holidaySet を元に「祝」「代」を振る）
+      if (typeof applyHolidayLeaveFlags === 'function') {
+        applyHolidayLeaveFlags(start, end);
       }
       renderGrid();
       paintRange4w();
 
       // ★追加：Aレベル不在帯のアラート（自動割り当て範囲のみチェック）
       checkABandAlert(start, end);
+
 
       const s = State.windowDates[start];
       const e = State.windowDates[end];
