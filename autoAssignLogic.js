@@ -151,20 +151,13 @@
       if (!res.ok){
         clearAssign(r, ds);
         return false;
-      } else {
-        const nextIdx = dayIdx + 1;
-        if (dayIdx === State.range4wStart + 27 && nextIdx < State.windowDates.length){
-          const nds = dateStr(State.windowDates[nextIdx]);
-          setLocked(r, nds, true);
-          const nextCell = grid.querySelector(`td[data-row="${r}"][data-day="${nextIdx}"]`);
-          if (nextCell) nextCell.classList.add('locked');
-        }
       }
     }
     return true;
   }
 
-  // ★追加：配列をシャッフルする関数（Fisher-Yatesアルゴリズム）
+
+  // 配列をシャッフルする関数（Fisher-Yatesアルゴリズム）
   // ---- ヘルパー：配列シャッフル ----
   function shuffleArray(arr){
     // 元配列を壊さないようにコピー
@@ -1196,7 +1189,7 @@ function autoAssignRange(startDayIdx, endDayIdx){
     return (window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3;
   }
 
-  // ★追加: 遅出（遅）対象者かチェック
+  // 遅出（遅）対象者かチェック
   function canAssignLateShift(r, dayIdx){
     const empAttr = State.employeesAttr[r] || {};
     if (!empAttr.hasLateShift) return false;
@@ -1234,7 +1227,7 @@ function autoAssignRange(startDayIdx, endDayIdx){
           fillWith(d, FIXED_NF - nf, ['☆','◆'], !hasANf);
           nf = countDayStats(d).nf;
           
-          // ★追加：超過分を厳格に削除
+          // 超過分を厳格に削除
           if (nf > FIXED_NF) {
             enforceExactCount(d, FIXED_NF, FIXED_NS);
             nf = countDayStats(d).nf;
@@ -1248,7 +1241,7 @@ function autoAssignRange(startDayIdx, endDayIdx){
           fillWith(d, FIXED_NS - ns, ['★','●'], !hasANs);
           ns = countDayStats(d).ns;
           
-          // ★追加：超過分を厳格に削除
+          // 超過分を厳格に削除
           if (ns > FIXED_NS) {
             enforceExactCount(d, FIXED_NF, FIXED_NS);
             ns = countDayStats(d).ns;
