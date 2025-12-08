@@ -39,6 +39,27 @@
     }
     return { star, half };
   }
+  // 三部制の◆のみカウント
+  function countNfForEmp(ctx, r, startIdx, endIdx){
+    let count = 0;
+    for(let d=startIdx; d<=endIdx; d++){
+      const ds = dateStr(ctx.dates[d]);
+      const mk = ctx.getAssign(r, ds);
+      if (mk === '◆') count++;
+    }
+    return count;
+  }
+
+  // 三部制の●のみカウント
+  function countNsForEmp(ctx, r, startIdx, endIdx){
+    let count = 0;
+    for(let d=startIdx; d<=endIdx; d++){
+      const ds = dateStr(ctx.dates[d]);
+      const mk = ctx.getAssign(r, ds);
+      if (mk === '●') count++;
+    }
+    return count;
+  }
 
   // 夜勤回数の不足度スコア（大きいほど優先／-Infinity は候補除外）
   function quotaDeficit(ctx, r, mark, startIdx, endIdx){
@@ -52,7 +73,7 @@
         return 100 + (quota - star);
       }
       if (wt === 'two'){
-        // ★修正：二部制も個別の☆回数を参照（未設定なら4）
+        // 二部制も個別の☆回数を参照（未設定なら4）
         const quota = ctx.getEmpAttr(r)?.twoShiftQuota || 4;
         if (star >= quota) return -Infinity;
         return 100 + (quota - star) * 20;  
@@ -61,9 +82,20 @@
     }
 if (mark === '◆' || mark === '●'){
   if (wt !== 'three') return -Infinity;
-  if (half >= 8) return -Infinity; // 三部制：4週間で◆+●≤8
-  // ★修正：三部制従業員の夜勤回数をより強く公平化（重みを増加）
-  return 100 + (8 - half) * 20;   
+  
+  // 三部制も個別の◆/●回数を参照
+  if (mark === '◆') {
+    const nfQuota = ctx.getEmpAttr(r)?.threeShiftNfQuota || 5;
+    const nfCount = countNfForEmp(ctx, r, startIdx, endIdx);
+    if (nfCount >= nfQuota) return -Infinity;
+    return 100 + (nfQuota - nfCount) * 20;
+  }
+  if (mark === '●') {
+    const nsQuota = ctx.getEmpAttr(r)?.threeShiftNsQuota || 5;
+    const nsCount = countNsForEmp(ctx, r, startIdx, endIdx);
+    if (nsCount >= nsQuota) return -Infinity;
+    return 100 + (nsQuota - nsCount) * 20;
+  }
 }
     return 0; // 〇などは対象外
   }
@@ -368,8 +400,13 @@ out = out
         } else if (wt === 'two'){
           if (star < 4) return false; // 二部制：4週間で☆≦4（下限も4）
         } else { // three
-          if (half < 8) return false; // 三部制：4週間で◆+●≦8（下限も8）
-        }
+        // ★修正：三部制も個別の◆/●回数を参照
+        const nfQuota = ctx.getEmpAttr(r)?.threeShiftNfQuota || 5;
+        const nsQuota = ctx.getEmpAttr(r)?.threeShiftNsQuota || 5;
+        const nfCount = countNfForEmp(ctx, r, startIdx, endIdx);
+        const nsCount = countNsForEmp(ctx, r, startIdx, endIdx);
+        if (nfCount < nfQuota || nsCount < nsQuota) return false;
+      }
       }
       return true;
     }

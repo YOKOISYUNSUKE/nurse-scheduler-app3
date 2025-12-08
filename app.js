@@ -309,12 +309,18 @@ window.setLocked = setLocked; // ★追加
           const quota = (State.employeesAttr[r]?.nightQuota) || 10;
           if (star !== quota) return `${name} のローリング4週間（${rng}）の「☆」は${quota}件ちょうどが必要：${star}/${quota}`;
         } else if (wt === 'two'){
-          // ★修正：二部制も個別の☆回数を参照（未設定なら4）
+          // 二部制も個別の☆回数を参照（未設定なら4）
           const quota = (State.employeesAttr[r]?.twoShiftQuota) || 4;
           if (star !== quota) return `${name} のローリング4週間（${rng}）の「☆」は${quota}件必要：${star}/${quota}`;
-        } else if (wt === 'three'){
-          if (half < 8 || half > 10) return `${name} のローリング4週間（${rng}）の（◆＋●）は8〜10件を許容（原則10件を目指す）：${half}/8〜10`;
+      } else if (wt === 'three'){
+        // 三部制も個別の◆/●回数を参照
+        const nfQuota = (State.employeesAttr[r]?.threeShiftNfQuota) || 5;
+        const nsQuota = (State.employeesAttr[r]?.threeShiftNsQuota) || 5;
+        const totalQuota = nfQuota + nsQuota;
+        if (half < totalQuota - 2 || half > totalQuota + 2) {
+          return `${name} のローリング4週間（${rng}）の（◆＋●）は${totalQuota-2}〜${totalQuota+2}件を許容：${half}件`;
         }
+      }
 
         // 4週間の休日日数（希望休＋空白）を ±1許容（7〜9日）で厳格化
         const offReq = requiredOffFor28(r, start, endDt);
@@ -603,7 +609,9 @@ function saveMetaOnly(){
     level: attr.level,
     workType: attr.workType,
     nightQuota: attr.nightQuota,
-    twoShiftQuota: attr.twoShiftQuota,  // ★追加
+    twoShiftQuota: attr.twoShiftQuota,
+    threeShiftNfQuota: attr.threeShiftNfQuota,
+    threeShiftNsQuota: attr.threeShiftNsQuota,
     shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
     hasEarlyShift: attr.hasEarlyShift,
     earlyShiftType: attr.earlyShiftType,
@@ -714,7 +722,9 @@ if (Array.isArray(meta.employees) && meta.employees.length){
     level: attr.level || 'B',
     workType: attr.workType || 'three',
     nightQuota: attr.nightQuota,
-    twoShiftQuota: attr.twoShiftQuota,  
+    twoShiftQuota: attr.twoShiftQuota, 
+    threeShiftNfQuota: attr.threeShiftNfQuota,
+    threeShiftNsQuota: attr.threeShiftNsQuota,
     shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
     hasEarlyShift: attr.hasEarlyShift || false,
     earlyShiftType: attr.earlyShiftType || 'all',

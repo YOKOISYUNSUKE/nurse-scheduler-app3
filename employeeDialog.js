@@ -304,6 +304,8 @@ function initInternal(){
     // 夜勤ノルマ入力
     const quotaWrap = createQuotaInput(State.employeesAttr[i], selWt);
     const twoShiftWrap = createTwoShiftQuotaInput(State.employeesAttr[i], selWt); 
+    const threeShiftNfWrap = createThreeShiftNfQuotaInput(State.employeesAttr[i], selWt);
+    const threeShiftNsWrap = createThreeShiftNsQuotaInput(State.employeesAttr[i], selWt);
 
     // 禁忌ペア選択
     const forbidWrap = createForbiddenPairsSelect(i, State);
@@ -341,6 +343,8 @@ function initInternal(){
     row.appendChild(earlyToggle);
     row.appendChild(lateToggle);
     row.appendChild(twoShiftWrap);
+    row.appendChild(threeShiftNfWrap);
+    row.appendChild(threeShiftNsWrap);
     row.appendChild(forbidWrap);
     row.appendChild(btnDur);        // ★追加：勤務時間編集ボタン
     row.appendChild(durationsWrap); // ★追加：勤務時間フィールド
@@ -661,6 +665,70 @@ function initInternal(){
 
     return quotaWrap;
   }
+  // 三部制用の◆回数入力欄を作成
+  function createThreeShiftNfQuotaInput(attr, selWt){
+    const quotaWrap = document.createElement('div');
+    quotaWrap.className = 'three-shift-nf-quota-wrap';
+    quotaWrap.style.display = (attr?.workType || 'three') === 'three' ? 'flex' : 'none';
+    quotaWrap.style.alignItems = 'center';
+    quotaWrap.style.gap = '4px';
+
+    const quotaLabel = document.createElement('span');
+    quotaLabel.textContent = '◆回数:';
+    quotaLabel.style.fontSize = '0.9em';
+
+    const quotaInput = document.createElement('input');
+    quotaInput.type = 'number';
+    quotaInput.className = 'three-shift-nf-quota-input';
+    quotaInput.style.width = '50px';
+    quotaInput.min = '1';
+    quotaInput.max = '10';
+    quotaInput.value = attr?.threeShiftNfQuota || 5;
+    quotaInput.title = '三部制の4週間あたりの◆の目標回数（1〜10）';
+
+    quotaWrap.appendChild(quotaLabel);
+    quotaWrap.appendChild(quotaInput);
+
+    // 勤務形態変更時に表示/非表示を切り替え
+    selWt.addEventListener('change', () => {
+      quotaWrap.style.display = selWt.value === 'three' ? 'flex' : 'none';
+    });
+
+    return quotaWrap;
+  }
+
+  // 三部制用の●回数入力欄を作成
+  function createThreeShiftNsQuotaInput(attr, selWt){
+    const quotaWrap = document.createElement('div');
+    quotaWrap.className = 'three-shift-ns-quota-wrap';
+    quotaWrap.style.display = (attr?.workType || 'three') === 'three' ? 'flex' : 'none';
+    quotaWrap.style.alignItems = 'center';
+    quotaWrap.style.gap = '4px';
+
+    const quotaLabel = document.createElement('span');
+    quotaLabel.textContent = '●回数:';
+    quotaLabel.style.fontSize = '0.9em';
+
+    const quotaInput = document.createElement('input');
+    quotaInput.type = 'number';
+    quotaInput.className = 'three-shift-ns-quota-input';
+    quotaInput.style.width = '50px';
+    quotaInput.min = '1';
+    quotaInput.max = '10';
+    quotaInput.value = attr?.threeShiftNsQuota || 5;
+    quotaInput.title = '三部制の4週間あたりの●の目標回数（1〜10）';
+
+    quotaWrap.appendChild(quotaLabel);
+    quotaWrap.appendChild(quotaInput);
+
+    // 勤務形態変更時に表示/非表示を切り替え
+    selWt.addEventListener('change', () => {
+      quotaWrap.style.display = selWt.value === 'three' ? 'flex' : 'none';
+    });
+
+    return quotaWrap;
+  }
+
 
 
 // --- 早出(early shift)・遅出(late shift) 選択（スクロール式セレクト） ---
@@ -1186,6 +1254,8 @@ function readAttrDialogToState(){
       const nameInput = row.querySelector('input[data-role="name"]');
       const quotaInput = row.querySelector('.quota-input');
       const twoShiftQuotaInput = row.querySelector('.two-shift-quota-input'); 
+      const threeShiftNfQuotaInput = row.querySelector('.three-shift-nf-quota-input');
+      const threeShiftNsQuotaInput = row.querySelector('.three-shift-ns-quota-input');
       // duration-select はクラスで取得（各 select に data-mark 属性は既に設定済み）
       const durSelects = Array.from(row.querySelectorAll('select.duration-select'));
 
@@ -1194,15 +1264,21 @@ function readAttrDialogToState(){
 
       const nightQuota = quotaInput ? parseInt(quotaInput.value, 10) : undefined;
       const twoShiftQuota = twoShiftQuotaInput ? parseInt(twoShiftQuotaInput.value, 10) : undefined;  
+      const threeShiftNfQuota = threeShiftNfQuotaInput ? parseInt(threeShiftNfQuotaInput.value, 10) : undefined;
+      const threeShiftNsQuota = threeShiftNsQuotaInput ? parseInt(threeShiftNsQuotaInput.value, 10) : undefined;
+  
 
-      // 既存の属性を保持しつつ更新（shiftDurations 等を上書きしない）
+   // 既存の属性を保持しつつ更新（shiftDurations 等を上書きしない）
       const prev = State.employeesAttr[i] || {};
       const merged = Object.assign({}, prev, {
         level: selLv ? selLv.value : (prev.level || 'B'),
         workType: selWt ? selWt.value : (prev.workType || 'three'),
         nightQuota: (selWt && selWt.value === 'night' && Number.isInteger(nightQuota)) ? nightQuota : (prev.nightQuota),
-        twoShiftQuota: (selWt && selWt.value === 'two' && Number.isInteger(twoShiftQuota)) ? twoShiftQuota : (prev.twoShiftQuota)  
+        twoShiftQuota: (selWt && selWt.value === 'two' && Number.isInteger(twoShiftQuota)) ? twoShiftQuota : (prev.twoShiftQuota),
+        threeShiftNfQuota: (selWt && selWt.value === 'three' && Number.isInteger(threeShiftNfQuota)) ? threeShiftNfQuota : (prev.threeShiftNfQuota),
+        threeShiftNsQuota: (selWt && selWt.value === 'three' && Number.isInteger(threeShiftNsQuota)) ? threeShiftNsQuota : (prev.threeShiftNsQuota)
       });
+
 
       // 読み取り：早出トグルの状態を取り込む（当該行に存在する場合）
       const earlyChk = row.querySelector('.early-toggle input[type="checkbox"]');
