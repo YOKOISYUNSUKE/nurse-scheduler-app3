@@ -306,9 +306,12 @@ window.setLocked = setLocked; // ★追加
         const rng = `${start.getMonth()+1}/${start.getDate()}〜${endDt.getMonth()+1}/${endDt.getDate()}`;
 
         if (wt === 'night'){
-          if (star !== 10) return `${name} のローリング4週間（${rng}）の「☆」は10件ちょうどが必要：${star}/10`;
+          const quota = (State.employeesAttr[r]?.nightQuota) || 10;
+          if (star !== quota) return `${name} のローリング4週間（${rng}）の「☆」は${quota}件ちょうどが必要：${star}/${quota}`;
         } else if (wt === 'two'){
-          if (star !== 4) return `${name} のローリング4週間（${rng}）の「☆」は4件必要：${star}/4`;
+          // ★修正：二部制も個別の☆回数を参照（未設定なら4）
+          const quota = (State.employeesAttr[r]?.twoShiftQuota) || 4;
+          if (star !== quota) return `${name} のローリング4週間（${rng}）の「☆」は${quota}件必要：${star}/${quota}`;
         } else if (wt === 'three'){
           if (half < 8 || half > 10) return `${name} のローリング4週間（${rng}）の（◆＋●）は8〜10件を許容（原則10件を目指す）：${half}/8〜10`;
         }
@@ -600,12 +603,14 @@ function saveMetaOnly(){
     level: attr.level,
     workType: attr.workType,
     nightQuota: attr.nightQuota,
+    twoShiftQuota: attr.twoShiftQuota,  // ★追加
     shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
-    hasEarlyShift: attr.hasEarlyShift,      // ★追加：早出フラグ
-    earlyShiftType: attr.earlyShiftType,    // ★追加：早出種別（all/weekday/holiday）
-    hasLateShift: attr.hasLateShift,        // ★追加：遅出フラグ
-    lateShiftType: attr.lateShiftType       // ★追加：遅出種別（all/weekday/holiday）
+    hasEarlyShift: attr.hasEarlyShift,
+    earlyShiftType: attr.earlyShiftType,
+    hasLateShift: attr.hasLateShift,
+    lateShiftType: attr.lateShiftType
   }));
+
   meta.range4wStart  = State.range4wStart;
   meta.forbiddenPairs = Array.from(State.forbiddenPairs.entries()).map(([k, set]) => [k, Array.from(set)]);
   // ★追加：ShiftDurations のグローバル既定を保存（存在すれば）
@@ -709,11 +714,12 @@ if (Array.isArray(meta.employees) && meta.employees.length){
     level: attr.level || 'B',
     workType: attr.workType || 'three',
     nightQuota: attr.nightQuota,
+    twoShiftQuota: attr.twoShiftQuota,  
     shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
-    hasEarlyShift: attr.hasEarlyShift || false,             // 早出フラグ復元
-    earlyShiftType: attr.earlyShiftType || 'all',           // 早出種別復元（デフォルトは全日）
-    hasLateShift: attr.hasLateShift || false,               // 遅出フラグ復元
-    lateShiftType: attr.lateShiftType || 'all'              // 遅出種別復元（デフォルトは全日）
+    hasEarlyShift: attr.hasEarlyShift || false,
+    earlyShiftType: attr.earlyShiftType || 'all',
+    hasLateShift: attr.hasLateShift || false,
+    lateShiftType: attr.lateShiftType || 'all'
   }));
  } else {
    State.employeesAttr = State.employees.map(()=> ({ 

@@ -303,6 +303,7 @@ function initInternal(){
 
     // 夜勤ノルマ入力
     const quotaWrap = createQuotaInput(State.employeesAttr[i], selWt);
+    const twoShiftWrap = createTwoShiftQuotaInput(State.employeesAttr[i], selWt); 
 
     // 禁忌ペア選択
     const forbidWrap = createForbiddenPairsSelect(i, State);
@@ -339,6 +340,7 @@ function initInternal(){
     row.appendChild(quotaWrap);
     row.appendChild(earlyToggle);
     row.appendChild(lateToggle);
+    row.appendChild(twoShiftWrap);
     row.appendChild(forbidWrap);
     row.appendChild(btnDur);        // ★追加：勤務時間編集ボタン
     row.appendChild(durationsWrap); // ★追加：勤務時間フィールド
@@ -628,6 +630,38 @@ function initInternal(){
 
     return quotaWrap;
   }
+// 二部制用の☆回数入力欄を作成
+  function createTwoShiftQuotaInput(attr, selWt){
+    const quotaWrap = document.createElement('div');
+    quotaWrap.className = 'two-shift-quota-wrap';
+    quotaWrap.style.display = (attr?.workType || 'three') === 'two' ? 'flex' : 'none';
+    quotaWrap.style.alignItems = 'center';
+    quotaWrap.style.gap = '4px';
+
+    const quotaLabel = document.createElement('span');
+    quotaLabel.textContent = '☆回数:';
+    quotaLabel.style.fontSize = '0.9em';
+
+    const quotaInput = document.createElement('input');
+    quotaInput.type = 'number';
+    quotaInput.className = 'two-shift-quota-input';
+    quotaInput.style.width = '50px';
+    quotaInput.min = '1';
+    quotaInput.max = '10';
+    quotaInput.value = attr?.twoShiftQuota || 4;
+    quotaInput.title = '二部制の4週間あたりの☆の目標回数（1〜10）';
+
+    quotaWrap.appendChild(quotaLabel);
+    quotaWrap.appendChild(quotaInput);
+
+    // 勤務形態変更時に☆回数入力欄の表示/非表示を切り替え
+    selWt.addEventListener('change', () => {
+      quotaWrap.style.display = selWt.value === 'two' ? 'flex' : 'none';
+    });
+
+    return quotaWrap;
+  }
+
 
 // --- 早出(early shift)・遅出(late shift) 選択（スクロール式セレクト） ---
 
@@ -1151,6 +1185,7 @@ function readAttrDialogToState(){
       const selWt = row.querySelector('select[data-role="worktype"]') || row.querySelector('select.worktype-select');
       const nameInput = row.querySelector('input[data-role="name"]');
       const quotaInput = row.querySelector('.quota-input');
+      const twoShiftQuotaInput = row.querySelector('.two-shift-quota-input'); 
       // duration-select はクラスで取得（各 select に data-mark 属性は既に設定済み）
       const durSelects = Array.from(row.querySelectorAll('select.duration-select'));
 
@@ -1158,13 +1193,15 @@ function readAttrDialogToState(){
       State.employees[i] = nm || `職員${pad2(i+1)}`;
 
       const nightQuota = quotaInput ? parseInt(quotaInput.value, 10) : undefined;
+      const twoShiftQuota = twoShiftQuotaInput ? parseInt(twoShiftQuotaInput.value, 10) : undefined;  
 
       // 既存の属性を保持しつつ更新（shiftDurations 等を上書きしない）
       const prev = State.employeesAttr[i] || {};
       const merged = Object.assign({}, prev, {
         level: selLv ? selLv.value : (prev.level || 'B'),
         workType: selWt ? selWt.value : (prev.workType || 'three'),
-        nightQuota: (selWt && selWt.value === 'night' && Number.isInteger(nightQuota)) ? nightQuota : (prev.nightQuota)
+        nightQuota: (selWt && selWt.value === 'night' && Number.isInteger(nightQuota)) ? nightQuota : (prev.nightQuota),
+        twoShiftQuota: (selWt && selWt.value === 'two' && Number.isInteger(twoShiftQuota)) ? twoShiftQuota : (prev.twoShiftQuota)  
       });
 
       // 読み取り：早出トグルの状態を取り込む（当該行に存在する場合）

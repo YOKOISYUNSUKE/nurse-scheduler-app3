@@ -46,16 +46,18 @@
     const { star, half } = countNightStatsForEmp(ctx, r, startIdx, endIdx);
     if (mark === '☆' || mark === '★'){
       if (wt === 'night'){
-        // ★修正：個別の夜勤ノルマを参照（未設定なら10）
+        // 夜勤専従：個別の夜勤ノルマを参照（未設定なら10）
         const quota = ctx.getEmpAttr(r)?.nightQuota || 10;
-        if (star >= quota) return -Infinity; // 目標に到達したら候補から外す
-        return 100 + (quota - star);         // ノルマまで強く優先
+        if (star >= quota) return -Infinity;
+        return 100 + (quota - star);
       }
       if (wt === 'two'){
-        if (star >= 4) return -Infinity;
-        return 100 + (4 - star) * 20;  
+        // ★修正：二部制も個別の☆回数を参照（未設定なら4）
+        const quota = ctx.getEmpAttr(r)?.twoShiftQuota || 4;
+        if (star >= quota) return -Infinity;
+        return 100 + (quota - star) * 20;  
       }
-      return -Infinity; // other は安全側で除外
+      return -Infinity;
     }
 if (mark === '◆' || mark === '●'){
   if (wt !== 'three') return -Infinity;
