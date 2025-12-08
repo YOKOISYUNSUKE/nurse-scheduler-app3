@@ -956,7 +956,7 @@ for (let r = 0; r < p.employeeCount; r++){
       }
     }
 
-    // ★追加：☆★ペア間隔（勤務形態で可変）
+    // ☆★ペア間隔（勤務形態で可変）
 //   night: >=0日 / others: >=3日
     for (let r = 0; r < p.employeeCount; r++){
       const wt = (typeof p.getWorkType === 'function') ? (p.getWorkType(r) || 'three') : 'three';
@@ -979,7 +979,7 @@ for (let r = 0; r < p.employeeCount; r++){
     }
   }
 
-  // ★新規：夜勤専従の連続ペア≦2（「☆★☆★☆★」禁止）
+  // 夜勤専従の連続ペア≦2（「☆★☆★☆★」禁止）
   for (let r = 0; r < p.employeeCount; r++){
     const wt = (typeof p.getWorkType === 'function') ? (p.getWorkType(r) || 'three') : 'three';
     if (wt !== 'night') continue;
@@ -1001,7 +1001,7 @@ for (let r = 0; r < p.employeeCount; r++){
     }
   }
 
-  // ★新規：「☆★」の次の2日は休（希望休 or 未割当）必須
+  // 「☆★」の次の2日は休（希望休 or 未割当）必須
 
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 3; d++){
@@ -1025,7 +1025,7 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
       }
     }
 
-    // ★★ 新ルール：単一休みは連続二回まで（「休」1日のブロックが3連続以上を禁止）
+    // 単一休みは連続二回まで（「休」1日のブロックが3連続以上を禁止）
     for (let r = 0; r < p.employeeCount; r++){
       let consecSingles = 0;
       let d = 0;
@@ -1059,7 +1059,7 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
       }
     }
 
-    // ★新規：休日と休日のインターバル≦5（＝6連勤禁止）
+    // 休日と休日のインターバル≦5（＝6連勤禁止）
     for (let r = 0; r < p.employeeCount; r++){
       let streak = 0;
       for (let d = 0; d < p.dates.length; d++){
@@ -1077,7 +1077,7 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
       }
     }
 
-    // ★追加：連休（…休休）と連休（休休…）の“間”≦13日（31日窓内で2ブロック以上ある場合のみ）
+    // 連休（…休休）と連休（休休…）の“間”≦13日（31日窓内で2ブロック以上ある場合のみ）
     for (let r = 0; r < p.employeeCount; r++){
       const blocks = [];
       let i = 0;
@@ -1109,7 +1109,7 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
       }
     }
 
-    // ★新規：連休（2日以上の“休”連続）を各職員で月2回以上（31日窓）必須
+    // 連休（2日以上の“休”連続）を各職員で月2回以上（31日窓）必須
     for (let r = 0; r < p.employeeCount; r++){
       const blocks = [];
       let i = 0;
@@ -1132,6 +1132,46 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
           type: 'RENKYU_MIN2',
           expected: '>=2',
           actual: blocks.length
+        });
+      }
+    }
+
+    // 全従業員の4週8休（±1許容）を厳格チェック
+    for (let r = 0; r < p.employeeCount; r++){
+      // 4週間の休日数を集計
+      let offCount = 0;
+      for (let d = 0; d < p.dates.length && d < 28; d++){
+        const ds = dateStr(p.dates[d]);
+        const mk = p.getAssign(r, ds);
+        const hasLv = (typeof p.getLeaveType === 'function') ? !!p.getLeaveType(r, ds) : false;
+        const off = (typeof p.hasOffByDate === 'function') ? p.hasOffByDate(r, ds) : false;
+        // 特別休暇がある日は休日扱いしない（勤務日としてカウント）
+        const isRest = (off || !mk) && !hasLv;
+        if (isRest) offCount++;
+      }
+
+      // ★始まり/☆終わりを判定
+      const dsStart = dateStr(p.dates[0]);
+      const dsEnd = dateStr(p.dates[Math.min(27, p.dates.length - 1)]);
+      const mkStart = p.getAssign(r, dsStart);
+      const mkEnd = p.getAssign(r, dsEnd);
+      const starStart = (mkStart === '★');
+      const starEnd = (mkEnd === '☆');
+
+      let base = 8;
+      if (starStart && !starEnd) base = 7;
+      else if (!starStart && starEnd) base = 9;
+
+      const minOff = Math.max(7, base - 1);
+      const maxOff = Math.min(9, base + 1);
+
+      if (offCount < minOff || offCount > maxOff){
+        errors.push({
+          rowIndex: r,
+          dayIndex: 0,
+          type: 'OFF_COUNT_4W8REST',
+          expected: `${minOff}〜${maxOff}`,
+          actual: offCount
         });
       }
     }

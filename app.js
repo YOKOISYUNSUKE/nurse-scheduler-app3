@@ -266,16 +266,31 @@ window.setLocked = setLocked; // ★追加
 
 
   // 〈新規〉28日窓の休日日数の必要量（★始まり/☆終わり 補正）
+  // ★全従業員に適用（夜勤専従含む）
+  // 戻り値: { base: 基準値(7/8/9), min: 最小許容, max: 最大許容 }
   function requiredOffFor28(r, startDt, endDt){
     const dsStart = dateStr(startDt);
     const dsEnd   = dateStr(endDt);
     const mkStart = globalGetAssign(r, dsStart);
     const mkEnd   = globalGetAssign(r, dsEnd);
-    const starStart = (mkStart === '★'); // ★始まり→7休
-    const starEnd   = (mkEnd   === '☆'); // ☆終わり→9休
-    if (starStart && !starEnd) return 7;
-    if (!starStart && starEnd) return 9;
-    return 8; // 両方 or どちらでもない → 8休
+    const starStart = (mkStart === '★'); // ★始まり→7休基準
+    const starEnd   = (mkEnd   === '☆'); // ☆終わり→9休基準
+
+    let base;
+    if (starStart && !starEnd) {
+      base = 7;
+    } else if (!starStart && starEnd) {
+      base = 9;
+    } else {
+      base = 8;
+    }
+
+    // 全従業員（二部制・三部制・日勤のみ・夜勤専従）に ±1 許容（7〜9日の範囲）
+    return {
+      base: base,
+      min: Math.max(7, base - 1),  // 最小7日
+      max: Math.min(9, base + 1)   // 最大9日
+    };
   }
 
   // ★ローリング4週間（過去を含む）検証：違反があればエラーメッセージ文字列を返す
@@ -298,10 +313,10 @@ window.setLocked = setLocked; // ★追加
           if (half < 8 || half > 10) return `${name} のローリング4週間（${rng}）の（◆＋●）は8〜10件を許容（原則10件を目指す）：${half}/8〜10`;
         }
 
-        // ★追加：4週間の休日日数（希望休＋空白）を 7/8/9 日に強制
-        const required = requiredOffFor28(r, start, endDt);
-        if (off !== required){
-          return `${name} のローリング4週間（${rng}）の休日は${required}日必要：${off}/${required}`;
+        // 4週間の休日日数（希望休＋空白）を ±1許容（7〜9日）で厳格化
+        const offReq = requiredOffFor28(r, start, endDt);
+        if (off < offReq.min || off > offReq.max){
+          return `${name} のローリング4週間（${rng}）の休日は${offReq.min}〜${offReq.max}日必要：${off}日`;
         }
       }
     }

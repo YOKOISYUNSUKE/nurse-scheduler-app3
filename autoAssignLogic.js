@@ -624,16 +624,17 @@
         }
       }
 
-      const needOff = (function(){
+      const offReq = (function(){
         const sDt = State.windowDates[startDayIdx];
         const eDt = State.windowDates[endDayIdx];
         return window.requiredOffFor28(r, sDt, eDt);
       })();
 
-      if (off > needOff){
-        let need = off - needOff;
+      // ±1許容: 最大許容値を超えている場合のみ削減
+      if (off > offReq.max){
+        let need = off - offReq.base; // 基準値まで戻す
         
-        // ★追加：空白日を日付順にシャッフルしてから処理（偏り防止）
+        // 空白日を日付順にシャッフルしてから処理（偏り防止）
         const shuffledBlanks = shuffleArray(blanks.slice());
         
         for(const d of shuffledBlanks){
