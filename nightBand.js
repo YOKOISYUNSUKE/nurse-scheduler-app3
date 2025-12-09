@@ -85,13 +85,13 @@ if (mark === '◆' || mark === '●'){
   
   // 三部制も個別の◆/●回数を参照
   if (mark === '◆') {
-    const nfQuota = ctx.getEmpAttr(r)?.threeShiftNfQuota || 5;
+    const nfQuota = ctx.getEmpAttr(r)?.threeShiftNfQuota ?? 5;
     const nfCount = countNfForEmp(ctx, r, startIdx, endIdx);
     if (nfCount >= nfQuota) return -Infinity;
     return 100 + (nfQuota - nfCount) * 20;
   }
   if (mark === '●') {
-    const nsQuota = ctx.getEmpAttr(r)?.threeShiftNsQuota || 5;
+    const nsQuota = ctx.getEmpAttr(r)?.threeShiftNsQuota ?? 5;
     const nsCount = countNsForEmp(ctx, r, startIdx, endIdx);
     if (nsCount >= nsQuota) return -Infinity;
     return 100 + (nsQuota - nsCount) * 20;
@@ -401,8 +401,8 @@ out = out
           if (star < 4) return false; // 二部制：4週間で☆≦4（下限も4）
         } else { // three
         // ★修正：三部制も個別の◆/●回数を参照
-        const nfQuota = ctx.getEmpAttr(r)?.threeShiftNfQuota || 5;
-        const nsQuota = ctx.getEmpAttr(r)?.threeShiftNsQuota || 5;
+        const nfQuota = ctx.getEmpAttr(r)?.threeShiftNfQuota ?? 5;
+        const nsQuota = ctx.getEmpAttr(r)?.threeShiftNsQuota ?? 5;
         const nfCount = countNfForEmp(ctx, r, startIdx, endIdx);
         const nsCount = countNsForEmp(ctx, r, startIdx, endIdx);
         if (nfCount < nfQuota || nsCount < nsQuota) return false;

@@ -314,8 +314,8 @@ window.setLocked = setLocked; // ★追加
           if (star !== quota) return `${name} のローリング4週間（${rng}）の「☆」は${quota}件必要：${star}/${quota}`;
       } else if (wt === 'three'){
         // 三部制も個別の◆/●回数を参照
-        const nfQuota = (State.employeesAttr[r]?.threeShiftNfQuota) || 5;
-        const nsQuota = (State.employeesAttr[r]?.threeShiftNsQuota) || 5;
+        const nfQuota = (State.employeesAttr[r]?.threeShiftNfQuota ?? 5);
+        const nsQuota = (State.employeesAttr[r]?.threeShiftNsQuota ?? 5);
         const totalQuota = nfQuota + nsQuota;
         if (half < totalQuota - 2 || half > totalQuota + 2) {
           return `${name} のローリング4週間（${rng}）の（◆＋●）は${totalQuota-2}〜${totalQuota+2}件を許容：${half}件`;

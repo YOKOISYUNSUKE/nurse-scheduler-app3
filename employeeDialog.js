@@ -622,11 +622,12 @@ function initInternal(){
     quotaInput.style.width = '50px';
     quotaInput.min = '0';
     quotaInput.max = '15';
-    quotaInput.value = attr?.nightQuota || 10;
+    quotaInput.value = attr?.nightQuota ?? 10;
     quotaInput.title = '夜勤専従の4週間あたりの☆の目標回数';
 
     quotaWrap.appendChild(quotaLabel);
     quotaWrap.appendChild(quotaInput);
+
 
     // 勤務形態変更時にノルマ表示切替
     selWt.addEventListener('change', () => {
@@ -653,11 +654,12 @@ function initInternal(){
     quotaInput.style.width = '50px';
     quotaInput.min = '1';
     quotaInput.max = '10';
-    quotaInput.value = attr?.twoShiftQuota || 4;
+    quotaInput.value = attr?.twoShiftQuota ?? 4;
     quotaInput.title = '二部制の4週間あたりの☆の目標回数（1〜10）';
 
     quotaWrap.appendChild(quotaLabel);
     quotaWrap.appendChild(quotaInput);
+
 
     // 勤務形態変更時に☆回数入力欄の表示/非表示を切り替え
     selWt.addEventListener('change', () => {
@@ -684,11 +686,12 @@ function initInternal(){
     quotaInput.style.width = '50px';
     quotaInput.min = '0';
     quotaInput.max = '10';
-    quotaInput.value = attr?.threeShiftNfQuota || 5;
+    quotaInput.value = attr?.threeShiftNfQuota ?? 5;
     quotaInput.title = '三部制の4週間あたりの◆の目標回数（0〜10）';
 
     quotaWrap.appendChild(quotaLabel);
     quotaWrap.appendChild(quotaInput);
+
 
     // 勤務形態変更時に表示/非表示を切り替え
     selWt.addEventListener('change', () => {
@@ -716,11 +719,12 @@ function initInternal(){
     quotaInput.style.width = '50px';
     quotaInput.min = '0';
     quotaInput.max = '10';
-    quotaInput.value = attr?.threeShiftNsQuota || 5;
+    quotaInput.value = attr?.threeShiftNsQuota ?? 5;
     quotaInput.title = '三部制の4週間あたりの●の目標回数（0〜10）';
 
     quotaWrap.appendChild(quotaLabel);
     quotaWrap.appendChild(quotaInput);
+
 
     // 勤務形態変更時に表示/非表示を切り替え
     selWt.addEventListener('change', () => {
