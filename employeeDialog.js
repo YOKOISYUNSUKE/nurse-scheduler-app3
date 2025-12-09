@@ -686,7 +686,7 @@ function initInternal(){
     quotaInput.style.width = '50px';
     quotaInput.min = '0';
     quotaInput.max = '10';
-    quotaInput.value = attr?.threeShiftNfQuota ?? 5;
+    quotaInput.value = attr?.threeShiftNfQuota ?? 4;
     quotaInput.title = '三部制の4週間あたりの◆の目標回数（0〜10）';
 
     quotaWrap.appendChild(quotaLabel);
@@ -719,7 +719,7 @@ function initInternal(){
     quotaInput.style.width = '50px';
     quotaInput.min = '0';
     quotaInput.max = '10';
-    quotaInput.value = attr?.threeShiftNsQuota ?? 5;
+    quotaInput.value = attr?.threeShiftNsQuota ?? 4;
     quotaInput.title = '三部制の4週間あたりの●の目標回数（0〜10）';
 
     quotaWrap.appendChild(quotaLabel);
