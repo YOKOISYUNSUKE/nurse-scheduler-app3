@@ -143,13 +143,7 @@ html, body { height: 100%; }                 /* ビューポート基準を安�
 .grid thead th{ position:sticky; top:0; background:#fff; z-index:1; }
 .grid .col-emp{ position:sticky; left:0; z-index:2; background:#fff; min-width:200px; text-align:left; }
 .grid .holiday{ background:#fff7f7; color:#b91c1c; }
-/* 4週帯：網目状オーバーレイ（元の曜日色を透かす） */
-.grid .range4w{
-  background-image:
-    repeating-linear-gradient( 45deg, rgba(37,99,235,.16) 0 2px, transparent 2px 8px),
-    repeating-linear-gradient(-45deg, rgba(37,99,235,.12) 0 2px, transparent 2px 8px);
-  background-origin: padding-box;
-}
+
 
 .grid .off{ background:#f8fafc; color:#0f172a; font-weight:700; }
 .grid .dow{ display:block; font-size:11px; color:var(--muted); }

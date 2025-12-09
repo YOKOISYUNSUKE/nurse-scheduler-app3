@@ -711,61 +711,63 @@ function ensureEmployees(){
     State.windowDates = buildWindowDates(State.anchor);
 
 
-const meta = readMeta();
-if (Array.isArray(meta.employees) && meta.employees.length){
- // 保存されたメタをそのまま復元
- State.employees = meta.employees.slice();
- // 属性長が合わない・未定義の場合は安全に補完
- if (Array.isArray(meta.employeesAttr) && meta.employeesAttr.length === State.employees.length){
-  // 勤務時間を含む完全な属性を復元
-  State.employeesAttr = meta.employeesAttr.map(attr => ({
-    level: attr.level || 'B',
-    workType: attr.workType || 'three',
-    nightQuota: attr.nightQuota,
-    twoShiftQuota: attr.twoShiftQuota, 
-    threeShiftNfQuota: attr.threeShiftNfQuota,
-    threeShiftNsQuota: attr.threeShiftNsQuota,
-    shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
-    hasEarlyShift: attr.hasEarlyShift || false,
-    earlyShiftType: attr.earlyShiftType || 'all',
-    hasLateShift: attr.hasLateShift || false,
-    lateShiftType: attr.lateShiftType || 'all'
-  }));
- } else {
-   State.employeesAttr = State.employees.map(()=> ({ 
-     level:'B', 
-     workType:'three', 
-     shiftDurations:{},
-     hasEarlyShift: false,   
-     earlyShiftType: 'all',
-     hasLateShift: false,  
-     lateShiftType: 'all'   
-   }));
- }
-   // employeeCount は保存値があれば優先、なければ配列長
-  State.employeeCount = Number.isInteger(meta.employeeCount) ? meta.employeeCount :              State.employees.length;
-  State.range4wStart  = meta.range4wStart ?? State.range4wStart;
-  if (Array.isArray(meta.forbiddenPairs)){
-    State.forbiddenPairs = new Map(meta.forbiddenPairs.map(([k, arr]) => [k, new Set(arr)]));
-  } else {
-    // 初期状態：レベルA同士をすべて禁忌ペアにする
-    State.forbiddenPairs = buildDefaultForbiddenPairsForA();
-  }
-  // ★追加：ShiftDurations のグローバル既定を復元（存在すれば）
-  if (meta.shiftDurationsDefaults && window.ShiftDurations && typeof window.ShiftDurations.setGlobalDefault === 'function') {
-    const defs = meta.shiftDurationsDefaults;
-    Object.keys(defs).forEach(mk => {
-      const v = defs[mk];
-      if (Number.isFinite(v)) window.ShiftDurations.setGlobalDefault(mk, Number(v));
-    });
-  }
+    const meta = readMeta();
+    if (Array.isArray(meta.employees) && meta.employees.length){
+     // 保存されたメタをそのまま復元
+     State.employees = meta.employees.slice();
+     // 属性長が合わない・未定義の場合は安全に補完
+     if (Array.isArray(meta.employeesAttr) && meta.employeesAttr.length === State.employees.length){
+      // 勤務時間を含む完全な属性を復元
+      State.employeesAttr = meta.employeesAttr.map(attr => ({
+        level: attr.level || 'B',
+        workType: attr.workType || 'three',
+        nightQuota: attr.nightQuota,
+        twoShiftQuota: attr.twoShiftQuota, 
+        threeShiftNfQuota: attr.threeShiftNfQuota,
+        threeShiftNsQuota: attr.threeShiftNsQuota,
+        shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
+        hasEarlyShift: attr.hasEarlyShift || false,
+        earlyShiftType: attr.earlyShiftType || 'all',
+        hasLateShift: attr.hasLateShift || false,
+        lateShiftType: attr.lateShiftType || 'all'
+      }));
+     } else {
+       State.employeesAttr = State.employees.map(()=> ({ 
+         level:'B', 
+         workType:'three', 
+         shiftDurations:{},
+         hasEarlyShift: false,   
+         earlyShiftType: 'all',
+         hasLateShift: false,  
+         lateShiftType: 'all'   
+       }));
+     }
+       // employeeCount は保存値があれば優先、なければ配列長
+      State.employeeCount = Number.isInteger(meta.employeeCount) ? meta.employeeCount :              State.employees.length;
+      // 4週間範囲は常にアンカー先頭から開始（保存値には依存しない）
+      State.range4wStart  = 0;
+      if (Array.isArray(meta.forbiddenPairs)){
+        State.forbiddenPairs = new Map(meta.forbiddenPairs.map(([k, arr]) => [k, new Set(arr)]));
+      } else {
+        // 初期状態：レベルA同士をすべて禁忌ペアにする
+        State.forbiddenPairs = buildDefaultForbiddenPairsForA();
+      }
+      // ★追加：ShiftDurations のグローバル既定を復元（存在すれば）
+      if (meta.shiftDurationsDefaults && window.ShiftDurations && typeof window.ShiftDurations.setGlobalDefault === 'function') {
+        const defs = meta.shiftDurationsDefaults;
+        Object.keys(defs).forEach(mk => {
+          const v = defs[mk];
+          if (Number.isFinite(v)) window.ShiftDurations.setGlobalDefault(mk, Number(v));
+        });
+      }
 
-} else {
-  // 新規ユーザー：デフォルト（20名）で初期化
-  State.employees     = Array.from({length: State.employeeCount}, (_,i)=> `職員${pad2(i+1)}`);
-  State.employeesAttr = Array.from({length: State.employeeCount}, ()=> ({ level:'B', workType:'three' }));
-}
-ensureEmployees();
+    } else {
+      // 新規ユーザー：デフォルト（20名）で初期化
+      State.employees     = Array.from({length: State.employeeCount}, (_,i)=> `職員${pad2(i+1)}`);
+      State.employeesAttr = Array.from({length: State.employeeCount}, ()=> ({ level:'B', workType:'three' }));
+    }
+    ensureEmployees();
+
 
 
 
@@ -1369,25 +1371,23 @@ function exportExcelCsv(){
           line.push(cell);
         }
 
-        // 続いて、指定4週間（網掛け範囲）の勤務時間合計を算出
+        // 続いて、表示中4週間（現在のウィンドウ）の勤務時間合計を算出
         let totalMin = 0;
-        let start4w = (typeof State.range4wStart === 'number') ? State.range4wStart : 0;
-        if (start4w < 0) start4w = 0;
-        let end4w = start4w + 27;
         const maxDayIdx4w = State.windowDates.length - 1;
-        if (end4w > maxDayIdx4w) end4w = maxDayIdx4w;
+        const start4w = 0;
+        const end4w = maxDayIdx4w;
 
         if (end4w >= start4w){
           for (let d4 = start4w; d4 <= end4w; d4++){
             const dt4 = State.windowDates[d4];
             if (!dt4) continue;
             const ds4 = dateStr(dt4);
-
             const isOff4 = globalHasOffByDate(r, ds4);
             const lv4 = globalHasLeave(r, ds4) ? (getLeaveType(r, ds4) || '') : undefined;
             const mk4 = globalGetAssign(r, ds4);
             if (!mk4) continue;
             if (isOff4 || lv4) continue;
+
 
             let minutes = 0;
             if (window.ShiftDurations && typeof window.ShiftDurations.getDurationForEmployee === 'function') {
