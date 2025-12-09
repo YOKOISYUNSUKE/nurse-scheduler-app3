@@ -294,6 +294,7 @@ function initInternal(){
     name.maxLength = 32;
     name.setAttribute('aria-label','従業員名');
     name.dataset.role = 'name';
+    name.style.maxWidth = '200px';
 
     // レベルセレクト
     const selLv = createLevelSelect(State.employeesAttr[i]?.level || 'B');
@@ -681,10 +682,10 @@ function initInternal(){
     quotaInput.type = 'number';
     quotaInput.className = 'three-shift-nf-quota-input';
     quotaInput.style.width = '50px';
-    quotaInput.min = '1';
+    quotaInput.min = '0';
     quotaInput.max = '10';
     quotaInput.value = attr?.threeShiftNfQuota || 5;
-    quotaInput.title = '三部制の4週間あたりの◆の目標回数（1〜10）';
+    quotaInput.title = '三部制の4週間あたりの◆の目標回数（0〜10）';
 
     quotaWrap.appendChild(quotaLabel);
     quotaWrap.appendChild(quotaInput);
@@ -713,10 +714,10 @@ function initInternal(){
     quotaInput.type = 'number';
     quotaInput.className = 'three-shift-ns-quota-input';
     quotaInput.style.width = '50px';
-    quotaInput.min = '1';
+    quotaInput.min = '0';
     quotaInput.max = '10';
     quotaInput.value = attr?.threeShiftNsQuota || 5;
-    quotaInput.title = '三部制の4週間あたりの●の目標回数（1〜10）';
+    quotaInput.title = '三部制の4週間あたりの●の目標回数（0〜10）';
 
     quotaWrap.appendChild(quotaLabel);
     quotaWrap.appendChild(quotaInput);

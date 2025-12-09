@@ -278,11 +278,13 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
 .attr .content{ max-height:60vh; overflow:auto; padding:10px 14px; }
 
 
-.attr .row{ display:grid; grid-template-columns: 1fr 60px 110px 90px 90px; gap:4px; align-items:center; padding:6px 0; }
+.attr .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:6px 0; }
 
 #countsDlg .row-fixed-by-date{
   display:block;
 }
+
+
 #countsDlg .row-fixed-by-date > label{
   display:block;
   margin-bottom:4px;
@@ -353,15 +355,44 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
   padding:4px 6px;
 }
 
-/* 追加：従業員編集ダイアログの操作ボタン */
+/* 従業員ダイアログ: 上段（名前 + トグル左寄せ） */
+.attr .row input[data-role="name"] {
+  flex: 0 0 auto;
+  max-width: 200px;
+  min-width: 150px;
+}
+
+.attr .row .mini-select {
+  flex: 0 0 auto;
+}
+
+/* 従業員ダイアログ: 下段（ボタンを均等幅） */
+.attr .ctrls {
+  display: flex;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+}
+
+.attr .ctrls .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+
+/* 従業員編集ダイアログの操作ボタン */
 .attr .ctrls{ display:flex; justify-content:flex-end; gap:6px; }
 .attr .ctrls .btn{ padding:6px 8px; font-size:12px; }
+
+
 .attr .ctrls .btn:active{ transform: translateY(1px); }
 
 /* 既存のスタイル */
 .attr .content .row .ctrls button + button { margin-left: .4rem; }
 
-/* ★追加：禁忌ペア選択UIのスタイル */
+/* 禁忌ペア選択UIのスタイル */
 .forbid-wrap {
   display: flex;
   align-items: center;
@@ -449,4 +480,3 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
-
