@@ -470,10 +470,36 @@ async function remotePut(k, data){ return (window.GAS ? GAS.put(k, data) : null)
 async function testRemoteConnection(){ return (window.GAS ? GAS.testConnection() : { success:false, message:'gasClient未読込' }); }
 
 
+// meta/dates/counts をまとめて取得するヘルパー
+// 1) GAS.getAll(key) があればそれを使用（1リクエスト）
+// 2) なければ従来通り remoteGet を3本投げる（Promise.allで並列）
+async function remoteGetBundle(ck){
+  // 新API（推奨）
+  if (window.GAS && typeof GAS.getAll === 'function'){
+    try{
+      const res = await GAS.getAll(ck);
+      const meta   = res && res.meta   || null;
+      const dates  = res && res.dates  || null;
+      const counts = res && res.counts || null;
+      return { meta, dates, counts };
+    }catch(e){
+      console.error('GAS.getAll failed, fallback to legacy remoteGet:', e);
+      // 落ちた場合はフォールバックに回す
+    }
+  }
+
+  // 旧API（互換用）：3キーを並列取得
+  const [m, d, c] = await Promise.all([
+    remoteGet(`${ck}:meta`),
+    remoteGet(`${ck}:dates`),
+    remoteGet(`${ck}:counts`)
+  ]);
+  return { meta:m, dates:d, counts:c };
+}
 
 
 
-// 追加：ログイン直後にクラウド→ローカルへ取り込み
+// ログイン直後にクラウド→ローカルへ取り込み
 async function syncFromRemote(){
   const keys = cloudKeys(); 
   if (!keys.length) {
@@ -487,23 +513,13 @@ async function syncFromRemote(){
   for (const ck of keys){
     console.log('Fetching data for key:', ck);
 
-    // ★ここを Promise.all で並列取得に変更
-    const [m, d, c] = await Promise.all([
-      remoteGet(`${ck}:meta`),
-      remoteGet(`${ck}:dates`),
-      remoteGet(`${ck}:counts`)
-    ]);
-    
-    if (m) {
-      console.log('Meta data received:', Object.keys(m));
-    }
-    if (d) {
-      console.log('Dates data received:', Object.keys(d));
-    }
-    if (c) {
-      console.log('Counts data received');
-    }
-    
+    // ★Promise.all の代わりに一括ヘルパーを呼ぶ
+    const { meta: m, dates: d, counts: c } = await remoteGetBundle(ck);
+
+    if (m) console.log('Meta data received:', Object.keys(m));
+    if (d) console.log('Dates data received:', Object.keys(d));
+    if (c) console.log('Counts data received');
+
     // どちらか取れた時点で採用（先勝ち）。次鍵により良いものがあれば上書き。
     if (m && !metaBest)  metaBest  = m;
     if (d){
