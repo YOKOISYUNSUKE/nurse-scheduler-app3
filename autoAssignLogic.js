@@ -454,34 +454,29 @@
       let earlyPlaced = 0;
       let latePlaced  = 0;
       
-      // 1日あたりの早出・遅出目標人数を取得（設定から動的に取得）
-      const dt = State.windowDates[dayIdx];
+// 1日あたりの早出・遅出「固定人数」を取得（平日・土日祝で区別）
+const dt = State.windowDates[dayIdx];
 
-      // 早出目標人数（設定から取得）
-      const earlyTarget = (window.Counts && typeof window.Counts.getEarlyShiftTarget === 'function')
-        ? window.Counts.getEarlyShiftTarget(dt, (ds)=> State.holidaySet.has(ds))
-        : 1; // デフォルト1名
+// 早出：counts.config.js の固定値をそのまま採用
+const earlyTarget = (window.Counts && typeof window.Counts.getEarlyShiftTarget === 'function')
+  ? window.Counts.getEarlyShiftTarget(dt, (ds)=> State.holidaySet.has(ds))  // ← 固定値
+  : 0;
 
-      // 遅出目標人数（設定から取得）
-      const lateTarget = (window.Counts && typeof window.Counts.getLateShiftTarget === 'function')
-        ? window.Counts.getLateShiftTarget(dt, (ds)=> State.holidaySet.has(ds))
-        : 1; // デフォルト1名
+// 遅出：counts.config.js の固定値をそのまま採用
+const lateTarget = (window.Counts && typeof window.Counts.getLateShiftTarget === 'function')
+  ? window.Counts.getLateShiftTarget(dt, (ds)=> State.holidaySet.has(ds))  // ← 固定値
+  : 0;
 
-      // 早出・遅出の割り当て確率（個人に着目した30%）
-      const EARLY_LATE_PROBABILITY = 0.30;
 
-      // ★ Phase 1: 早出・遅出対象者に30%の確率で割り当て（目標人数まで）
+// 早出・遅出は「固定人数」に達するまで優先的に割り当てる
       // 早出候補をシャッフルして順に処理
       const shuffledEarlyCand = shuffleArray(earlyShiftCand.slice());
       for (const r of shuffledEarlyCand){
         if (placed >= need) break;
         if (earlyPlaced >= earlyTarget) break;
-        // 30%の確率で早出を割り当て
-        if (Math.random() < EARLY_LATE_PROBABILITY){
-          if (tryPlace(dayIdx, r, '早')){
-            placed++;
-            earlyPlaced++;
-          }
+        if (tryPlace(dayIdx, r, '早')){
+          placed++;
+          earlyPlaced++;
         }
       }
 
@@ -490,14 +485,12 @@
       for (const r of shuffledLateCand){
         if (placed >= need) break;
         if (latePlaced >= lateTarget) break;
-        // 30%の確率で遅出を割り当て
-        if (Math.random() < EARLY_LATE_PROBABILITY){
-          if (tryPlace(dayIdx, r, '遅')){
-            placed++;
-            latePlaced++;
-          }
+        if (tryPlace(dayIdx, r, '遅')){
+          placed++;
+          latePlaced++;
         }
       }
+
 
       // ★ Phase 2: 目標人数に達していない場合、残りの候補から埋める
       // 早出が目標に達していない場合

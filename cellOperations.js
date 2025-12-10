@@ -63,7 +63,7 @@
       case 'three': return ['', '〇', '早', '遅', '◆', '●', ''];            
       case 'day':   return ['', '〇', '早', '遅', '☆', '◆', '●', ''];   
       case 'night': return ['', '☆', ''];                           
-      default:      return ['', '〇', '□', '◆', '●', ''];
+      default:      return ['', '〇', '早', '遅', '◆', '●', ''];
     }
   }
 
