@@ -1,23 +1,23 @@
 // ====== 自動割り当てアルゴリズム ======
 // app.jsから切り出した自動割り当てロジック
 
-(function(){
-  'use strict';
+  (function(){
+    'use strict';
 
-  // app.jsのグローバル変数・関数への参照
-  let State, grid;
-  let dateStr, addDays;
-  let getAssign, setAssign, clearAssign;
-  let hasOffByDate, getLeaveType, setLeaveType, clearLeaveType;
-  let isLocked, setLocked;
-  let showToast, updateFooterCounts;
-  let isRestByDate;
+    // app.jsのグローバル変数・関数への参照
+    let State, grid;
+    let dateStr, addDays;
+    let getAssign, setAssign, clearAssign;
+    let hasOffByDate, getLeaveType, setLeaveType, clearLeaveType;
+    let isLocked, setLocked;
+    let showToast, updateFooterCounts;
+    let isRestByDate;
 
   // 初期化関数（app.jsから呼ばれる）
   window.AutoAssignLogic = {
     init: function() {
       // グローバル変数・関数の取得
-      State = window.State;
+      State = window.SchedulerState || window.State;
       grid = document.getElementById('grid');
       dateStr = window.App?.Dates?.dateStr;
       addDays = window.App?.Dates?.addDays;

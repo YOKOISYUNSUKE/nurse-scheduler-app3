@@ -11,11 +11,12 @@
   const WorkOrder = ['two','three','day','night'];
 
   // グローバル依存の取得（app.jsから公開済みを想定）
-  const getState = () => window.SchedulerState;
+  const getState = () => window.SchedulerState || window.State;
   const { pad2 } = window.App?.Dates || {};
 
   // DOM要素
   let attrDlg, attrContent, attrSave, attrClose;
+
   let employeeCountSel;
 
 // 修正後（DOMContentLoaded でラップ）
