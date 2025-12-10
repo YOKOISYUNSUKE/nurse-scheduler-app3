@@ -709,7 +709,9 @@ function ensureEmployees(){
   function loadWindow(anchorDate){
     State.anchor = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
     State.windowDates = buildWindowDates(State.anchor);
-
+    // ★重要：キャッシュをクリア（月ジャンプ後に古いウィンドウ判定が残らないように）
+    _winDateSet = null;
+    _storeCache = null;
 
     const meta = readMeta();
     if (Array.isArray(meta.employees) && meta.employees.length){
@@ -1163,7 +1165,7 @@ const rows = [
   function updateFooterCounts(){
     const tfoot = grid.querySelector('tfoot');
     if (!tfoot){ renderFooterCounts(); return; }
-    for(let d=0; d<State.windowDates.length; d++){
+    for(let d=0; d<Math.min(28, State.windowDates.length); d++){
 const c = countForDayLocal(d);
 
 tfoot.querySelector(`td[data-day="${d}"][data-sum="day"]`).textContent = c.day;
@@ -1181,11 +1183,15 @@ window.updateFooterCounts = updateFooterCounts; //
   function refresh4wSummaryForRow(r){
     if (!grid || typeof r !== 'number') return;
 
+    // ★重要：キャッシュをクリア（現在のウィンドウの日付で集計を行う）
+    _winDateSet = null;
+    _storeCache = null;
+
     const maxIdx = State.windowDates.length - 1;
     if (maxIdx < 0) return;
 
     const start4w = 0;
-    const end4w   = maxIdx;
+    const end4w   = Math.min(27, maxIdx);
 
     const tdMarks = grid.querySelector(`td.month-marks[data-row="${r}"]`);
     const tdEarly = grid.querySelector(`td.month-early[data-row="${r}"]`);
@@ -1438,6 +1444,9 @@ function exportExcelCsv(){
     }
     function renderGrid(){
       grid.innerHTML = '';
+      // ★重要：描画前にキャッシュをクリア（現在のウィンドウの日付で集計を行う）
+      _winDateSet = null;
+      _storeCache = null;
 
       const thead = document.createElement('thead');
       const trh = document.createElement('tr');
@@ -1596,9 +1605,9 @@ function exportExcelCsv(){
 
           tr.appendChild(td);
         }
-        // 4週間（表示範囲）のマーク集計
+        // 4週間（表示範囲）のマーク集計 - 常に表示中の28日間を集計
         const start4w = 0;
-        const end4w   = State.windowDates.length - 1;
+        const end4w   = Math.min(27, State.windowDates.length - 1);
 
         let cntO = 0, cntNightPair = 0, cntNF = 0, cntNS = 0, cntHoliday = 0;
         if (end4w >= start4w){
