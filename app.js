@@ -474,7 +474,6 @@ async function testRemoteConnection(){ return (window.GAS ? GAS.testConnection()
 
 
 // 追加：ログイン直後にクラウド→ローカルへ取り込み
-// 追加：ログイン直後にクラウド→ローカルへ取り込み
 async function syncFromRemote(){
   const keys = cloudKeys(); 
   if (!keys.length) {
@@ -487,9 +486,13 @@ async function syncFromRemote(){
 
   for (const ck of keys){
     console.log('Fetching data for key:', ck);
-    const m = await remoteGet(`${ck}:meta`);
-    const d = await remoteGet(`${ck}:dates`);
-    const c = await remoteGet(`${ck}:counts`);
+
+    // ★ここを Promise.all で並列取得に変更
+    const [m, d, c] = await Promise.all([
+      remoteGet(`${ck}:meta`),
+      remoteGet(`${ck}:dates`),
+      remoteGet(`${ck}:counts`)
+    ]);
     
     if (m) {
       console.log('Meta data received:', Object.keys(m));
