@@ -169,17 +169,13 @@ function precheckPlace(p){
   
 
 
-// ★単独禁止：前日に同一職員の「☆」が無い場合は不可
-   if (p.mark === '★'){
+if (p.mark === '★'){
     const prev = d - 1;
     if (prev < 0) return { ok:false, message:'「★」は前日に「☆」がある場合のみ可' };
     const dsPrev = dateStr(p.dates[prev]);
-    if (p.getAssign(p.rowIndex, dsPrev) !== '☆'){
-      return { ok:false, message:'「★」は前日に「☆」がある場合のみ可' };
-    }
+    const prevMk = p.getAssign(p.rowIndex, dsPrev);  // ← 追加：prevMkを定義
 
-  // 前日が「★」なら不可（★★の並びを禁止）
-  if (prevMk === '★'){
+  if (prevMk === '★'){  // ← 正常に参照可能
     return { ok:false, message:'「★」は連続して配置できません' };
   }
   

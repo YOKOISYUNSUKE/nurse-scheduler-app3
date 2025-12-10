@@ -381,7 +381,7 @@
 
 
 
-      // ★追加：同じカウントの人たちをシャッフル（公平性を保ちつつランダム性向上）
+      // 同じカウントの人たちをシャッフル（公平性を保ちつつランダム性向上）
       let i = 0;
       while (i < cand.length) {
         const count = whCount(cand[i]);
@@ -401,10 +401,10 @@
       }
 
     } else {
-      // ★修正：平日も配置回数と位置の分散を考慮
+      // 平日も配置回数と位置の分散を考慮
       const dayCount = (r)=> dayCount4w(r);
       
-      // ★追加：最後に配置された日勤（〇）からの経過日数を優先（2部制/3部制では〇間隔を重視）
+      // 最後に配置された日勤（〇）からの経過日数を優先（2部制/3部制では〇間隔を重視）
       const daysSinceLastAssign = (r)=> daysSinceLastDay4w(r);
       
       // ★ソート：配置回数が少ない順、同数なら最後の配置から遠い順
@@ -414,13 +414,6 @@
         return daysSinceLastAssign(b) - daysSinceLastAssign(a);
       });
 
-      
-      // ★ソート：配置回数が少ない順、同数なら最後の配置から遠い順
-      cand.sort((a, b) => {
-        const countDiff = dayCount(a) - dayCount(b);
-        if (countDiff !== 0) return countDiff;
-        return daysSinceLastAssign(b) - daysSinceLastAssign(a);
-      });
       
       // ★同じ条件の人たちをシャッフル（さらなる公平性）
       let i = 0;
@@ -654,7 +647,7 @@ const lateTarget = (window.Counts && typeof window.Counts.getLateShiftTarget ===
           }
         }
         
-        // ★追加：それでも超過している場合は早出・遅出も試す
+        // それでも超過している場合は早出・遅出も試す
         if (need > 0){
           for(const d of shuffledBlanks){
             if (need <= 0) break;
@@ -682,42 +675,82 @@ const lateTarget = (window.Counts && typeof window.Counts.getLateShiftTarget ===
     }
   }
   
-  // ★追加：normalizeOffToEight用の早出チェック
+ 
+  // normalizeOffToEight用の早出チェック
   function canAssignEarlyShiftForNormalize(r, dayIdx){
     const empAttr = State.employeesAttr[r] || {};
     if (!empAttr.hasEarlyShift) return false;
-    
+
     const dt = State.windowDates[dayIdx];
+    const ds = dateStr(dt);
+
+    // その日の早出人数が固定値に達していないかを確認
+    if (window.Counts && typeof window.Counts.getEarlyShiftTarget === 'function'){
+      // ★ dt + 祝日判定コールバックを渡すように修正
+      const earlyTarget = window.Counts.getEarlyShiftTarget(
+        dt,
+        (ds0) => State.holidaySet.has(ds0)
+      );
+      if (typeof earlyTarget === 'number'){
+        let earlyCount = 0;
+        for (let i = 0; i < State.employeeCount; i++){
+          if (getAssign(i, ds) === '早') earlyCount++;
+        }
+        // 固定人数以上なら、これ以上「早」を増やさない
+        if (earlyCount >= earlyTarget) return false;
+      }
+    }
+
     const earlyType = empAttr.earlyShiftType || 'all';
-    
+
     if (earlyType === 'all') return true;
-    
+
     const isWH = isWeekendOrHoliday(dt);
     if (earlyType === 'weekday') return !isWH;
     if (earlyType === 'holiday') return isWH;
-    
+
     return false;
   }
   
-  // ★追加：normalizeOffToEight用の遅出チェック
+  // normalizeOffToEight用の遅出チェック
   function canAssignLateShiftForNormalize(r, dayIdx){
     const empAttr = State.employeesAttr[r] || {};
     if (!empAttr.hasLateShift) return false;
-    
+
     const dt = State.windowDates[dayIdx];
+    const ds = dateStr(dt);
+
+    // その日の遅出人数が固定値に達していないかを確認
+    if (window.Counts && typeof window.Counts.getLateShiftTarget === 'function'){
+      // ★ dt + 祝日判定コールバックを渡すように修正
+      const lateTarget = window.Counts.getLateShiftTarget(
+        dt,
+        (ds0) => State.holidaySet.has(ds0)
+      );
+      if (typeof lateTarget === 'number'){
+        let lateCount = 0;
+        for (let i = 0; i < State.employeeCount; i++){
+          if (getAssign(i, ds) === '遅') lateCount++;
+        }
+        // 固定人数以上なら、これ以上「遅」を増やさない
+        if (lateCount >= lateTarget) return false;
+      }
+    }
+
     const lateType = empAttr.lateShiftType || 'all';
-    
+
     if (lateType === 'all') return true;
-    
+
     const isWH = isWeekendOrHoliday(dt);
     if (lateType === 'weekday') return !isWH;
     if (lateType === 'holiday') return isWH;
-    
+
     return false;
   }
-
-
+  
+  
   function isWeekendOrHoliday(dt){
+
     if (window.HolidayRules && typeof window.HolidayRules.minDayFor === 'function'){
       const md = window.HolidayRules.minDayFor(dt, (ds)=> State.holidaySet.has(ds));
       return md === 5;
@@ -750,10 +783,23 @@ function targetDayForIndex(dayIdx){
   return isWeekendOrHoliday(dt) ? 6 : 10;
 }
 
+function countDayShift4w(r){
+  let c = 0;
+  const startIdx = State.range4wStart;
+  const endIdx   = State.range4wStart + 27;
+  for (let i = startIdx; i <= endIdx && i < State.windowDates.length; i++){
+    const ds2 = dateStr(State.windowDates[i]);
+    const mk2 = getAssign(r, ds2);
+    if (mk2 === '〇' || mk2 === '早' || mk2 === '遅') c++;
+  }
+  return c;
+}
+
 function reduceDayShiftTo(dayIdx, target) { // target は土日祝/特定日用として引き続き受け取る
     const ds = dateStr(State.windowDates[dayIdx]);
     const dt = State.windowDates[dayIdx];
     const isWH = isWeekendOrHoliday(dt);
+
 
     // target が引数で渡されなかった場合（平日の呼び出し）、許容リストから上限値を動的に取得する
     if (target === undefined && !isWH) {
@@ -787,9 +833,9 @@ function reduceDayShiftTo(dayIdx, target) { // target は土日祝/特定日用�
     const aInfo = info.filter(x => x.isA);
     if (aInfo.length > 0){
       let best = aInfo[0];
-      let bestCount = dayCount4w(best.r);
+      let bestCount = countDayShift4w(best.r);
       for (let i = 1; i < aInfo.length; i++){
-        const c = dayCount4w(aInfo[i].r);
+        const c = countDayShift4w(aInfo[i].r);
         if (c < bestCount){
           best = aInfo[i];
           bestCount = c;
@@ -804,8 +850,10 @@ function reduceDayShiftTo(dayIdx, target) { // target は土日祝/特定日用�
       .map(x => ({
         r: x.r,
         isB: x.isB,
-        dayCount: dayCount4w(x.r)
+        dayCount: countDayShift4w(x.r),
+        workType: (State.employeesAttr[x.r]?.workType) || 'three'
       }));
+
 
     if (removal.length === 0) return;
 
@@ -1055,7 +1103,6 @@ function reduceDayShiftTo(dayIdx, target) { // target は土日祝/特定日用�
     if (typeof updateFooterCounts === 'function') updateFooterCounts();
   }
 
-
   function nightQuotasOK(startIdx, endIdx){
     return (window.NightBand && window.NightBand.nightQuotasOK)
       ? window.NightBand.nightQuotasOK(nbCtx(), startIdx, endIdx)
@@ -1262,6 +1309,7 @@ function autoAssignRange(startDayIdx, endDayIdx){
 
 
 // 修正後（5行前後を含む）
+// 207行目〜232行目
     (function ensureNightToTen(){
       // ★従業員順序をランダム化
       let nightEmpOrder = [];
@@ -1285,8 +1333,6 @@ function autoAssignRange(startDayIdx, endDayIdx){
           if (tryPlace(d, r, '☆')) need--;
         }
       }
-
-// 修正後
     })();
 
     // ★夜勤専従配置後に人数を厳格化
