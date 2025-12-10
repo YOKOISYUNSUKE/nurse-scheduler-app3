@@ -1285,13 +1285,31 @@ function readAttrDialogToState(){
       });
 
 
-      // 読み取り：早出トグルの状態を取り込む（当該行に存在する場合）
-      const earlyChk = row.querySelector('.early-toggle input[type="checkbox"]');
-      merged.hasEarlyShift = earlyChk ? Boolean(earlyChk.checked) : (prev.hasEarlyShift || false);
+      // 読み取り：早出セレクトの状態を取り込む
+      const earlySel = row.querySelector('.early-select');
+      if (earlySel) {
+        const v = earlySel.value;
+        if (v === 'none') {
+          merged.hasEarlyShift = false;
+          delete merged.earlyShiftType;
+        } else {
+          merged.hasEarlyShift = true;
+          merged.earlyShiftType = v;
+        }
+      }
 
-      // 読み取り：遅出トグルの状態を取り込む（当該行に存在する場合）
-      const lateChk = row.querySelector('.late-toggle input[type="checkbox"]');
-      merged.hasLateShift = lateChk ? Boolean(lateChk.checked) : (prev.hasLateShift || false);
+      // 読み取り：遅出セレクトの状態を取り込む
+      const lateSel = row.querySelector('.late-select');
+      if (lateSel) {
+        const v = lateSel.value;
+        if (v === 'none') {
+          merged.hasLateShift = false;
+          delete merged.lateShiftType;
+        } else {
+          merged.hasLateShift = true;
+          merged.lateShiftType = v;
+        }
+      }
 
 
       // 更新：duration selects の値を読み取って empAttr.shiftDurations を更新
