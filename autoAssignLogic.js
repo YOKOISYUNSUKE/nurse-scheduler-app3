@@ -79,7 +79,7 @@
         if (lvl === 'A') hasANs = true;
       }
     }
-    return { day, nf, ns, hasADay, hasANf, hasANs };
+     return { day, nf, ns, early, late, hasADay, hasANf, hasANs };
   }
 
   function candidatesFor(dayIdx, mark){
@@ -1101,7 +1101,7 @@ function reduceDayShiftTo(dayIdx, target) { // target は土日祝/特定日用�
     
     if (typeof updateFooterCounts === 'function') updateFooterCounts();
   }
-function enforceDayShiftFixedCounts(dayIdx) {
+  function enforceDayShiftFixedCounts(dayIdx) {
     const dt = State.windowDates[dayIdx];
     if (!dt) return;
     const ds = dateStr(dt);
@@ -1111,10 +1111,22 @@ function enforceDayShiftFixedCounts(dayIdx) {
     let earlyCount = stats.early;
     let lateCount = stats.late;
 
+    // NightBand.countDayStats が early/late を返さない場合に備えて再計算
+    if (!Number.isInteger(earlyCount) || !Number.isInteger(lateCount)) {
+      earlyCount = 0;
+      lateCount = 0;
+      for (let r = 0; r < State.employeeCount; r++) {
+        const mk = getAssign(r, ds);
+        if (mk === '早') earlyCount++;
+        if (mk === '遅') lateCount++;
+      }
+    }
+
     // Counts からターゲット値を取得
     let targetDay = targetDayForIndex(dayIdx);
     let earlyTarget = null;
     let lateTarget = null;
+
 
     if (window.Counts && typeof window.Counts.getEarlyShiftTarget === 'function') {
         earlyTarget = window.Counts.getEarlyShiftTarget(
