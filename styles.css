@@ -412,6 +412,27 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
   color: white;
 }
 
+.counts-table{
+  width:100%;
+  border-collapse:collapse;
+  margin:10px 0 18px;
+}
+.counts-table th,
+.counts-table td{
+  border:1px solid var(--border);
+  padding:8px;
+  text-align:center;
+}
+.counts-table th{
+  background:#f8fafc;
+  font-weight:600;
+}
+.counts-table input.txt{
+  width:70px;
+  text-align:right;
+}
+
+
 /* --- 末尾に追加 --- */
 
 /* 勤務時間設定フィールド */
@@ -473,4 +494,200 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
 .btn-duration-toggle:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+/* === レスポンシブ対応の追加 === */
+
+/* タッチデバイス用のタップ領域拡大 */
+@media (hover: none) and (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 16px;
+  }
+  
+  .btn-sm {
+    min-height: 36px;
+    padding: 6px 12px;
+  }
+  
+  .grid th, .grid td {
+    min-height: 44px;
+    padding: 12px 10px;
+  }
+  
+  .mini-select {
+    min-height: 36px;
+    padding: 6px 8px;
+  }
+}
+
+/* スマートフォン向け調整 (600px以下) */
+@media (max-width: 600px) {
+  /* トップバーを縦積み */
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px;
+  }
+  
+  .topbar .left,
+  .topbar .right {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+  
+  /* ボタンテキストを短縮表示 */
+  .topbar .btn {
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+  
+  /* ツールバーも縦積み */
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  
+  .tool {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  
+  /* 期間表示を大きく */
+  .period {
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    width: 100%;
+  }
+  
+  /* グリッドのフォントサイズ調整 */
+  .grid th, .grid td {
+    font-size: 12px;
+    padding: 6px 4px;
+    min-width: 40px;
+  }
+  
+  .grid .col-emp {
+    min-width: 120px;
+    font-size: 11px;
+  }
+  
+  .mark {
+    font-size: 14px;
+  }
+  
+  /* ダイアログを全画面に近い表示 */
+  dialog.attr {
+    width: calc(100% - 16px);
+    max-width: none;
+    margin: 8px;
+  }
+  
+  .attr .content {
+    max-height: calc(100vh - 200px);
+  }
+  
+  /* ログインカードの調整 */
+  .login-card {
+    margin: 4vh auto;
+    padding: 20px;
+  }
+  
+  .app-title {
+    font-size: 20px;
+  }
+}
+
+/* タブレット向け調整 (601px〜1024px) */
+@media (min-width: 601px) and (max-width: 1024px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+  
+  .topbar .right {
+    flex-wrap: wrap;
+  }
+  
+  .grid th, .grid td {
+    font-size: 13px;
+    padding: 8px 6px;
+  }
+  
+  .grid .col-emp {
+    min-width: 160px;
+  }
+}
+
+/* 横向き表示時の最適化 */
+@media (orientation: landscape) and (max-height: 500px) {
+  .topbar {
+    padding: 6px 10px;
+  }
+  
+  .topbar .btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  
+  .toolbar {
+    padding: 6px 10px;
+  }
+  
+  .grid th, .grid td {
+    padding: 4px 6px;
+  }
+}
+
+/* タッチデバイスでのスクロール改善 */
+.grid-wrap {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* 選択UIの改善（モバイル） */
+@media (max-width: 600px) {
+  .select,
+  .mini-select {
+    font-size: 14px;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23475569' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 28px;
+  }
+  
+  /* ヒントテキストを小さく */
+  .hint {
+    font-size: 11px;
+  }
+  
+  /* チップのサイズ調整 */
+  .chip {
+    font-size: 10px;
+    padding: 1px 4px;
+  }
+}
+
+/* フォーカス表示の改善（キーボード使用時のみ） */
+@media (hover: hover) and (pointer: fine) {
+  .btn:focus-visible,
+  .txt:focus-visible,
+  .select:focus-visible {
+    outline: 3px solid rgba(37,99,235,.35);
+    outline-offset: 2px;
+  }
+}
+
+/* タッチデバイスではアウトライン非表示 */
+@media (hover: none) and (pointer: coarse) {
+  .btn:focus,
+  .txt:focus,
+  .select:focus {
+    outline: none;
+  }
 }

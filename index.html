@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
 <title>勤務スケジュールアプリ - UI v1</title>
 <link rel="stylesheet" href="styles.css?v=20251031">
 
@@ -58,7 +58,7 @@
         <input id="monthPicker" type="month" class="hidden" />
         <button id="btnPrevDay" class="btn btn-outline" type="button" title="1日戻る">◀ 前日</button>
         <button id="btnNextDay" class="btn btn-outline" type="button" title="1日進む">翌日 ▶</button>
-        <div class="period">表示範囲：<span id="periodText">----</span>（常に31日表示）</div>
+        <div class="period">表示：<span id="periodText">----</span></div>
       </div>
       <div class="right">
         <button id="btnAttrOpen" class="btn btn-outline" type="button" title="従業員の属性を編集">従業員編集</button>
@@ -168,45 +168,40 @@
 <dialog id="countsDlg" class="attr">
   <header>人数設定</header>
   <div class="content">
-<div class="row">
-  <label>平日の日勤（目標）</label>
-  <input id="cfgDayTarget" type="number" class="txt" min="0" step="1">
-</div>
 
-    <div class="row">
-      <label>土日祝の日勤（目標）</label>
-      <input id="cfgDayTargetWkHol" type="number" class="txt" min="0" step="1">
-    </div>
-    <!-- 早出の目標人数 -->
-    <div class="row">
-      <label>平日の早出（目標）</label>
-      <input id="cfgEarlyTargetWeekday" type="number" class="txt" min="0" step="1" value="1">
-    </div>
-    <div class="row">
-      <label>土日祝の早出（目標）</label>
-      <input id="cfgEarlyTargetWkHol" type="number" class="txt" min="0" step="1" value="1">
-    </div>
-    
-    <!-- 遅出の目標人数 -->
-    <div class="row">
-      <label>平日の遅出（目標）</label>
-      <input id="cfgLateTargetWeekday" type="number" class="txt" min="0" step="1" value="1">
-    </div>
-    <div class="row">
-      <label>土日祝の遅出（目標）</label>
-      <input id="cfgLateTargetWkHol" type="number" class="txt" min="0" step="1" value="1">
-    </div>
+<table class="counts-table">
+  <thead>
+    <tr>
+      <th></th>
+      <th>〇 日勤</th>
+      <th>早出</th>
+      <th>遅出</th>
+      <th>☆＋◆</th>
+      <th>★＋●</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>平日</th>
+      <td><input id="cfgDayTarget" type="number" class="txt" min="0" step="1"></td>
+      <td><input id="cfgEarlyTargetWeekday" type="number" class="txt" min="0" step="1"></td>
+      <td><input id="cfgLateTargetWeekday" type="number" class="txt" min="0" step="1"></td>
+      <td><input id="cfgFixedNF" type="number" class="txt" min="0" step="1"></td>
+      <td><input id="cfgFixedNS" type="number" class="txt" min="0" step="1"></td>
+    </tr>
+    <tr>
+      <th>土日祝</th>
+      <td><input id="cfgDayTargetWkHol" type="number" class="txt" min="0" step="1"></td>
+      <td><input id="cfgEarlyTargetWkHol" type="number" class="txt" min="0" step="1"></td>
+      <td><input id="cfgLateTargetWkHol" type="number" class="txt" min="0" step="1"></td>
+      <td><input id="cfgFixedNFHoliday" type="number" class="txt" min="0" step="1"></td>
+      <td><input id="cfgFixedNSHoliday" type="number" class="txt" min="0" step="1"></td>
+    </tr>
+  </tbody>
+</table>
 
 
 
-    <div class="row">
-      <label>NF（☆＋◆）固定人数</label>
-      <input id="cfgFixedNF" type="number" class="txt" min="0" step="1">
-    </div>
-    <div class="row">
-      <label>NS（★＋●）固定人数</label>
-      <input id="cfgFixedNS" type="number" class="txt" min="0" step="1">
-    </div>
     <div class="row row-fixed-by-date">
       <label>特定日 固定条件</label>
       <div class="fixed-block">
