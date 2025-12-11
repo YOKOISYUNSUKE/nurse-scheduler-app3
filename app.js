@@ -484,17 +484,17 @@ async function remoteGetBundle(ck){
       return { meta, dates, counts };
     }catch(e){
       console.error('GAS.getAll failed, fallback to legacy remoteGet:', e);
-      // 落ちた場合はフォールバックに回す
+      // 落ちた場合はフォールバックに回す（下に続く）
     }
   }
 
-  // 旧API（互換用）：3キーを並列取得
+  // 旧API（互換用）：3キーを並列取得（個別エラーは null として扱う）
   const [m, d, c] = await Promise.all([
-    remoteGet(`${ck}:meta`),
-    remoteGet(`${ck}:dates`),
-    remoteGet(`${ck}:counts`)
+    remoteGet(`${ck}:meta`).catch(() => null),
+    remoteGet(`${ck}:dates`).catch(() => null),
+    remoteGet(`${ck}:counts`).catch(() => null)
   ]);
-  return { meta:m, dates:d, counts:c };
+  return { meta: m, dates: d, counts: c };
 }
 
 
@@ -513,27 +513,31 @@ async function syncFromRemote(){
   for (const ck of keys){
     console.log('Fetching data for key:', ck);
 
-    // ★Promise.all の代わりに一括ヘルパーを呼ぶ
-    const { meta: m, dates: d, counts: c } = await remoteGetBundle(ck);
+    try {
+      const { meta: m, dates: d, counts: c } = await remoteGetBundle(ck);
 
-    if (m) console.log('Meta data received:', Object.keys(m));
-    if (d) console.log('Dates data received:', Object.keys(d));
-    if (c) console.log('Counts data received');
+      if (m) console.log('Meta data received:', Object.keys(m));
+      if (d) console.log('Dates data received:', Object.keys(d));
+      if (c) console.log('Counts data received');
 
-    // どちらか取れた時点で採用（先勝ち）。次鍵により良いものがあれば上書き。
-    if (m && !metaBest)  metaBest  = m;
-    if (d){
-      const score = (obj)=> {
-        try{
-          const asg = obj?.assign || {};
-          return Object.values(asg).reduce((s,day)=> s + Object.keys(day||{}).length, 0);
-        }catch(_){ return 0; }
-      };
-      if (!datesBest || score(d) > score(datesBest)) datesBest = d;
-    }
-    // Counts は最初に取得できたものを採用
-    if (c && !countsBest){
-      countsBest = c;
+      // どちらか取れた時点で採用（先勝ち）。次鍵により良いものがあれば上書き。
+      if (m && !metaBest)  metaBest  = m;
+      if (d){
+        const score = (obj)=> {
+          try{
+            const asg = obj?.assign || {};
+            return Object.values(asg).reduce((s,day)=> s + Object.keys(day||{}).length, 0);
+          }catch(_){ return 0; }
+        };
+        if (!datesBest || score(d) > score(datesBest)) datesBest = d;
+      }
+      if (c && !countsBest){
+        countsBest = c;
+      }
+    } catch (e) {
+      console.error(`Failed to fetch data for key ${ck}:`, e);
+      // 次のキーを試行
+      continue;
     }
   }
   
@@ -570,12 +574,13 @@ async function pushToRemote(){
   const keys = cloudKeys(); 
   if(!keys.length) return;
   
+  let meta, dates, countsCfg;
+  
   try{
-    const meta  = readMeta();
-    const dates = readDatesStore();
+    meta  = readMeta();
+    dates = readDatesStore();
     
     // counts設定を確実に取得（早出・遅出含む全項目）
-    let countsCfg = null;
     try{
       const raw = localStorage.getItem('sched:counts');
       if (raw) countsCfg = JSON.parse(raw);
@@ -595,15 +600,23 @@ async function pushToRemote(){
         FIXED_BY_DATE: window.Counts.FIXED_BY_DATE
       };
     }
-
-    // awaitで順次送信（エラーがあっても続行）
-    for (const ck of keys){
-      await remotePut(`${ck}:meta`,  meta).catch(()=>{});
-      await remotePut(`${ck}:dates`, dates).catch(()=>{});
-      if (countsCfg) await remotePut(`${ck}:counts`, countsCfg).catch(()=>{});
-    }
   }catch(e){
-    console.error('pushToRemote failed:', e);
+    console.error('pushToRemote: Failed to read local data:', e);
+    return;
+  }
+
+  // 各キーに対して並列送信（個別エラーは無視して継続）
+  for (const ck of keys){
+    const promises = [
+      remotePut(`${ck}:meta`,  meta).catch(e => console.warn(`Failed to push meta for ${ck}:`, e)),
+      remotePut(`${ck}:dates`, dates).catch(e => console.warn(`Failed to push dates for ${ck}:`, e))
+    ];
+    if (countsCfg) {
+      promises.push(
+        remotePut(`${ck}:counts`, countsCfg).catch(e => console.warn(`Failed to push counts for ${ck}:`, e))
+      );
+    }
+    await Promise.all(promises);
   }
 }
 

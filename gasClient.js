@@ -89,24 +89,41 @@
       return { success:false, message:'クラウド接続: エラーが発生しました - ' + e.message };
     }
   }
-  // meta/dates/counts をまとめて取得する API
+// meta/dates/counts をまとめて取得する API
   //   GAS 側 doGet(e) の ?k=<cloudKey>&bundle=1 に対応
   async function getAll(baseKey){
     const url = `${getEndpoint()}?k=${encodeURIComponent(baseKey)}&bundle=1`;
 
-    const res = await fetch(url, {
-      method: 'GET',
-      mode: 'cors',
-      cache: 'no-cache'
-    });
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-cache'
+      });
 
-    if (!res.ok) {
-      throw new Error('getAll failed: ' + res.status + ' ' + res.statusText);
+      if (!res.ok) {
+        console.error('getAll failed:', res.status, res.statusText);
+        setCloudStatus('offline');
+        throw new Error('getAll failed: ' + res.status + ' ' + res.statusText);
+      }
+
+      setCloudStatus('ok');
+      const text = await res.text();
+      if (!text || text.trim() === '') {
+        return { meta: null, dates: null, counts: null };
+      }
+      
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error('getAll JSON parse error:', e, text);
+        return { meta: null, dates: null, counts: null };
+      }
+    } catch (e) {
+      console.error('getAll network error:', e);
+      setCloudStatus('offline');
+      throw e;
     }
-
-    const json = await res.json();
-    // 期待する形: { meta: {...}, dates: {...}, counts: {...} }
-    return json;
   }
 
 
