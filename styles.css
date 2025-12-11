@@ -271,44 +271,8 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
 .attr header{ padding:14px; border-bottom:1px solid var(--border); font-weight:700; }
 .attr .content{ max-height:60vh; overflow:auto; padding:10px 14px; }
 
-/* 従業員ダイアログ用 タブ UI */
-.attr-tabs{
-  display:flex;
-  gap:4px;
-  margin-bottom:8px;
-  border-bottom:1px solid var(--border);
-}
-.attr-tab-button{
-  flex:1 1 0;
-  padding:6px 8px;
-  border:none;
-  background:transparent;
-  font-size:13px;
-  cursor:pointer;
-  border-bottom:2px solid transparent;
-}
-.attr-tab-button.is-active{
-  font-weight:600;
-  color:var(--accent);
-  border-color:var(--accent);
-}
-.attr-tab-panels{
-  width:100%;
-}
-.attr-tab-panel{
-  display:none;
-}
-.attr-tab-panel.is-active{
-  display:block;
-}
-.attr-detail-placeholder{
-  font-size:0.85em;
-  color:#6b7280;
-  padding:8px 0;
-}
 
 .attr .row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:6px 0; }
-
 
 #countsDlg .row-fixed-by-date{
   display:block;

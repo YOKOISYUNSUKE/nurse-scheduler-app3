@@ -44,174 +44,240 @@ function initInternal(){
     else attrDlg.show();
   }
 
-function buildAttrDialog(){
-  const State = getState();
-  if (!State) return;
+  function buildAttrDialog(){
+    const State = getState();
+    if (!State) return;
 
-  attrContent.innerHTML = '';
+    attrContent.innerHTML = '';
 
-  // === 「一覧 / 詳細」タブ UI の骨組み（まずは見た目だけ） ===
-  const tabs = document.createElement('div');
-  tabs.className = 'attr-tabs';
+    // --- 勤務時間（全体）一括設定パネル ---
+    // 既に ShiftDurations が読み込まれていることが前提
+    if (window.ShiftDurations){
+      const globalWrap = document.createElement('div');
+      globalWrap.className = 'global-durations';
+      globalWrap.style.display = 'flex';
+      globalWrap.style.flexDirection = 'column';
+      globalWrap.style.gap = '8px';
+      globalWrap.style.marginBottom = '12px';
 
-  const listTabBtn = document.createElement('button');
-  listTabBtn.type = 'button';
-  listTabBtn.className = 'attr-tab-button is-active';
-  listTabBtn.textContent = '一覧';
+      const title = document.createElement('div');
+      title.textContent = '勤務時間（全体）一括設定';
+      title.style.fontWeight = '600';
+      globalWrap.appendChild(title);
 
-  const detailTabBtn = document.createElement('button');
-  detailTabBtn.type = 'button';
-  detailTabBtn.className = 'attr-tab-button';
-  detailTabBtn.textContent = '詳細';
+      const marks = window.ShiftDurations.MARKS || ['〇','☆','★','◆','●'];
+      const fields = document.createElement('div');
+      fields.style.display = 'flex';
+      fields.style.flexWrap = 'wrap';
+      fields.style.gap = '8px';
 
-  tabs.appendChild(listTabBtn);
-  tabs.appendChild(detailTabBtn);
+      const currentDefs = (typeof window.ShiftDurations.getAllGlobalDefaults === 'function')
+        ? window.ShiftDurations.getAllGlobalDefaults()
+        : {};
 
-  const panels = document.createElement('div');
-  panels.className = 'attr-tab-panels';
+      marks.forEach(mk => {
+        const field = document.createElement('div');
+        field.style.minWidth = '120px';
+        field.style.display = 'flex';
+        field.style.flexDirection = 'column';
 
-  const listPanel = document.createElement('div');
-  listPanel.className = 'attr-tab-panel is-active';
-  listPanel.dataset.tab = 'list';
+        const lbl = document.createElement('label');
+        lbl.textContent = mk + ' マーク（全体既定）';
+        field.appendChild(lbl);
 
-  const detailPanel = document.createElement('div');
-  detailPanel.className = 'attr-tab-panel';
-  detailPanel.dataset.tab = 'detail';
+        const sel = document.createElement('select');
+        sel.className = 'select global-duration-select';
+        sel.dataset.mark = mk;
+        // 選択肢は ShiftDurations.getOptionsForMark から取得
+        const opts = (typeof window.ShiftDurations.getOptionsForMark === 'function')
+          ? window.ShiftDurations.getOptionsForMark(mk)
+          : (function(){
+              const out = [];
+              for (let m = 300; m <= 1200; m += 15) out.push({ value: m, label: `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}` });
+              return out;
+            })();
+        opts.forEach(o => {
+          const op = document.createElement('option');
+          op.value = String(o.value);
+          op.textContent = o.label;
+          sel.appendChild(op);
+        });
 
-  const detailPlaceholder = document.createElement('div');
-  detailPlaceholder.className = 'attr-detail-placeholder';
-  detailPlaceholder.textContent = 'ここに従業員ごとの詳細ビューを表示予定です。';
-  detailPanel.appendChild(detailPlaceholder);
+        const curVal = currentDefs[mk] ?? (window.ShiftDurations.getDefaultForMark ? window.ShiftDurations.getDefaultForMark(mk) : null);
+        if (curVal != null) sel.value = String(curVal);
 
-  panels.appendChild(listPanel);
-  panels.appendChild(detailPanel);
+        const info = document.createElement('div');
+        info.className = 'current-duration-label';
+        info.style.fontSize = '0.8em';
+        info.style.color = '#6b7280';
+        info.textContent = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
+          ? window.ShiftDurations.formatMinutes(Number(curVal) || 0)
+          : `${Math.floor((Number(curVal)||0)/60)}:${String((Number(curVal)||0)%60).padStart(2,'0')}`;
 
-  attrContent.appendChild(tabs);
-  attrContent.appendChild(panels);
+        sel.addEventListener('change', () => {
+          const val = parseInt(sel.value, 10);
+          if (!Number.isFinite(val)) return;
+          // 更新：ShiftDurations にセット（既存の個別設定は上書きしない）
+          if (typeof window.ShiftDurations.setGlobalDefault === 'function') {
+            window.ShiftDurations.setGlobalDefault(mk, val);
+          } else {
+            // フォールバックで直接格納（非推奨）
+            window.ShiftDurations._globalDefaults = window.ShiftDurations._globalDefaults || {};
+            window.ShiftDurations._globalDefaults[mk] = val;
+          }
+          // ラベル更新
+          info.textContent = (window.ShiftDurations && typeof window.ShiftDurations.formatMinutes === 'function')
+            ? window.ShiftDurations.formatMinutes(val)
+            : `${Math.floor(val/60)}:${String(val%60).padStart(2,'0')}`;
 
-  const activateTab = (targetBtn) => {
-    const isList = (targetBtn === listTabBtn);
-    listTabBtn.classList.toggle('is-active', isList);
-    detailTabBtn.classList.toggle('is-active', !isList);
-    listPanel.classList.toggle('is-active', isList);
-    detailPanel.classList.toggle('is-active', !isList);
-  };
+          // 即時保存（メタデータのみ）
+          if (typeof window.saveMetaOnly === 'function') {
+            window.saveMetaOnly();
+            if (typeof window.showToast === 'function') {
+              window.showToast(`${mk} を一括で ${info.textContent} に変更しました`);
+            }
+          }
 
-  listTabBtn.addEventListener('click', () => activateTab(listTabBtn));
-  detailTabBtn.addEventListener('click', () => activateTab(detailTabBtn));
+          // 画面上の月合計なども即時反映
+          if (typeof window.renderGrid === 'function') {
+            window.renderGrid();
+          }
+        });
 
-  // --- 勤務時間（全体）一括設定パネル ---
-  // 既に ShiftDurations が存在し、全体設定UIが別途初期化済みの場合のみ表示
-  if (window.ShiftDurations){
-    const globalWrap = document.createElement('div');
-    globalWrap.className = 'durations-wrap';
-    globalWrap.style.border = '1px solid #e5e7eb';
-    globalWrap.style.borderRadius = '10px';
-    globalWrap.style.padding = '8px 10px';
-    globalWrap.style.marginBottom = '8px';
-    globalWrap.style.background = '#f9fafb';
 
-    const globalHeader = document.createElement('div');
-    globalHeader.style.display = 'flex';
-    globalHeader.style.alignItems = 'center';
-    globalHeader.style.gap = '6px';
-    globalHeader.style.marginBottom = '6px';
+        field.appendChild(sel);
+        field.appendChild(info);
+        fields.appendChild(field);
+      });
 
-    const title = document.createElement('span');
-    title.textContent = '勤務時間（全員共通）の一括設定';
-    title.style.fontWeight = '600';
-    title.style.fontSize = '0.95em';
+      globalWrap.appendChild(fields);
+      
+      // 一括適用ボタンを追加
+      const applyBtn = document.createElement('button');
+      applyBtn.type = 'button';
+      applyBtn.className = 'btn btn-accent';
+      applyBtn.textContent = '適応';
+      applyBtn.title = '現在の全体既定値を全従業員に一括適用';
+      applyBtn.style.marginTop = '8px';
+      applyBtn.style.alignSelf = 'flex-start';
+      applyBtn.addEventListener('click', () => {
+        applyGlobalDurationsToAll();
+      });
+      globalWrap.appendChild(applyBtn);
+      
+      attrContent.appendChild(globalWrap);
+    }
+    // --- ここまで全体設定パネル ---
+    // --- 早出・遅出の一括選択パネル ---
+    {
+      const bulkWrap = document.createElement('div');
+      bulkWrap.style.display = 'flex';
+      bulkWrap.style.flexWrap = 'wrap';
+      bulkWrap.style.alignItems = 'center';
+      bulkWrap.style.gap = '8px';
+      bulkWrap.style.marginBottom = '12px';
+      bulkWrap.style.padding = '8px';
+      bulkWrap.style.backgroundColor = '#f9fafb';
+      bulkWrap.style.borderRadius = '8px';
 
-    const currentLabel = document.createElement('span');
-    currentLabel.className = 'current-duration-label';
-    currentLabel.style.fontSize = '0.85em';
-    currentLabel.style.color = '#6b7280';
-    currentLabel.textContent = window.ShiftDurations.getGlobalSummaryLabel
-      ? window.ShiftDurations.getGlobalSummaryLabel()
-      : '';
+      const bulkTitle = document.createElement('div');
+      bulkTitle.textContent = '早出・遅出 一括設定';
+      bulkTitle.style.fontSize = '0.9em';
+      bulkTitle.style.fontWeight = '600';
+      bulkTitle.style.marginRight = '8px';
+      bulkWrap.appendChild(bulkTitle);
 
-    globalHeader.appendChild(title);
-    globalHeader.appendChild(currentLabel);
-    globalWrap.appendChild(globalHeader);
+      // 早出一括
+      const earlyBlock = document.createElement('div');
+      earlyBlock.style.display = 'flex';
+      earlyBlock.style.alignItems = 'center';
+      earlyBlock.style.gap = '4px';
 
-    const inner = document.createElement('div');
-    inner.style.display = 'flex';
-    inner.style.flexWrap = 'wrap';
-    inner.style.gap = '8px';
+      const earlyLabel = document.createElement('span');
+      earlyLabel.textContent = '早出';
+      earlyLabel.style.fontSize = '0.85em';
+      earlyBlock.appendChild(earlyLabel);
 
-    ['〇','☆','★','◆','●'].forEach(mk => {
-      const field = createDurationFieldForMark(mk, null, State);
-      inner.appendChild(field);
-    });
+      const earlySel = document.createElement('select');
+      earlySel.className = 'select';
+      ['none','all','weekday','holiday'].forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent =
+          v === 'none'    ? 'なし' :
+          v === 'all'     ? '全日' :
+          v === 'weekday' ? '平日のみ' :
+                            '土日祝のみ';
+        earlySel.appendChild(opt);
+      });
+      earlySel.value = 'none';
+      earlyBlock.appendChild(earlySel);
 
-    globalWrap.appendChild(inner);
+      const earlyBtn = document.createElement('button');
+      earlyBtn.type = 'button';
+      earlyBtn.className = 'btn btn-outline btn-sm';
+      earlyBtn.textContent = '早出を一括適用';
+      earlyBtn.addEventListener('click', () => {
+        applyBulkEarlyShift(earlySel.value);
+      });
+      earlyBlock.appendChild(earlyBtn);
 
-    const note = document.createElement('div');
-    note.textContent = '※ ここで設定した勤務時間は、従業員ごとの個別設定が未指定の場合に適用されます。';
-    note.style.fontSize = '0.8em';
-    note.style.color = '#6b7280';
-    note.style.marginTop = '4px';
-    globalWrap.appendChild(note);
+      bulkWrap.appendChild(earlyBlock);
 
-    // 一覧タブの中に配置（一覧タブの先頭に挿入）
-    if (listPanel.firstChild) {
-      listPanel.insertBefore(globalWrap, listPanel.firstChild);
-    } else {
-      listPanel.appendChild(globalWrap);
+      // 遅出一括
+      const lateBlock = document.createElement('div');
+      lateBlock.style.display = 'flex';
+      lateBlock.style.alignItems = 'center';
+      lateBlock.style.gap = '4px';
+
+      const lateLabel = document.createElement('span');
+      lateLabel.textContent = '遅出';
+      lateLabel.style.fontSize = '0.85em';
+      lateBlock.appendChild(lateLabel);
+
+      const lateSel = document.createElement('select');
+      lateSel.className = 'select';
+      ['none','all','weekday','holiday'].forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent =
+          v === 'none'    ? 'なし' :
+          v === 'all'     ? '全日' :
+          v === 'weekday' ? '平日のみ' :
+                            '土日祝のみ';
+        lateSel.appendChild(opt);
+      });
+      lateSel.value = 'none';
+      lateBlock.appendChild(lateSel);
+
+      const lateBtn = document.createElement('button');
+      lateBtn.type = 'button';
+      lateBtn.className = 'btn btn-outline btn-sm';
+      lateBtn.textContent = '遅出を一括適用';
+      lateBtn.addEventListener('click', () => {
+        applyBulkLateShift(lateSel.value);
+      });
+      lateBlock.appendChild(lateBtn);
+
+      bulkWrap.appendChild(lateBlock);
+
+      const note = document.createElement('div');
+      note.textContent = '※夜勤専従（勤務形態：夜勤のみ）は対象外です。';
+      note.style.fontSize = '0.8em';
+      note.style.color = '#6b7280';
+      note.style.marginLeft = '4px';
+      bulkWrap.appendChild(note);
+
+      attrContent.appendChild(bulkWrap);
     }
 
-  // --- 早出・遅出の一括選択パネル ---
-  {
-    const bulkWrap = document.createElement('div');
-    bulkWrap.style.display = 'flex';
-    bulkWrap.style.flexWrap = 'wrap';
-    bulkWrap.style.gap = '8px';
-    bulkWrap.style.alignItems = 'center';
-    bulkWrap.style.marginBottom = '10px';
-    bulkWrap.style.marginTop = '4px';
+    // --- 従業員ごとの行を追加 ---
+    for (let i = 0; i < State.employeeCount; i++){
+      const row = createEmployeeRow(i, State);  // ← 今度は正しく参照できる
+      attrContent.appendChild(row);
+    }
 
-    const label = document.createElement('span');
-    label.textContent = '早出・遅出の一括設定';
-    label.style.fontWeight = '600';
-    label.style.fontSize = '0.95em';
-    bulkWrap.appendChild(label);
-
-    const earlySelect = createBulkEarlyShiftSelect(State);
-    const lateSelect  = createBulkLateShiftSelect(State);
-
-    bulkWrap.appendChild(earlySelect);
-    bulkWrap.appendChild(lateSelect);
-
-    const applyBtn = document.createElement('button');
-    applyBtn.type = 'button';
-    applyBtn.className = 'btn btn-outline btn-duration-toggle';
-    applyBtn.textContent = '反映';
-    applyBtn.style.marginLeft = 'auto';
-    applyBtn.addEventListener('click', () => {
-      const earlyVal = earlySelect.querySelector('select')?.value || 'none';
-      const lateVal  = lateSelect.querySelector('select')?.value || 'none';
-
-      applyBulkEarlyShift(earlyVal, State);
-      applyBulkLateShift(lateVal, State);
-      if (typeof window.showToast === 'function'){
-        window.showToast('早出・遅出の一括設定を反映しました');
-      }
-      // 画面更新
-      buildAttrDialog();
-    });
-    bulkWrap.appendChild(applyBtn);
-
-    // こちらも一覧タブの中に配置
-    listPanel.appendChild(bulkWrap);
   }
-
-  // --- 従業員ごとの行を追加 ---
-  for (let i = 0; i < State.employeeCount; i++){
-    const row = createEmployeeRow(i, State);
-    listPanel.appendChild(row);
-  }
-}
-
 
   // createEmployeeRow を buildAttrDialog の外に移動（関数スコープを修正）
   function createEmployeeRow(i, State){
