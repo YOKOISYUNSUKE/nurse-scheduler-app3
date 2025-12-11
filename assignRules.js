@@ -379,10 +379,11 @@ if (p.mark==='☆'){
   if (d+1 >= p.dates.length) return { ok:false, message:'月末のため「☆」を置けません' };
   if (p.hasOffByDate && p.hasOffByDate(p.rowIndex, dsNext)) return { ok:false, message:'翌日が希望休のため「☆」を置けません' };
 
-  // ★追加：「☆★」の次の2日（d+2, d+3）が無い場合は不可（休休を確保できない）
-  if (d + 3 >= p.dates.length){
-    return { ok:false, message:'月末のため「☆★→休休」を置けません' };
+// 「☆★」の次の1日（d+2）が無い場合は不可（休を確保できない）
+  if (d + 2 >= p.dates.length){
+    return { ok:false, message:'月末のため「☆★→休」を置けません' };
   }
+
       // 翌日★を仮置きして過剰チェック
       // 既に本人が翌日に★なら差分ゼロ
       const already = p.getAssign(p.rowIndex, dsNext) === '★';
@@ -549,26 +550,24 @@ if (p.mark==='☆'){
         }
       }
     }
-    // ★新規：「☆★」直後2日は休専用（配置禁止）
+
+// 「☆★」直後1日は休専用（配置禁止）
+    // ※4週間で最低2回の二連休は別途チェック（validateWindow内）
     {
       const prev1 = p.dayIndex - 1;
       const prev2 = p.dayIndex - 2;
-      const prev3 = p.dayIndex - 3;
       const dsPrev1 = prev1>=0 ? dateStr(p.dates[prev1]) : null;
       const dsPrev2 = prev2>=0 ? dateStr(p.dates[prev2]) : null;
-      const dsPrev3 = prev3>=0 ? dateStr(p.dates[prev3]) : null;
       const mkPrev1 = dsPrev1 ? p.getAssign(p.rowIndex, dsPrev1) : undefined;
       const mkPrev2 = dsPrev2 ? p.getAssign(p.rowIndex, dsPrev2) : undefined;
-      const mkPrev3 = dsPrev3 ? p.getAssign(p.rowIndex, dsPrev3) : undefined;
-      const isAfterPair1 = (mkPrev2==='☆' && mkPrev1==='★'); // d = k+2
-      const isAfterPair2 = (mkPrev3==='☆' && mkPrev2==='★'); // d = k+3
+      const isAfterPair = (mkPrev2==='☆' && mkPrev1==='★'); // d = k+2（★の翌日）
       const wt = (typeof p.getWorkType === 'function') ? (p.getWorkType(p.rowIndex) || 'three') : 'three';
-      if ((isAfterPair1 || isAfterPair2) && p.mark && wt !== 'night'){
-        return { ok:false, message:'「☆★」の次の2日は必ず休（希望休または未割当）。配置できません' };
+      if (isAfterPair && p.mark && wt !== 'night'){
+        return { ok:false, message:'「☆★」の次の1日は必ず休（希望休または未割当）。配置できません' };
       }
     }
 
-    // ★追加：36協定 4週間155時間（実労働）の上限チェック
+    // 36協定 4週間155時間（実労働）の上限チェック
     if (typeof global.countLast28Days === 'function'){
       try {
         const endDt = p.dates[d];
@@ -997,24 +996,21 @@ for (let r = 0; r < p.employeeCount; r++){
     }
   }
 
-  // 「☆★」の次の2日は休（希望休 or 未割当）必須
+// 「☆★」の次の1日は休（希望休 or 未割当）必須
+  // ※4週間で最低2回の二連休は RENKYU_MIN2 でチェック
 
     for (let r = 0; r < p.employeeCount; r++){
-      for (let d = 0; d < p.dates.length - 3; d++){
+      for (let d = 0; d < p.dates.length - 2; d++){
         const ds0 = dateStr(p.dates[d]);
         const ds1 = dateStr(p.dates[d+1]);
 if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
   const wt = (typeof p.getWorkType === 'function') ? (p.getWorkType(r) || 'three') : 'three';
   const ds2 = dateStr(p.dates[d+2]);
-  const ds3 = dateStr(p.dates[d+3]);
   const mk2 = p.getAssign(r, ds2);
-  const mk3 = p.getAssign(r, ds3);
   const off2 = (typeof p.hasOffByDate==='function') ? p.hasOffByDate(r, ds2) : false;
-  const off3 = (typeof p.hasOffByDate==='function') ? p.hasOffByDate(r, ds3) : false;
   const isRest2 = off2 || !mk2;
-  const isRest3 = off3 || !mk3;
-  if (wt !== 'night' && (!isRest2 || !isRest3)){
-    errors.push({ rowIndex:r, dayIndex:d, type:'SEQ_STAR_AFTER_REST2', expected:'休休', actual:`${mk2||'休'}${mk3||'休'}` });
+  if (wt !== 'night' && !isRest2){
+    errors.push({ rowIndex:r, dayIndex:d, type:'SEQ_STAR_AFTER_REST1', expected:'休', actual:`${mk2||'休'}` });
   }
 }
 
