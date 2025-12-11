@@ -750,25 +750,23 @@ const lateTarget = (window.Counts && typeof window.Counts.getLateShiftTarget ===
   
   
   function isWeekendOrHoliday(dt){
-
-    if (window.HolidayRules && typeof window.HolidayRules.minDayFor === 'function'){
-      const md = window.HolidayRules.minDayFor(dt, (ds)=> State.holidaySet.has(ds));
-      return md === 5;
-    }
-    const w = dt.getDay();
+    const w  = dt.getDay();
     const ds = dateStr(dt);
-    return (w===0 || w===6) || State.holidaySet.has(ds);
+    // 祝日セット or 土日を「土日祝」として判定するシンプル版
+    return (w === 0 || w === 6) || State.holidaySet.has(ds);
   }
 
 function targetDayForIndex(dayIdx){
   const dt = State.windowDates[dayIdx];
+  const ds = dateStr(dt);
 
-  // 1) カスタム関数があれば優先して利用
-  if (window.Counts && typeof window.Counts.getDayTarget === 'function'){
-    return window.Counts.getDayTarget(dt, (ds)=> State.holidaySet.has(ds));
+  // 1) counts.config.js の「固定値」関数を最優先で利用
+  if (window.Counts && typeof window.Counts.getFixedDayCount === 'function'){
+    const fixed = window.Counts.getFixedDayCount(ds);
+    if (typeof fixed === 'number') return fixed;
   }
 
-  // 2) カウント設定オブジェクトに明示的なターゲットがあれば利用（ここを追加）
+  // 2) 固定値が未設定の場合、平日/土日祝ごとの「固定人数」（※DAY_TARGET_* を固定値として扱う）
   if (window.Counts){
     const isWH = isWeekendOrHoliday(dt);
     if (isWH && Number.isInteger(window.Counts.DAY_TARGET_WEEKEND_HOLIDAY)){
@@ -782,6 +780,7 @@ function targetDayForIndex(dayIdx){
   // 3) 最終フォールバック（既存の既定値）
   return isWeekendOrHoliday(dt) ? 6 : 10;
 }
+
 
 function countDayShift4w(r){
   let c = 0;
@@ -1102,6 +1101,181 @@ function reduceDayShiftTo(dayIdx, target) { // target は土日祝/特定日用�
     
     if (typeof updateFooterCounts === 'function') updateFooterCounts();
   }
+function enforceDayShiftFixedCounts(dayIdx) {
+    const dt = State.windowDates[dayIdx];
+    if (!dt) return;
+    const ds = dateStr(dt);
+
+    const stats = countDayStats(dayIdx);
+    let totalDay = stats.day;   // 〇＋早＋遅 の合計
+    let earlyCount = stats.early;
+    let lateCount = stats.late;
+
+    // Counts からターゲット値を取得
+    let targetDay = targetDayForIndex(dayIdx);
+    let earlyTarget = null;
+    let lateTarget = null;
+
+    if (window.Counts && typeof window.Counts.getEarlyShiftTarget === 'function') {
+        earlyTarget = window.Counts.getEarlyShiftTarget(
+            dt,
+            d0 => State.holidaySet.has(d0)
+        );
+    }
+    if (window.Counts && typeof window.Counts.getLateShiftTarget === 'function') {
+        lateTarget = window.Counts.getLateShiftTarget(
+            dt,
+            d0 => State.holidaySet.has(d0)
+        );
+    }
+
+    if (!Number.isInteger(targetDay)) {
+        targetDay = null;
+    }
+    if (!Number.isInteger(earlyTarget)) {
+        earlyTarget = null;
+    }
+    if (!Number.isInteger(lateTarget)) {
+        lateTarget = null;
+    }
+
+    // ターゲット未設定なら何もしない
+    if (targetDay == null && earlyTarget == null && lateTarget == null) {
+        return;
+    }
+
+    // 実現可能な範囲にターゲットを丸める（合計より多い早・遅は要求しない）
+    if (targetDay != null && totalDay > 0) {
+        if (earlyTarget != null) {
+            if (earlyTarget < 0) earlyTarget = 0;
+            if (earlyTarget > totalDay) earlyTarget = totalDay;
+        }
+        if (lateTarget != null) {
+            if (lateTarget < 0) lateTarget = 0;
+            const maxLate = totalDay - (earlyTarget || 0);
+            if (lateTarget > maxLate) lateTarget = maxLate;
+        }
+    }
+
+    // 早・遅のリストを作る（調整順の優先度付け用）
+    function buildRowsForMark(mark) {
+        const rows = [];
+        for (let r = 0; r < State.employeeCount; r++) {
+            const mk = getAssign(r, ds);
+            if (mk !== mark) continue;
+            const emp = State.employeesAttr[r] || {};
+            const level = emp.level || 'B';
+            const day4w = countDayShift4w(r);
+            rows.push({
+                r,
+                isA: level === 'A',
+                day4w
+            });
+        }
+        // B を先に落とし、日勤が多い人から優先的に外す
+        rows.sort((a, b) => {
+            if (a.isA !== b.isA) return a.isA ? 1 : -1;
+            if (a.day4w !== b.day4w) return b.day4w - a.day4w;
+            return a.r - b.r;
+        });
+        return rows;
+    }
+
+    // --- Step1: 早・遅が多すぎる場合は〇に落として調整 ---
+    if (earlyTarget != null) {
+        let rows = buildRowsForMark('早');
+        while (earlyCount > earlyTarget && rows.length > 0) {
+            const { r } = rows.shift();
+            setAssign(r, ds, '〇');
+            earlyCount--;
+        }
+    }
+
+    if (lateTarget != null) {
+        let rows = buildRowsForMark('遅');
+        while (lateCount > lateTarget && rows.length > 0) {
+            const { r } = rows.shift();
+            setAssign(r, ds, '〇');
+            lateCount--;
+        }
+    }
+
+    // --- Step2: 早・遅が不足している場合は〇から振り分ける ---
+    if (earlyTarget != null) {
+        let guard = State.employeeCount * 2;
+        while (earlyCount < earlyTarget && guard-- > 0) {
+            let best = null;
+
+            for (let r = 0; r < State.employeeCount; r++) {
+                const mk = getAssign(r, ds);
+                if (mk !== '〇') continue;
+                if (!canAssignEarlyShiftForNormalize(dayIdx, r)) continue;
+
+                const emp = State.employeesAttr[r] || {};
+                const level = emp.level || 'B';
+                const day4w = countDayShift4w(r);
+                const cand = {
+                    r,
+                    isA: level === 'A',
+                    day4w
+                };
+
+                if (!best) {
+                    best = cand;
+                } else if (best.isA !== cand.isA) {
+                    // B を優先して早にする
+                    if (best.isA && !cand.isA) best = cand;
+                } else if (cand.day4w < best.day4w) {
+                    // 日勤が少ない人を優先
+                    best = cand;
+                }
+            }
+
+            if (!best) break;
+
+            setAssign(best.r, ds, '早');
+            earlyCount++;
+        }
+    }
+
+    if (lateTarget != null) {
+        let guard = State.employeeCount * 2;
+        while (lateCount < lateTarget && guard-- > 0) {
+            let best = null;
+
+            for (let r = 0; r < State.employeeCount; r++) {
+                const mk = getAssign(r, ds);
+                if (mk !== '〇') continue;
+                if (!canAssignLateShiftForNormalize(dayIdx, r)) continue;
+
+                const emp = State.employeesAttr[r] || {};
+                const level = emp.level || 'B';
+                const day4w = countDayShift4w(r);
+                const cand = {
+                    r,
+                    isA: level === 'A',
+                    day4w
+                };
+
+                if (!best) {
+                    best = cand;
+                } else if (best.isA !== cand.isA) {
+                    if (best.isA && !cand.isA) best = cand;
+                } else if (cand.day4w < best.day4w) {
+                    best = cand;
+                }
+            }
+
+            if (!best) break;
+
+            setAssign(best.r, ds, '遅');
+            lateCount++;
+        }
+    }
+
+    // 日勤合計については、この関数では「〇・早・遅の入れ替え」だけなので変動しない。
+    // （総数は直前のロジックで targetDayForIndex に合わせてある前提）
+}
 
   function nightQuotasOK(startIdx, endIdx){
     return (window.NightBand && window.NightBand.nightQuotasOK)
@@ -1586,9 +1760,9 @@ function autoAssignRange(startDayIdx, endDayIdx){
 
     if (typeof ensureRenkyuMin2 === 'function'){
       ensureRenkyuMin2(startDayIdx, endDayIdx);
-     }
-  
-     // ★★★ 追加：最終チェック：全日程で厳格化を再実行 ★★★
+    }
+    
+    // --- ⑤ NF/NS と日勤帯の最終チェック ---
      for(let d=startDayIdx; d<=endDayIdx; d++){
        const ds = dateStr(State.windowDates[d]);
        const FIXED_NF = targetNFFor(ds);
@@ -1606,11 +1780,15 @@ function autoAssignRange(startDayIdx, endDayIdx){
          const pushDay = fillDayShift(d);
          pushDay(target - day);
        }
+
+       // 〇・早・遅の固定値を最終的に整える
+       enforceDayShiftFixedCounts(d);
      }
 
   }
 
   // === 祝日・代休の自動付与 ===
+
   function applyHolidayLeaveFlags(startDayIdx, endDayIdx){
     for (let d = startDayIdx; d <= endDayIdx; d++){
       const dt = State.windowDates[d];

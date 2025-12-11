@@ -5,13 +5,17 @@
     DAY_TARGET_WEEKEND_HOLIDAY: 6,
     FIXED_NF: 3,
     FIXED_NS: 3,
-    // 特定日ごとの固定条件 { 'YYYY-MM-DD': { day, nf, ns } }
+    // 土日祝の☆＋◆／★＋● 固定人数（未設定なら平日と同じ値）
+    FIXED_NF_WEEKEND_HOLIDAY: 3,
+    FIXED_NS_WEEKEND_HOLIDAY: 3,
+    // 特定日ごとの固定条件 { 'YYYY-MM-DD': { day, early, late, nf, ns } }
     FIXED_BY_DATE: {},
     EARLY_TARGET_WEEKDAY: 1,
     EARLY_TARGET_WEEKEND_HOLIDAY: 1,
     LATE_TARGET_WEEKDAY: 1,
     LATE_TARGET_WEEKEND_HOLIDAY: 1
   };
+
 
   function pad2(n){ return String(n).padStart(2,'0'); }
   function toDs(dtOrString){
@@ -82,19 +86,70 @@
   };
 
 
-  // 「☆＋◆」固定人数（特定日設定 ＞ グローバル設定）
-  Counts.getFixedNF = function(ds){
+  // 「☆＋◆」固定人数（特定日設定 ＞ 平日／土日祝のグローバル設定）
+  Counts.getFixedNF = function(dsOrDt){
+    const ds = toDs(dsOrDt);
     const cfg = Counts.getFixedConfigFor(ds);
     if (cfg && Number.isFinite(cfg.nf)) return cfg.nf;
+
+    const isHol = (typeof global.isHoliday === 'function') ? !!global.isHoliday(ds) : false;
+
+    let dt = null;
+    if (dsOrDt instanceof Date){
+      dt = dsOrDt;
+    } else if (typeof ds === 'string'){
+      const parts = ds.split('-');
+      if (parts.length === 3){
+        const y = parseInt(parts[0],10);
+        const m = parseInt(parts[1],10) - 1;
+        const d = parseInt(parts[2],10);
+        const tmp = new Date(y, m, d);
+        if (Number.isFinite(tmp.getTime())) dt = tmp;
+      }
+    }
+
+    const w = dt ? dt.getDay() : NaN;
+    const isWeekend = (w === 0 || w === 6);
+    const isWkEndOrHol = isWeekend || isHol;
+
+    if (isWkEndOrHol && Number.isFinite(Counts.FIXED_NF_WEEKEND_HOLIDAY)){
+      return Counts.FIXED_NF_WEEKEND_HOLIDAY;
+    }
     return Counts.FIXED_NF;
   };
 
-  // 「★＋●」固定人数（特定日設定 ＞ グローバル設定）
-  Counts.getFixedNS = function(ds){
+  // 「★＋●」固定人数（特定日設定 ＞ 平日／土日祝のグローバル設定）
+  Counts.getFixedNS = function(dsOrDt){
+    const ds = toDs(dsOrDt);
     const cfg = Counts.getFixedConfigFor(ds);
     if (cfg && Number.isFinite(cfg.ns)) return cfg.ns;
+
+    const isHol = (typeof global.isHoliday === 'function') ? !!global.isHoliday(ds) : false;
+
+    let dt = null;
+    if (dsOrDt instanceof Date){
+      dt = dsOrDt;
+    } else if (typeof ds === 'string'){
+      const parts = ds.split('-');
+      if (parts.length === 3){
+        const y = parseInt(parts[0],10);
+        const m = parseInt(parts[1],10) - 1;
+        const d = parseInt(parts[2],10);
+        const tmp = new Date(y, m, d);
+        if (Number.isFinite(tmp.getTime())) dt = tmp;
+      }
+    }
+
+    const w = dt ? dt.getDay() : NaN;
+    const isWeekend = (w === 0 || w === 6);
+    const isWkEndOrHol = isWeekend || isHol;
+
+    if (isWkEndOrHol && Number.isFinite(Counts.FIXED_NS_WEEKEND_HOLIDAY)){
+      return Counts.FIXED_NS_WEEKEND_HOLIDAY;
+    }
     return Counts.FIXED_NS;
   };
+
 
 
 
@@ -124,9 +179,10 @@
     if (!cfg) return;
     const keys = [
       'DAY_TARGET_WEEKDAY','DAY_TARGET_WEEKEND_HOLIDAY',
-      'EARLY_TARGET_WEEKDAY','EARLY_TARGET_WEEKEND_HOLIDAY',  
-      'LATE_TARGET_WEEKDAY','LATE_TARGET_WEEKEND_HOLIDAY',     
-      'FIXED_NF','FIXED_NS'
+      'EARLY_TARGET_WEEKDAY','EARLY_TARGET_WEEKEND_HOLIDAY',
+      'LATE_TARGET_WEEKDAY','LATE_TARGET_WEEKEND_HOLIDAY',
+      'FIXED_NF','FIXED_NS',
+      'FIXED_NF_WEEKEND_HOLIDAY','FIXED_NS_WEEKEND_HOLIDAY'
     ];
     for (const k of keys){
       if (!(k in cfg)) continue;
@@ -138,6 +194,7 @@
       Counts.FIXED_BY_DATE = normalizeFixedMap(cfg.FIXED_BY_DATE);
     }
   }
+
   function load(){ apply(read()); return {...Counts}; }
   function save(partial){
     const next = { ...read(), ...(partial||{}) };
@@ -145,14 +202,17 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       DAY_TARGET_WEEKDAY: Counts.DAY_TARGET_WEEKDAY,
       DAY_TARGET_WEEKEND_HOLIDAY: Counts.DAY_TARGET_WEEKEND_HOLIDAY,
-      EARLY_TARGET_WEEKDAY: Counts.EARLY_TARGET_WEEKDAY,            
-      EARLY_TARGET_WEEKEND_HOLIDAY: Counts.EARLY_TARGET_WEEKEND_HOLIDAY,  
-      LATE_TARGET_WEEKDAY: Counts.LATE_TARGET_WEEKDAY,               
-      LATE_TARGET_WEEKEND_HOLIDAY: Counts.LATE_TARGET_WEEKEND_HOLIDAY,   
+      EARLY_TARGET_WEEKDAY: Counts.EARLY_TARGET_WEEKDAY,
+      EARLY_TARGET_WEEKEND_HOLIDAY: Counts.EARLY_TARGET_WEEKEND_HOLIDAY,
+      LATE_TARGET_WEEKDAY: Counts.LATE_TARGET_WEEKDAY,
+      LATE_TARGET_WEEKEND_HOLIDAY: Counts.LATE_TARGET_WEEKEND_HOLIDAY,
       FIXED_NF: Counts.FIXED_NF,
       FIXED_NS: Counts.FIXED_NS,
+      FIXED_NF_WEEKEND_HOLIDAY: Counts.FIXED_NF_WEEKEND_HOLIDAY,
+      FIXED_NS_WEEKEND_HOLIDAY: Counts.FIXED_NS_WEEKEND_HOLIDAY,
       FIXED_BY_DATE: Counts.FIXED_BY_DATE
     }));
+
 
 
     // 人数設定もクラウドへ同期（ログイン済みかつpushToRemoteがあれば）
@@ -249,15 +309,17 @@
     const dlg = document.getElementById('countsDlg');
     if (!btn || !dlg) return;
     const $ = id => dlg.querySelector(`#${id}`);
-    const inpTWeek       = $('cfgDayTarget');
-    const inpTWH         = $('cfgDayTargetWkHol');
+    const inpTWeek        = $('cfgDayTarget');
+    const inpTWH          = $('cfgDayTargetWkHol');
     const inpEarlyWeekday = $('cfgEarlyTargetWeekday');
     const inpEarlyWkHol   = $('cfgEarlyTargetWkHol');
     const inpLateWeekday  = $('cfgLateTargetWeekday');
     const inpLateWkHol    = $('cfgLateTargetWkHol');
-    const inpNF          = $('cfgFixedNF');
-    const inpNS          = $('cfgFixedNS');
-    const inpFixedByDate = $('cfgFixedByDate');
+    const inpNF           = $('cfgFixedNF');
+    const inpNS           = $('cfgFixedNS');
+    const inpNFHoliday    = $('cfgFixedNFHoliday');
+    const inpNSHoliday    = $('cfgFixedNSHoliday');
+    const inpFixedByDate  = $('cfgFixedByDate');
     const inpFixedDate   = $('cfgFixedDate');
     const inpFixedDay    = $('cfgFixedDay');
     const inpFixedEarlyDate = $('cfgFixedEarlyDate');
@@ -273,6 +335,20 @@
       inpTWH.value     = String(Counts.DAY_TARGET_WEEKEND_HOLIDAY);
       inpNF.value      = String(Counts.FIXED_NF);
       inpNS.value      = String(Counts.FIXED_NS);
+      if (inpNFHoliday){
+        inpNFHoliday.value = String(
+          Number.isFinite(Counts.FIXED_NF_WEEKEND_HOLIDAY)
+            ? Counts.FIXED_NF_WEEKEND_HOLIDAY
+            : Counts.FIXED_NF
+        );
+      }
+      if (inpNSHoliday){
+        inpNSHoliday.value = String(
+          Number.isFinite(Counts.FIXED_NS_WEEKEND_HOLIDAY)
+            ? Counts.FIXED_NS_WEEKEND_HOLIDAY
+            : Counts.FIXED_NS
+        );
+      }
       if (inpEarlyWeekday) inpEarlyWeekday.value = String(Counts.EARLY_TARGET_WEEKDAY);
       if (inpEarlyWkHol)   inpEarlyWkHol.value   = String(Counts.EARLY_TARGET_WEEKEND_HOLIDAY);
       if (inpLateWeekday)  inpLateWeekday.value  = String(Counts.LATE_TARGET_WEEKDAY);
@@ -283,6 +359,7 @@
           ? Counts.exportFixedByDateText()
           : '';
       }
+
       if (inpFixedDate){
         inpFixedDate.value = '';
         if (inpFixedDay)        inpFixedDay.value        = '';
@@ -372,17 +449,24 @@
         ? parseFixedByDateText(inpFixedByDate.value || '')
         : {};
 
-const cfg = {
-  DAY_TARGET_WEEKDAY: parseInt(inpTWeek.value,10),
-  DAY_TARGET_WEEKEND_HOLIDAY: parseInt(inpTWH.value,10),
-  FIXED_NF: parseInt(inpNF.value,10),
-  FIXED_NS: parseInt(inpNS.value,10),
-  FIXED_BY_DATE: fixedMap,
+      const cfg = {
+        DAY_TARGET_WEEKDAY: parseInt(inpTWeek.value,10),
+        DAY_TARGET_WEEKEND_HOLIDAY: parseInt(inpTWH.value,10),
+        FIXED_NF: parseInt(inpNF.value,10),
+        FIXED_NS: parseInt(inpNS.value,10),
+        FIXED_BY_DATE: fixedMap,
         EARLY_TARGET_WEEKDAY: inpEarlyWeekday ? parseInt(inpEarlyWeekday.value,10) : 1,
         EARLY_TARGET_WEEKEND_HOLIDAY: inpEarlyWkHol ? parseInt(inpEarlyWkHol.value,10) : 1,
         LATE_TARGET_WEEKDAY: inpLateWeekday ? parseInt(inpLateWeekday.value,10) : 1,
         LATE_TARGET_WEEKEND_HOLIDAY: inpLateWkHol ? parseInt(inpLateWkHol.value,10) : 1
-};
+      };
+
+      if (inpNFHoliday && inpNFHoliday.value !== ''){
+        cfg.FIXED_NF_WEEKEND_HOLIDAY = parseInt(inpNFHoliday.value,10);
+      }
+      if (inpNSHoliday && inpNSHoliday.value !== ''){
+        cfg.FIXED_NS_WEEKEND_HOLIDAY = parseInt(inpNSHoliday.value,10);
+      }
 
       save(cfg);
 
@@ -390,7 +474,10 @@ const cfg = {
       if (typeof window.showToast === 'function') window.showToast('人数設定を保存しました');
     });
 
-    dlg.querySelector('#countsClose')?.addEventListener('click', ()=> dlg.close ? dlg.close() : (dlg.open=false));
+    dlg.querySelector('#countsClose')?.addEventListener('click', ()=>{
+      dlg.close ? dlg.close() : (dlg.open = false);
+    });
   });
 
 })(window);
+

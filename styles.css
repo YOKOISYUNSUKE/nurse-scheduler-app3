@@ -291,14 +291,17 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
 }
 #countsDlg .fixed-control-row{
   display:flex;
-  flex-wrap:wrap;
+  flex-wrap:nowrap;      
+  overflow-x:auto;      
   gap:4px;
   margin-bottom:4px;
   align-items:center;
 }
 #countsDlg .fixed-control-row input#cfgFixedDate{
   flex:0 0 auto;
-  min-width:140px;
+  min-width:100px;
+  max-width:100px;        
+  padding:6px 8px; 
 }
 #countsDlg .fixed-num{
   display:flex;
@@ -691,3 +694,4 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
     outline: none;
   }
 }
+

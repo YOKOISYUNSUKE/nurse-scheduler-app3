@@ -62,6 +62,7 @@
       </div>
       <div class="right">
         <button id="btnAttrOpen" class="btn btn-outline" type="button" title="従業員の属性を編集">従業員編集</button>
+        <button id="btnCountsOpen" class="btn btn-outline" type="button" title="日勤・夜勤の人数設定">人数設定</button>
         <button id="btnAutoAssign" class="btn btn-primary" type="button">自動割り当て</button>
         <button id="btnCancel" class="btn btn-outline" type="button">キャンセル</button>
         <button id="btnGlobalLock" class="btn btn-outline" type="button" title="指定された4週間をロック（編集禁止）">🔓 4週間ロック</button>
@@ -112,7 +113,6 @@
 
 <div id="cloudIndicator" class="cloud-indicator" title="クラウド同期状態">未接続</div>
 
-<button id="btnCountsOpen" class="btn btn-outline" type="button" title="日勤・夜勤の人数設定">人数設定</button>
 
 </div>  <!-- ← ここで .toolbar を閉じる -->
 
@@ -138,6 +138,18 @@
     .cloud-indicator.online::before{ background:#10b981; }
     .cloud-indicator.offline{ color:#7f1d1d; border-color:#fecaca; }
     .cloud-indicator.offline::before{ background:#ef4444; }
+/* 特定日固定条件の入力フィールド幅を統一 */
+.fixed-num-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 80px;  /* テーブルのセル幅に合わせる */
+}
+
+.fixed-num-input .txt {
+  flex: 1;
+  min-width: 50px;  /* 最小幅を確保 */
+}
   </style>
 
   <!-- 属性ダイアログ -->
@@ -168,19 +180,25 @@
 <dialog id="countsDlg" class="attr">
   <header>人数設定</header>
   <div class="content">
-
-<table class="counts-table">
-  <thead>
-    <tr>
-      <th></th>
-      <th>〇 日勤</th>
-      <th>早出</th>
-      <th>遅出</th>
-      <th>☆＋◆</th>
-      <th>★＋●</th>
-    </tr>
-  </thead>
-  <tbody>
+    <div class="row">
+      <div class="counts-and-fixed-options">
+ 
+      </div>
+    </div>
+    <div class="row">
+      <div id="countsTableWrapper">
+        <table class="counts-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>日勤全員</th>
+              <th>早出</th>
+              <th>遅出</th>
+              <th>準夜</th>
+              <th>深夜</th>
+            </tr>
+          </thead>
+          <tbody>
     <tr>
       <th>平日</th>
       <td><input id="cfgDayTarget" type="number" class="txt" min="0" step="1"></td>
@@ -207,24 +225,24 @@
       <div class="fixed-block">
         <div class="fixed-control-row">
           <input id="cfgFixedDate" type="date" class="txt">
-          <div class="fixed-num">
-            <span class="fixed-mark">〇</span>
+          <div class="fixed-num fixed-num-input">
+            <span class="fixed-mark">日勤全員</span>
             <input id="cfgFixedDay" type="number" class="txt" min="0" step="1">
           </div>
-          <div class="fixed-num">
-            <span class="fixed-mark">早</span>
+          <div class="fixed-num fixed-num-input">
+            <span class="fixed-mark">早出</span>
             <input id="cfgFixedEarlyDate" type="number" class="txt" min="0" step="1">
           </div>
-          <div class="fixed-num">
-            <span class="fixed-mark">遅</span>
+          <div class="fixed-num fixed-num-input">
+            <span class="fixed-mark">遅出</span>
             <input id="cfgFixedLateDate" type="number" class="txt" min="0" step="1">
           </div>
-          <div class="fixed-num">
-            <span class="fixed-mark">☆＋◆</span>
+          <div class="fixed-num fixed-num-input">
+            <span class="fixed-mark">準夜</span>
             <input id="cfgFixedNFDate" type="number" class="txt" min="0" step="1">
           </div>
-          <div class="fixed-num">
-            <span class="fixed-mark">★＋●</span>
+          <div class="fixed-num fixed-num-input">
+            <span class="fixed-mark">深夜</span>
             <input id="cfgFixedNSDate" type="number" class="txt" min="0" step="1">
           </div>
           <button id="btnFixedByDateAdd" class="btn btn-outline" type="button">追加</button>
@@ -232,7 +250,7 @@
         <textarea id="cfgFixedByDate" class="txt fixed-text" rows="4"
                   placeholder="2025-11-03 8 1 1 3 3&#10;2025-11-04 7 1 1 2 3"></textarea>
         <div class="fixed-hint">
-          1行ごとに「日付 〇 早 遅 ☆＋◆ ★＋●」を入力（例: 2025-11-03 8 1 1 3 3）。
+          1行ごとに「日付 日勤全員 早出 遅出 準夜 深夜」を入力（例: 2025-11-03 8 1 1 3 3）。
           日付だけの行はその日の固定解除として扱われます。
         </div>
       </div>
