@@ -91,10 +91,13 @@
     out = out.filter(r=>{
       if (isLocked(r, ds)) return false;
       if (mark === '☆'){
-        const n = dayIdx + 1;
-        if (n >= State.windowDates.length) return false;
-        const nds = dateStr(State.windowDates[n]);
-        if (isLocked(r, nds)) return false;
+        const isLast = (dayIdx === State.windowDates.length - 1);
+        if (!isLast){
+          const n = dayIdx + 1;
+          if (n >= State.windowDates.length) return false;
+          const nds = dateStr(State.windowDates[n]);
+          if (isLocked(r, nds)) return false;
+        }
 
         const p = dayIdx - 1;
         if (p >= 0){
@@ -109,6 +112,7 @@
     return out;
   }
 
+
   function clearSoftLeaveIfAny(empIdx, ds){
     const lv = getLeaveType(empIdx, ds);
     const isSoftLeave = (code)=> code === '祝' || code === '代';
@@ -118,21 +122,35 @@
   function tryPlace(dayIdx, r, mark){
     const ds = dateStr(State.windowDates[dayIdx]);
     if (isLocked(r, ds)) return false;
-    if (mark === '☆'){
-      const n = dayIdx + 1;
-      if (n >= State.windowDates.length) return false;
-      const nds = dateStr(State.windowDates[n]);
-      if (isLocked(r, nds)) return false;
-    }
 
+    // ☆の場合のみ、28日目→画面外29日目へのペアも許容する
+    let datesForRules = State.windowDates;
+    if (mark === '☆'){
+      const isLast = (dayIdx === State.windowDates.length - 1);
+      if (!isLast){
+        const n = dayIdx + 1;
+        if (n >= State.windowDates.length) return false;
+        const nds = dateStr(State.windowDates[n]);
+        if (isLocked(r, nds)) return false;
+      } else {
+        // 最終日の☆は、画面外の3日分をルール判定用に拡張して渡す
+        const baseDate = State.windowDates[dayIdx];
+        const extra = [
+          addDays(baseDate, 1),
+          addDays(baseDate, 2),
+          addDays(baseDate, 3),
+        ];
+        datesForRules = State.windowDates.concat(extra);
+      }
+    }
 
     const pre = window.AssignRules?.precheckPlace?.({
       rowIndex:r, dayIndex:dayIdx, mark,
-      dates:State.windowDates, employeeCount:State.employeeCount,
+      dates:datesForRules, employeeCount:State.employeeCount,
       getAssign, hasOffByDate:(i,ds)=>isRestByDate(i, ds),
       getWorkType: (i)=> (State.employeesAttr[i]?.workType) || 'three',
       getLevel:   (i)=> (State.employeesAttr[i]?.level)    || 'B',
-      getForbiddenPairs: (i)=> State.forbiddenPairs.get(i) || new Set() // ★追加
+      getForbiddenPairs: (i)=> State.forbiddenPairs.get(i) || new Set() 
     }) || { ok:true };
     if (!pre.ok) return false;
 
@@ -145,7 +163,7 @@
         getAssign, setAssign, clearAssign, hasOffByDate,
         getLeaveType, clearLeaveType,
         getWorkType: (i)=> (State.employeesAttr[i]?.workType) || 'three',
-        gridEl:null, dates:State.windowDates
+        gridEl:null, dates:datesForRules
       });
 
       if (!res.ok){
@@ -155,6 +173,7 @@
     }
     return true;
   }
+
 
 
   // 配列をシャッフルする関数（Fisher-Yatesアルゴリズム）

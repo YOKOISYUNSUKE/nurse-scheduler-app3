@@ -941,7 +941,7 @@ function ensureEmployees(){
     renderGrid(); // 合計行・4週ハイライトも再描画
   }
 
-  // ★追加：完全キャンセル（全体）— 4週間の割当・希望休・特別休暇・ロックを全消去
+  // 完全キャンセル（全体）— 4週間の割当・希望休・特別休暇・ロックを全消去
   function completeCancelAll(){
     const start = State.range4wStart;
     const end   = start + 27;
@@ -967,8 +967,8 @@ function ensureEmployees(){
     if (btnUndo) btnUndo.disabled = true;
   }
 
-  // ★追加：完全キャンセル（1セル）
-  function completeCancelOneCell(r, dayIdx, td){
+  // 完全キャンセル（1セル）
+function completeCancelOneCell(r, dayIdx, td){
     const ds = dateStr(State.windowDates[dayIdx]);
     // 現在のマークを把握（☆なら翌日の★を連鎖で外す）
     const mk = getAssign(r, ds);
@@ -985,10 +985,11 @@ function ensureEmployees(){
     td.textContent = '';
     updateFooterCounts();
 
-    // ☆だった場合のみ：翌日の★も削除（既存の挙動と整合）
+    // ☆だった場合のみ：翌日の★も削除（既存の挙動と整合＋画面外29日目対応）
     if (mk === '☆'){
       const nextIndex = dayIdx + 1;
       if (nextIndex < State.windowDates.length){
+        // 通常：画面内の翌日セル
         const nds = dateStr(State.windowDates[nextIndex]);
         if (getAssign(r, nds) === '★'){
           clearAssign(r, nds);
@@ -1000,6 +1001,17 @@ function ensureEmployees(){
           }
           updateFooterCounts();
         }
+      } else {
+        // 4週ウィンドウ最終日の☆ → 画面外29日目の★もクリア
+        const baseDate = State.windowDates[dayIdx];
+        const nextDate = addDays(baseDate, 1);
+        const nds = dateStr(nextDate);
+        if (getAssign(r, nds) === '★'){
+          clearAssign(r, nds);
+          setLocked(r, nds, false);
+          // 画面外なのでセルは存在しないが、集計だけ更新
+          updateFooterCounts();
+        }
       }
     }
 
@@ -1007,7 +1019,8 @@ function ensureEmployees(){
   showToast('1セルを完全キャンセルしました');
 }
 
-// ★追加：セルクリア処理（希望休・割り当て・特別休暇を一括消去）
+
+// セルクリア処理（希望休・割り当て・特別休暇を一括消去）
 function handleClearCell(r, dayIdx, td){
   const ds = dateStr(State.windowDates[dayIdx]);
   
@@ -1038,10 +1051,11 @@ function handleClearCell(r, dayIdx, td){
   td.textContent = '';
   updateFooterCounts();
 
-  // ☆だった場合のみ：翌日の★も削除
+  // ☆だった場合のみ：翌日の★も削除（画面外29日目も対象）
   if (mk === '☆') {
     const nextIndex = dayIdx + 1;
     if (nextIndex < State.windowDates.length) {
+      // 通常：画面内の翌日セル
       const nds = dateStr(State.windowDates[nextIndex]);
       if (getAssign(r, nds) === '★') {
         clearAssign(r, nds);
@@ -1053,20 +1067,31 @@ function handleClearCell(r, dayIdx, td){
         }
         updateFooterCounts();
       }
+    } else {
+      // 4週ウィンドウ最終日の☆ → 画面外29日目の★もクリア
+      const baseDate = State.windowDates[dayIdx];
+      const nextDate = addDays(baseDate, 1);
+      const nds = dateStr(nextDate);
+      if (getAssign(r, nds) === '★') {
+        clearAssign(r, nds);
+        setLocked(r, nds, false);
+        // 画面外なのでセルは存在しないが、集計だけ更新
+        updateFooterCounts();
+      }
     }
   }
 
   showToast('セルをクリアしました');
 }
 
-// ★追加：直前キャンセルのための一時バッファ
 
 
-  // ★追加：直前キャンセルのための一時バッファ
+
+  // 直前キャンセルのための一時バッファ
 
   let UndoBuf = null;
 
-  // ★追加：4週間ぶんの割当バックアップを作成
+  // 4週間ぶんの割当バックアップを作成
   function makeCancelBackup(){
     const start = State.range4wStart;
     const end   = start + 27;
