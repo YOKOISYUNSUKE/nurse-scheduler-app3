@@ -548,6 +548,10 @@ await new Promise(r => setTimeout(r, 10));
     try {
       const { meta: m, dates: d, counts: c } = await remoteGetBundle(ck);
 
+      // タイムスタンプ取得（将来的な競合解決用）
+      const ts = await remoteGet(`${ck}:meta:ts`).catch(() => null);
+      if (ts) console.log('Remote data timestamp:', new Date(Number(ts)).toISOString());
+
       if (m) console.log('Meta data received:', Object.keys(m));
       if (d) console.log('Dates data received:', Object.keys(d));
       if (c) console.log('Counts data received');
