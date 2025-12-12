@@ -1,4 +1,4 @@
-/* auth.js - ログイン専用（改善版：堅牢な認証フロー） */
+/* auth.js - ログイン専用（改善版：堅牢な認証フロー + 旧形式対応） */
 
 (function () {
   const $ = (s, r = document) => r.querySelector(s);
@@ -78,6 +78,7 @@
 
   /**
    * ユーザー登録または検証を行う（リトライ機能付き）
+   * ★修正：旧形式（文字列）と新形式（オブジェクト）の登録簿に対応
    * 
    * 動作：
    * 1. 認証キーを生成
@@ -114,7 +115,22 @@
           // ★既存ユーザー：キーを検証
           console.log(`[Auth] Existing user detected: ${id}`);
           
-          if (regEntry.ck !== ck) {
+          // ★修正：旧形式（文字列）と新形式（オブジェクト）の両方に対応
+          let storedCk;
+          if (typeof regEntry === 'string') {
+            // 旧形式：regEntry そのものが認証キー
+            storedCk = regEntry;
+            console.log(`[Auth] Old format detected for user: ${id}`);
+          } else if (typeof regEntry === 'object' && regEntry.ck) {
+            // 新形式：regEntry.ck が認証キー
+            storedCk = regEntry.ck;
+            console.log(`[Auth] New format detected for user: ${id}`);
+          } else {
+            // 不正な形式
+            throw new Error('登録簿のデータが破損しています');
+          }
+          
+          if (storedCk !== ck) {
             // パスワード不一致
             throw new Error('このIDは別のパスワードで登録済みです。別のIDにしてください。');
           }
@@ -151,11 +167,21 @@
             throw new Error('登録データが保存されていません（競合の可能性）');
           }
 
-          if (verifyEntry.ck !== ck) {
+          // ★修正：旧形式と新形式の両方に対応
+          let verifyStoredCk;
+          if (typeof verifyEntry === 'string') {
+            verifyStoredCk = verifyEntry;
+          } else if (typeof verifyEntry === 'object' && verifyEntry.ck) {
+            verifyStoredCk = verifyEntry.ck;
+          } else {
+            throw new Error('登録簿のデータが破損しています');
+          }
+
+          if (verifyStoredCk !== ck) {
             // 別のデバイスが先に登録した可能性
             console.warn(`[Auth] Conflict detected: stored key differs from generated key`);
             console.warn(`[Auth] Generated: ${ck.substring(0, 8)}...`);
-            console.warn(`[Auth] Stored: ${verifyEntry.ck.substring(0, 8)}...`);
+            console.warn(`[Auth] Stored: ${verifyStoredCk.substring(0, 8)}...`);
             throw new Error('別のデバイスから同時に登録されました。もう一度ログインしてください。');
           }
 
