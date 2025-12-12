@@ -16,7 +16,7 @@
    */
 function applyAfterAssign(p) {
   // ルール：☆ の翌日は必ず ★
-  if (p.mark === '☆') {
+if (p.mark === '☆') {
     const next = p.dayIndex + 1;
     if (next >= p.dates.length) {
       return { ok: false, message: '月末のため「通し夜勤（☆→★）」を設定できません' };
@@ -30,17 +30,35 @@ function applyAfterAssign(p) {
       const lvNext = p.getLeaveType(p.rowIndex, nds);
       if (lvNext === '祝' || lvNext === '代') p.clearLeaveType(p.rowIndex, nds);
     }
-if (p.getAssign(p.rowIndex, nds) !== '★') p.setAssign(p.rowIndex, nds, '★');
-if (p.gridEl) {
-  const td = p.gridEl.querySelector(`td[data-row="${p.rowIndex}"][data-day="${next}"]`);
-  if (td) {
-    td.textContent = '';
-    const sp = document.createElement('span');
-    sp.className = 'mark ' + markToClass('★');
-    sp.textContent = '★';
-    td.appendChild(sp);
-  }
-}
+
+    // 夜勤専従：「☆★★」の並びを禁止（3連続夜勤を避ける）
+    if (typeof p.getWorkType === 'function') {
+      const wt = p.getWorkType(p.rowIndex) || 'three';
+      if (wt === 'night') {
+        const next2 = next + 1;
+        if (next2 < p.dates.length) {
+          const nds2 = dateStr(p.dates[next2]);
+          const mk2  = p.getAssign(p.rowIndex, nds2);
+          // 新しく置く ☆ の 2日後が既に「★」なら、「☆★★」になってしまうので禁止
+          if (mk2 === '★') {
+            return { ok:false, message:'夜勤専従では「☆★★」の並びは配置できません' };
+          }
+        }
+      }
+    }
+
+    if (p.getAssign(p.rowIndex, nds) !== '★') p.setAssign(p.rowIndex, nds, '★');
+    if (p.gridEl) {
+      const td = p.gridEl.querySelector(`td[data-row="${p.rowIndex}"][data-day="${next}"]`);
+      if (td) {
+        td.textContent = '';
+        const sp = document.createElement('span');
+        sp.className = 'mark ' + markToClass('★');
+        sp.textContent = '★';
+        td.appendChild(sp);
+      }
+    }
+
 
 // 夜勤専従のみ例外：☆★の後も休休を強制しない
 const isNight = (typeof p.getWorkType === 'function') && p.getWorkType(p.rowIndex) === 'night';
