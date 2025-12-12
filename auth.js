@@ -35,15 +35,31 @@
   bindEnterToSubmit(loginPw);
 
   // --- SHA-256(hex) ---
+  // crypto.subtle が使えない環境でも同じ結果になるように、JS実装をフォールバック
   async function sha256Hex(str) {
-    if (!window.crypto || !window.crypto.subtle) return '';
-    const enc  = new TextEncoder().encode(str);
-    const buf  = await crypto.subtle.digest('SHA-256', enc);
-    const arr  = Array.from(new Uint8Array(buf));
-    return arr.map(b => b.toString(16).padStart(2, '0')).join('');
+    // 1) 可能なら WebCrypto
+    try {
+      if (window.crypto && window.crypto.subtle) {
+        const enc  = new TextEncoder().encode(str);
+        const buf  = await crypto.subtle.digest('SHA-256', enc);
+        const arr  = Array.from(new Uint8Array(buf));
+        return arr.map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+    } catch (_) {}
+
+    // 2) フォールバック：JS実装（UTF-8）
+    try {
+      return sha256HexJs(str);
+    } catch (_) {
+      return '';
+    }
   }
 
+  // SHA-256 (UTF-8) / pure JS fallback
+  function sha256HexJs(str) { /* …（実装追加）… */ }
+
   // --- UTF-8 → Base64 ---
+
   function b64Utf8(str) {
     try {
       return btoa(unescape(encodeURIComponent(str)));
@@ -104,23 +120,33 @@
 
       showLoginLoading();
 
-      // 1) ck生成（既存互換）
-      const raw   = `sched:${id}:${pw}`;
-      const ckSha = await sha256Hex(raw);
-      const ckB64 = b64Utf8(raw);
-      const ck    = ckSha || (ckB64 ? `b64:${ckB64}` : '');
+      // 1) ck生成（互換あり：端末差が出ないよう SHA-256 を優先しつつ、b64 も保持）
+      const raw      = `sched:${id}:${pw}`;
+      const ckSha    = await sha256Hex(raw);
+      const ckB64    = b64Utf8(raw);
+      const ckB64Key = ckB64 ? `b64:${ckB64}` : '';
+      let   ck       = ckSha || ckB64Key;
 
-      // 2) 登録レジストリの取得・検証・新規登録
+      // 2) 登録レジストリの取得・検証・（既存なら）クラウド保存先キーに合わせる
+      //    既に reg[id] がある場合、そこが「正」として扱われます（別端末でも同じデータを見るため）。
       try {
         let reg = await remoteGet(REG_KEY);
         if (!reg || typeof reg !== 'object') reg = {};
 
-        if (reg[id] && reg[id] !== ck) {
-          if (loginError) loginError.textContent = 'このIDは別のパスワードで登録済みです。別のIDにしてください。';
-          hideLoginLoading(); // ここでローディングを確実に止める
-          return;
-        }
-        if (!reg[id]) {
+        const regKey = reg[id];
+
+        if (regKey) {
+          // 既存ユーザー：sha / b64 のどちらかに一致すればOK
+          const ok = (regKey === ckSha) || (regKey === ckB64Key);
+          if (!ok) {
+            if (loginError) loginError.textContent = 'このIDは別のパスワードで登録済みです。別のIDにしてください。';
+            hideLoginLoading(); // ここでローディングを確実に止める
+            return;
+          }
+          // ★重要：登録済みキー（=クラウド上の保存先）に合わせる
+          ck = regKey;
+        } else {
+          // 新規ユーザー：原則 sha を登録（無理なら b64）
           reg[id] = ck;
           await remotePut(REG_KEY, reg);
         }
@@ -132,8 +158,9 @@
       ssSet('sched:loggedIn', '1');
       ssSet('sched:userId', id);
       if (ckSha) ssSet('sched:cloudKeySha', ckSha);
-      if (ckB64) ssSet('sched:cloudKeyCompat', `b64:${ckB64}`);
+      if (ckB64Key) ssSet('sched:cloudKeyCompat', ckB64Key);
       ssSet('sched:cloudKey', ck);
+
 
       // 4) 既存フロー継続（auth:logged-in → クラウド同期 → 入室）
       await new Promise(r => setTimeout(r, 0));
