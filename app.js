@@ -566,19 +566,44 @@ async function syncFromRemote(){
       if (c) console.log('Counts data received');
 
       // 空オブジェクトでないことを確認
-      const isValidObj = (obj) => obj && typeof obj === 'object' && Object.keys(obj).length > 0;
+     const isValidObj = (obj) => {
+  if (!obj || typeof obj !== 'object') return false;
+  
+  // 最上位のキーが存在するか確認
+  if (Object.keys(obj).length === 0) return false;
+  
+  // assign / off / leave / lock / holidays のいずれかに実データがあるか確認
+  const hasData = (obj.assign && Object.keys(obj.assign).length > 0) ||
+                  (obj.off && Object.keys(obj.off).length > 0) ||
+                  (obj.leave && Object.keys(obj.leave).length > 0) ||
+                  (obj.lock && Object.keys(obj.lock).length > 0) ||
+                  (obj.holidays && Object.keys(obj.holidays).length > 0);
+  
+  console.log('[syncFromRemote] isValidObj check:', {
+    hasTopKeys: Object.keys(obj).length > 0,
+    hasData: hasData,
+    keys: Object.keys(obj)
+  });
+  
+  return hasData;
+};
       
       // どちらか取れた時点で採用（先勝ち）。次鍵により良いものがあれば上書き。
       if (isValidObj(m) && !metaBest)  metaBest  = m;
-      if (d){
-        const score = (obj)=> {
-          try{
-            const asg = obj?.assign || {};
-            return Object.values(asg).reduce((s,day)=> s + Object.keys(day||{}).length, 0);
-          }catch(_){ return 0; }
-        };
-        if (!datesBest || score(d) > score(datesBest)) datesBest = d;
-      }
+if (d){
+  const score = (obj)=> {
+    try{
+      const asg = obj?.assign || {};
+      return Object.values(asg).reduce((s,day)=> s + Object.keys(day||{}).length, 0);
+    }catch(_){ return 0; }
+  };
+  
+  // ★修正：空データでない場合のみ採用
+  if (isValidObj(d) && (!datesBest || score(d) > score(datesBest))) {
+    datesBest = d;
+    console.log('[syncFromRemote] Using dates data with score:', score(d));
+  }
+}
       if (isValidObj(c) && !countsBest){
         countsBest = c;
       }
@@ -625,7 +650,27 @@ async function syncFromRemote(){
 // 保存のたびにクラウドへ送信（失敗は無視）
 async function pushToRemote(){
   const keys = cloudKeys(); 
-  if(!keys.length) return;
+  
+  // ★修正：cloudKeys が空の場合、少し待機してリトライ
+  if(!keys.length) {
+    console.warn('[pushToRemote] No cloud keys available. Retrying...');
+    
+    // 最大1秒間、100ms間隔で待機
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      const retryKeys = cloudKeys();
+      if (retryKeys.length) {
+        console.log('[pushToRemote] Cloud keys found after retry');
+        keys.push(...retryKeys);
+        break;
+      }
+    }
+    
+    if (!keys.length) {
+      console.warn('[pushToRemote] Still no cloud keys. Skipping remote push.');
+      return;
+    }
+  }
   
   let meta, dates, countsCfg;
   
@@ -654,22 +699,50 @@ async function pushToRemote(){
       };
     }
   }catch(e){
-    console.error('pushToRemote: Failed to read local data:', e);
-    return;
+    console.error('[pushToRemote] Failed to read local data:', e);
+    throw e;
   }
 
-  // 各キーに対して並列送信（個別エラーは無視して継続）
+  // ★修正：各キーに対して並列送信（個別エラーは記録するが継続）
+  const results = [];
   for (const ck of keys){
+    console.log(`[pushToRemote] Pushing data for key: ${ck.substring(0, 16)}...`);
+    
     const promises = [
-      remotePut(`${ck}:meta`,  meta).catch(e => console.warn(`Failed to push meta for ${ck}:`, e)),
-      remotePut(`${ck}:dates`, dates).catch(e => console.warn(`Failed to push dates for ${ck}:`, e))
+      remotePut(`${ck}:meta`,  meta)
+        .catch(e => {
+          console.error(`[pushToRemote] Failed to push meta for ${ck.substring(0, 16)}...`, e);
+          return { success: false, error: e };
+        }),
+      remotePut(`${ck}:dates`, dates)
+        .catch(e => {
+          console.error(`[pushToRemote] Failed to push dates for ${ck.substring(0, 16)}...`, e);
+          return { success: false, error: e };
+        })
     ];
+    
     if (countsCfg) {
       promises.push(
-        remotePut(`${ck}:counts`, countsCfg).catch(e => console.warn(`Failed to push counts for ${ck}:`, e))
+        remotePut(`${ck}:counts`, countsCfg)
+          .catch(e => {
+            console.error(`[pushToRemote] Failed to push counts for ${ck.substring(0, 16)}...`, e);
+            return { success: false, error: e };
+          })
       );
     }
-    await Promise.all(promises);
+    
+    const res = await Promise.all(promises);
+    results.push({ key: ck, results: res });
+  }
+  
+  // ★追加：送信結果をログ出力
+  const allSuccess = results.every(r => r.results.every(res => res !== false));
+  if (allSuccess) {
+    console.log('[pushToRemote] All data pushed successfully');
+    setCloudStatus('ok', '同期OK');
+  } else {
+    console.warn('[pushToRemote] Some data failed to push');
+    setCloudStatus('offline', '一部同期エラー');
   }
 }
 
@@ -730,12 +803,22 @@ window.saveMetaOnly = saveMetaOnly; // ★追加
       return { holidays:{}, off:{}, leave:{}, assign:{}, lock:{} };
     }
   }
-  function writeDatesStore(store){
+function writeDatesStore(store){
+  try {
     localStorage.setItem(storageKey('dates'), JSON.stringify(store));
-
-    // 追加：クラウドへ非同期送信（失敗は無視）
-    pushToRemote();
+    console.log('[writeDatesStore] Data saved to localStorage');
+  } catch (e) {
+    console.error('[writeDatesStore] Failed to save to localStorage:', e);
+    return;
   }
+
+  // ★修正：クラウドへ非同期送信（エラーハンドリング付き）
+  pushToRemote()
+    .catch(e => {
+      console.error('[writeDatesStore] Failed to push to remote:', e);
+      setCloudStatus('offline', 'クラウド同期エラー');
+    });
+}
 
 
 
@@ -2072,16 +2155,64 @@ window.setLeaveType = setLeaveType; // ★追加
 function setAssign(r, ds, mk){
   let m = State.assignments.get(r);
   if(!m){ m = new Map(); State.assignments.set(r,m); }
-  if(mk) m.set(ds, mk);
+  
+  if(mk) {
+    m.set(ds, mk);
+  } else {
+    m.delete(ds);
+  }
 
-  // ★追加：当日が「〇」または「□」になったら、翌日の「★」（ロック含む）を強制消去
   if (mk === '〇' || mk === '□') removeNextStarByDs(r, ds);
+  
+  // ★修正：即座にローカルストレージに保存
+  try {
+    const store = readDatesStore();
+    if (!store.assign) store.assign = {};
+    const asgObj = store.assign[r] || (store.assign[r] = {});
+    
+    if (mk) {
+      asgObj[ds] = mk;
+    } else {
+      delete asgObj[ds];
+    }
+    
+    localStorage.setItem(storageKey('dates'), JSON.stringify(store));
+    console.log(`[setAssign] Saved: r=${r}, ds=${ds}, mk=${mk}`);
+    
+    // ★追加：即座にクラウドに送信
+    pushToRemote()
+      .catch(e => console.error('[setAssign] Failed to push to remote:', e));
+  } catch (e) {
+    console.error('[setAssign] Failed to save:', e);
+  }
 }
 window.setAssign = setAssign; // ★追加
-  function clearAssign(r, ds){
-    const m = State.assignments.get(r);
-    if(m){ m.delete(ds); if(m.size===0) State.assignments.delete(r); }
+function clearAssign(r, ds){
+  const m = State.assignments.get(r);
+  if(m){ 
+    m.delete(ds);
+    if(m.size===0) State.assignments.delete(r);
   }
+  
+  // ★追加：即座にローカルストレージに保存
+  try {
+    const store = readDatesStore();
+    if (store.assign && store.assign[r]) {
+      delete store.assign[r][ds];
+      if (Object.keys(store.assign[r]).length === 0) {
+        delete store.assign[r];
+      }
+    }
+    localStorage.setItem(storageKey('dates'), JSON.stringify(store));
+    console.log(`[clearAssign] Cleared: r=${r}, ds=${ds}`);
+    
+    // ★追加：即座にクラウドに送信
+    pushToRemote()
+      .catch(e => console.error('[clearAssign] Failed to push to remote:', e));
+  } catch (e) {
+    console.error('[clearAssign] Failed to save:', e);
+  }
+}
 window.clearAssign = clearAssign; // ★追加
 //  isToday は core.dates.js（App.Dates.isToday）へ移動
 
