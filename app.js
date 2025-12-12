@@ -2151,7 +2151,8 @@ window.setLeaveType = setLeaveType; // ★追加
     const m = State.assignments.get(r);
     return m ? m.get(ds) : undefined;
   }
- window.getAssign = getAssign; // ★追加
+ window.getAssign = getAssign; 
+
 function setAssign(r, ds, mk){
   let m = State.assignments.get(r);
   if(!m){ m = new Map(); State.assignments.set(r,m); }
@@ -2164,28 +2165,20 @@ function setAssign(r, ds, mk){
 
   if (mk === '〇' || mk === '□') removeNextStarByDs(r, ds);
   
-  // ★修正：即座にローカルストレージに保存
-  try {
-    const store = readDatesStore();
-    if (!store.assign) store.assign = {};
-    const asgObj = store.assign[r] || (store.assign[r] = {});
-    
-    if (mk) {
-      asgObj[ds] = mk;
-    } else {
-      delete asgObj[ds];
-    }
-    
-    localStorage.setItem(storageKey('dates'), JSON.stringify(store));
-    console.log(`[setAssign] Saved: r=${r}, ds=${ds}, mk=${mk}`);
-    
-    // ★追加：即座にクラウドに送信
-    pushToRemote()
-      .catch(e => console.error('[setAssign] Failed to push to remote:', e));
-  } catch (e) {
-    console.error('[setAssign] Failed to save:', e);
+  // ★修正：writeDatesStore を呼び出す（従業員データと同じパターン）
+  const store = readDatesStore();
+  if (!store.assign) store.assign = {};
+  const asgObj = store.assign[r] || (store.assign[r] = {});
+  
+  if (mk) {
+    asgObj[ds] = mk;
+  } else {
+    delete asgObj[ds];
   }
+  
+  writeDatesStore(store);
 }
+
 window.setAssign = setAssign; // ★追加
 function clearAssign(r, ds){
   const m = State.assignments.get(r);
@@ -2194,25 +2187,18 @@ function clearAssign(r, ds){
     if(m.size===0) State.assignments.delete(r);
   }
   
-  // ★追加：即座にローカルストレージに保存
-  try {
-    const store = readDatesStore();
-    if (store.assign && store.assign[r]) {
-      delete store.assign[r][ds];
-      if (Object.keys(store.assign[r]).length === 0) {
-        delete store.assign[r];
-      }
+  // ★修正：writeDatesStore を呼び出す（従業員データと同じパターン）
+  const store = readDatesStore();
+  if (store.assign && store.assign[r]) {
+    delete store.assign[r][ds];
+    if (Object.keys(store.assign[r]).length === 0) {
+      delete store.assign[r];
     }
-    localStorage.setItem(storageKey('dates'), JSON.stringify(store));
-    console.log(`[clearAssign] Cleared: r=${r}, ds=${ds}`);
-    
-    // ★追加：即座にクラウドに送信
-    pushToRemote()
-      .catch(e => console.error('[clearAssign] Failed to push to remote:', e));
-  } catch (e) {
-    console.error('[clearAssign] Failed to save:', e);
   }
+  
+  writeDatesStore(store);
 }
+
 window.clearAssign = clearAssign; // ★追加
 //  isToday は core.dates.js（App.Dates.isToday）へ移動
 
