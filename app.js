@@ -74,6 +74,14 @@ window.updateFooterCounts = null;
 document.addEventListener('auth:logged-in', async (ev)=>{
   try {
     State.userId = (ev?.detail?.userId) || 'user';
+
+    // ★修正：cloudKeyの存在を確認
+    const ck = sessionStorage.getItem('sched:cloudKey');
+    if (!ck) {
+      console.warn('cloudKey not set yet, waiting...');
+      await new Promise(r => setTimeout(r, 50));
+    }
+
     
     // 接続テストを実行
     const testResult = await testRemoteConnection();
@@ -524,6 +532,7 @@ async function remoteGetBundle(ck){
 
 // ログイン直後にクラウド→ローカルへ取り込み
 async function syncFromRemote(){
+await new Promise(r => setTimeout(r, 10));
   const keys = cloudKeys(); 
   if (!keys.length) {
     console.warn('Cloud keys not found. Skipping remote sync.');
@@ -543,8 +552,11 @@ async function syncFromRemote(){
       if (d) console.log('Dates data received:', Object.keys(d));
       if (c) console.log('Counts data received');
 
+      // 空オブジェクトでないことを確認
+      const isValidObj = (obj) => obj && typeof obj === 'object' && Object.keys(obj).length > 0;
+      
       // どちらか取れた時点で採用（先勝ち）。次鍵により良いものがあれば上書き。
-      if (m && !metaBest)  metaBest  = m;
+      if (isValidObj(m) && !metaBest)  metaBest  = m;
       if (d){
         const score = (obj)=> {
           try{
@@ -554,7 +566,7 @@ async function syncFromRemote(){
         };
         if (!datesBest || score(d) > score(datesBest)) datesBest = d;
       }
-      if (c && !countsBest){
+      if (isValidObj(c) && !countsBest){
         countsBest = c;
       }
     } catch (e) {

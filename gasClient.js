@@ -36,8 +36,18 @@
       if (r.ok){
         setCloudStatus('ok');
         const text = await r.text();
-        if (!text || text.trim() === '') return {}; // 空レスポンス対策（既存挙動に合わせる）
-        try { return JSON.parse(text); } catch(e){ console.error('JSON parse error:', e, text); return {}; }
+        if (!text || text.trim() === '') return null; // ★修正：空は null（データなし）
+        try { 
+          const parsed = JSON.parse(text);
+          // ★修正：空オブジェクトもデータなしとして扱う
+          if (parsed && typeof parsed === 'object' && Object.keys(parsed).length === 0) {
+            return null;
+          }
+          return parsed;
+        } catch(e){ 
+          console.error('JSON parse error:', e, text); 
+          return null; 
+        }
       } else {
         console.error('Remote GET failed:', r.status, r.statusText);
         setCloudStatus('offline');
@@ -46,7 +56,7 @@
       console.error('Remote GET error:', err);
       setCloudStatus('offline');
     }
-    return null; // フェイルセーフ（既存と同じ）
+    return null; // フェイルセーフ
   }
 
   async function put(k, data){

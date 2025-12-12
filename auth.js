@@ -136,6 +136,7 @@
       ssSet('sched:cloudKey', ck);
 
       // 4) 既存フロー継続（auth:logged-in → クラウド同期 → 入室）
+      await new Promise(r => setTimeout(r, 0));
       emitLogin(id);
 
     });
