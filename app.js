@@ -157,11 +157,34 @@ document.addEventListener('auth:logged-in', async (ev)=>{
   // 手動割り当てはルール無視で通す（canAssign / precheckPlace / applyAfterAssign をスキップ）
   const IGNORE_RULES_ON_MANUAL = true;
 
+  // 勤務形態に応じて属性を正規化（不整合な値の残留を防止）
+  function normalizeEmployeeAttrByWorkType(attr){
+    if (!attr || typeof attr !== 'object') attr = { level:'B', workType:'three' };
+
+    // 既定値（未定義を補完）
+    if (typeof attr.hasEarlyShift !== 'boolean') attr.hasEarlyShift = false;
+    if (!attr.earlyShiftType) attr.earlyShiftType = 'all';
+    if (typeof attr.hasLateShift !== 'boolean') attr.hasLateShift = false;
+    if (!attr.lateShiftType) attr.lateShiftType = 'all';
+    if (!attr.shiftDurations || typeof attr.shiftDurations !== 'object') attr.shiftDurations = {};
+
+    // 夜勤専従は「早出/遅出」概念を持たないため常に無効化
+    if (attr.workType === 'night'){
+      attr.hasEarlyShift = false;
+      attr.hasLateShift  = false;
+      attr.earlyShiftType = 'all';
+      attr.lateShiftType  = 'all';
+    }
+
+    return attr;
+  }
+
   // ユーザー別localStorageキーとクラウドキー群
   function storageKey(k){
     const uid = sessionStorage.getItem('sched:userId') || 'user';
     return `sched:${uid}:${k}`;
   }
+
   function cloudKeys(){
     const keys = [];
     const main = sessionStorage.getItem('sched:cloudKey');
@@ -1875,8 +1898,10 @@ function markToClass(mk){
     selWk.addEventListener('change', ()=>{
       const a = State.employeesAttr[idx] || (State.employeesAttr[idx]={level:'B', workType:'three'});
       a.workType = selWk.value;
+      normalizeEmployeeAttrByWorkType(a);
       saveMetaOnly(); // ← 即時保存
     });
+
 
 
     wrap.appendChild(selWk);
@@ -2278,11 +2303,17 @@ function readAttrDialogToState(){
     State.employees[i] = nm || `職員${pad2(i+1)}`;
     // 夜勤ノルマを追加
     const nightQuota = quotaInput ? parseInt(quotaInput.value, 10) : undefined;
-    State.employeesAttr[i] = { 
-      level: selLv.value, 
+
+    const prev = State.employeesAttr[i] || { level:'B', workType:'three', shiftDurations:{} };
+    const next = {
+      ...prev,
+      level: selLv.value,
       workType: selWt.value,
       nightQuota: (selWt.value === 'night' && Number.isInteger(nightQuota)) ? nightQuota : undefined
     };
+
+    State.employeesAttr[i] = normalizeEmployeeAttrByWorkType(next);
+
     
     // 禁忌ペアの保存（複数選択対応）
     if (forbidSelect) {

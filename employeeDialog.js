@@ -303,53 +303,28 @@ function initInternal(){
     // 勤務形態セレクト
     const selWt = createWorkTypeSelect(State.employeesAttr[i]?.workType || 'three');
 
-    // 夜勤ノルマ入力
-    const quotaWrap = createQuotaInput(State.employeesAttr[i], selWt);
-    const twoShiftWrap = createTwoShiftQuotaInput(State.employeesAttr[i], selWt); 
-    const threeShiftNfWrap = createThreeShiftNfQuotaInput(State.employeesAttr[i], selWt);
-    const threeShiftNsWrap = createThreeShiftNsQuotaInput(State.employeesAttr[i], selWt);
 
     // 禁忌ペア選択
     const forbidWrap = createForbiddenPairsSelect(i, State);
 
-    // 各従業員ごとの勤務時間（マーク毎）を編集できるフィールドを作成
-    const empAttr = State.employeesAttr[i] || (State.employeesAttr[i] = {});
-    const durationsWrap = createShiftDurationFields(empAttr);
-    // 初期は折りたたんでおく（ボタンで表示/非表示）
-    durationsWrap.style.display = 'none';
-
-    // --- 重要: ここで早出・遅出トグルを生成してから append する ---
-    const earlyToggle = createEarlyShiftToggle(empAttr, selWt);
-    const lateToggle  = createLateShiftToggle(empAttr, selWt);
-
-
-    // 勤務時間編集ボタン（表示/非表示のトグル）
-    const btnDur = document.createElement('button');
-    btnDur.type = 'button';
-    btnDur.className = 'btn btn-outline btn-duration-toggle';
-    btnDur.textContent = '勤務時間編集';
-    btnDur.title = 'この従業員のマーク別勤務時間を編集';
-    btnDur.addEventListener('click', () => {
-      const isHidden = durationsWrap.style.display === 'none' || durationsWrap.style.display === '';
-      durationsWrap.style.display = isHidden ? 'flex' : 'none';
-      btnDur.textContent = isHidden ? '勤務時間を閉じる' : '勤務時間編集';
-    });
-
     // コントロールボタン（上へ・下へ・削除）
     const ctrls = createControls(i, State);
+
+    // 個人設定ボタン（早出・遅出・回数・勤務時間を別ダイアログで設定）
+    const btnPersonal = document.createElement('button');
+    btnPersonal.type = 'button';
+    btnPersonal.className = 'btn btn-outline btn-personal-settings';
+    btnPersonal.textContent = '個人設定';
+    btnPersonal.title = '早出・遅出・回数・勤務時間を設定';
+    btnPersonal.addEventListener('click', () => {
+      openPersonalSettingsDialog(i, State);
+    });
 
     row.appendChild(name);
     row.appendChild(selLv);
     row.appendChild(selWt);
-    row.appendChild(quotaWrap);
-    row.appendChild(earlyToggle);
-    row.appendChild(lateToggle);
-    row.appendChild(twoShiftWrap);
-    row.appendChild(threeShiftNfWrap);
-    row.appendChild(threeShiftNsWrap);
     row.appendChild(forbidWrap);
-    row.appendChild(btnDur);        // ★追加：勤務時間編集ボタン
-    row.appendChild(durationsWrap); // ★追加：勤務時間フィールド
+    row.appendChild(btnPersonal);
     row.appendChild(ctrls);
 
     return row;
@@ -497,6 +472,310 @@ function initInternal(){
     });
 
     return wrap;
+  }
+
+  // 個人設定ダイアログを開く
+  function openPersonalSettingsDialog(employeeIndex, State){
+    const empName = State.employees[employeeIndex] || `職員${pad2(employeeIndex+1)}`;
+    const empAttr = State.employeesAttr[employeeIndex] || (State.employeesAttr[employeeIndex] = { level: 'B', workType: 'three' });
+    const workType = empAttr.workType || 'three';
+
+    // ダイアログ要素を作成
+    const dialog = document.createElement('dialog');
+    dialog.className = 'attr personal-settings-dialog';
+    dialog.style.maxWidth = '600px';
+    dialog.style.width = '90%';
+
+    // ヘッダー
+    const header = document.createElement('header');
+    header.textContent = `個人設定：${empName}`;
+    dialog.appendChild(header);
+
+    // コンテンツ
+    const content = document.createElement('div');
+    content.className = 'content';
+    content.style.maxHeight = '500px';
+    content.style.overflowY = 'auto';
+    content.style.display = 'flex';
+    content.style.flexDirection = 'column';
+    content.style.gap = '16px';
+
+    // --- 早出・遅出セクション（夜勤専従以外） ---
+    if (workType !== 'night') {
+      const shiftSection = document.createElement('div');
+      shiftSection.style.padding = '12px';
+      shiftSection.style.backgroundColor = '#f9fafb';
+      shiftSection.style.borderRadius = '8px';
+
+      const shiftTitle = document.createElement('div');
+      shiftTitle.textContent = '早出・遅出設定';
+      shiftTitle.style.fontWeight = '600';
+      shiftTitle.style.marginBottom = '12px';
+      shiftSection.appendChild(shiftTitle);
+
+      const shiftGrid = document.createElement('div');
+      shiftGrid.style.display = 'flex';
+      shiftGrid.style.flexWrap = 'wrap';
+      shiftGrid.style.gap = '16px';
+
+      // 早出
+      const earlyWrap = createPersonalShiftSelect('早出', empAttr, 'hasEarlyShift', 'earlyShiftType');
+      shiftGrid.appendChild(earlyWrap);
+
+      // 遅出
+      const lateWrap = createPersonalShiftSelect('遅出', empAttr, 'hasLateShift', 'lateShiftType');
+      shiftGrid.appendChild(lateWrap);
+
+      shiftSection.appendChild(shiftGrid);
+      content.appendChild(shiftSection);
+    }
+
+    // --- ☆/◆/●回数セクション ---
+    const quotaSection = document.createElement('div');
+    quotaSection.style.padding = '12px';
+    quotaSection.style.backgroundColor = '#f0fdf4';
+    quotaSection.style.borderRadius = '8px';
+
+    const quotaTitle = document.createElement('div');
+    quotaTitle.textContent = '回数設定（4週間あたり）';
+    quotaTitle.style.fontWeight = '600';
+    quotaTitle.style.marginBottom = '12px';
+    quotaSection.appendChild(quotaTitle);
+
+    const quotaGrid = document.createElement('div');
+    quotaGrid.style.display = 'flex';
+    quotaGrid.style.flexWrap = 'wrap';
+    quotaGrid.style.gap = '16px';
+
+    // 勤務形態に応じた回数入力
+    if (workType === 'two') {
+      // 二部制：☆回数
+      const starWrap = createQuotaField('☆回数', empAttr, 'twoShiftQuota', 4, 1, 10);
+      quotaGrid.appendChild(starWrap);
+    } else if (workType === 'three') {
+      // 三部制：◆回数、●回数
+      const nfWrap = createQuotaField('◆回数', empAttr, 'threeShiftNfQuota', 4, 0, 10);
+      quotaGrid.appendChild(nfWrap);
+      const nsWrap = createQuotaField('●回数', empAttr, 'threeShiftNsQuota', 4, 0, 10);
+      quotaGrid.appendChild(nsWrap);
+    } else if (workType === 'night') {
+      // 夜勤専従：☆ノルマ
+      const nightWrap = createQuotaField('☆ノルマ', empAttr, 'nightQuota', 10, 0, 15);
+      quotaGrid.appendChild(nightWrap);
+    }
+
+    quotaSection.appendChild(quotaGrid);
+    content.appendChild(quotaSection);
+
+    // --- 勤務時間設定セクション ---
+    const durationSection = document.createElement('div');
+    durationSection.style.padding = '12px';
+    durationSection.style.backgroundColor = '#eff6ff';
+    durationSection.style.borderRadius = '8px';
+
+    const durationTitle = document.createElement('div');
+    durationTitle.textContent = '勤務時間設定（15分刻み）';
+    durationTitle.style.fontWeight = '600';
+    durationTitle.style.marginBottom = '12px';
+    durationSection.appendChild(durationTitle);
+
+    const durationFields = createShiftDurationFieldsForDialog(empAttr);
+    durationSection.appendChild(durationFields);
+
+    content.appendChild(durationSection);
+
+    dialog.appendChild(content);
+
+    // フッター
+    const footer = document.createElement('footer');
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'btn btn-outline';
+    closeBtn.textContent = '閉じる';
+    closeBtn.addEventListener('click', () => {
+      dialog.close();
+      document.body.removeChild(dialog);
+    });
+    footer.appendChild(closeBtn);
+    dialog.appendChild(footer);
+
+    // ダイアログを DOM に追加して表示
+    document.body.appendChild(dialog);
+    if (typeof dialog.showModal === 'function') {
+      dialog.showModal();
+    } else {
+      dialog.show();
+    }
+
+    // Escape キーで閉じる
+    dialog.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        dialog.close();
+        document.body.removeChild(dialog);
+      }
+    });
+  }
+
+  // 個人設定用の早出/遅出セレクト作成
+  function createPersonalShiftSelect(label, attr, hasKey, typeKey){
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex';
+    wrap.style.alignItems = 'center';
+    wrap.style.gap = '8px';
+
+    const lbl = document.createElement('span');
+    lbl.textContent = label;
+    lbl.style.fontSize = '0.9em';
+    lbl.style.minWidth = '40px';
+
+    const sel = document.createElement('select');
+    sel.className = 'select';
+    const options = [
+      { value: 'none',    label: 'なし' },
+      { value: 'all',     label: '全日' },
+      { value: 'weekday', label: '平日のみ' },
+      { value: 'holiday', label: '土日祝のみ' }
+    ];
+    options.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o.value;
+      opt.textContent = o.label;
+      sel.appendChild(opt);
+    });
+
+    let initValue = 'none';
+    if (attr[hasKey]) {
+      initValue = attr[typeKey] || 'all';
+    }
+    sel.value = initValue;
+
+    sel.addEventListener('change', () => {
+      const v = sel.value;
+      if (v === 'none') {
+        attr[hasKey] = false;
+        delete attr[typeKey];
+      } else {
+        attr[hasKey] = true;
+        attr[typeKey] = v;
+      }
+      if (typeof window.saveMetaOnly === 'function') window.saveMetaOnly();
+      if (typeof window.renderGrid === 'function') window.renderGrid();
+    });
+
+    wrap.appendChild(lbl);
+    wrap.appendChild(sel);
+    return wrap;
+  }
+
+  // 個人設定用の回数入力フィールド作成
+  function createQuotaField(label, attr, key, defaultVal, min, max){
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex';
+    wrap.style.alignItems = 'center';
+    wrap.style.gap = '8px';
+
+    const lbl = document.createElement('span');
+    lbl.textContent = label;
+    lbl.style.fontSize = '0.9em';
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'txt';
+    input.style.width = '60px';
+    input.min = String(min);
+    input.max = String(max);
+    input.value = attr[key] ?? defaultVal;
+
+    input.addEventListener('change', () => {
+      const v = parseInt(input.value, 10);
+      if (Number.isFinite(v)) {
+        attr[key] = Math.max(min, Math.min(max, v));
+        input.value = attr[key];
+        if (typeof window.saveMetaOnly === 'function') window.saveMetaOnly();
+        if (typeof window.renderGrid === 'function') window.renderGrid();
+      }
+    });
+
+    wrap.appendChild(lbl);
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  // 個人設定ダイアログ用の勤務時間フィールド
+  function createShiftDurationFieldsForDialog(empAttr){
+    const container = document.createElement('div');
+    container.style.display = 'flex';
+    container.style.flexWrap = 'wrap';
+    container.style.gap = '8px';
+
+    const marks = (window.ShiftDurations && window.ShiftDurations.MARKS) 
+      ? window.ShiftDurations.MARKS 
+      : ['〇','☆','★','◆','●'];
+
+    if (!empAttr.shiftDurations) {
+      empAttr.shiftDurations = {};
+    }
+
+    marks.forEach(mk => {
+      const fieldWrap = document.createElement('div');
+      fieldWrap.style.display = 'flex';
+      fieldWrap.style.flexDirection = 'column';
+      fieldWrap.style.minWidth = '100px';
+      fieldWrap.style.padding = '6px';
+      fieldWrap.style.backgroundColor = '#fff';
+      fieldWrap.style.borderRadius = '6px';
+      fieldWrap.style.border = '1px solid #e5e7eb';
+
+      const lbl = document.createElement('label');
+      lbl.textContent = mk + ' マーク';
+      lbl.style.fontSize = '0.8em';
+      lbl.style.fontWeight = '600';
+      lbl.style.marginBottom = '4px';
+
+      const sel = document.createElement('select');
+      sel.className = 'select';
+      sel.style.fontSize = '0.85em';
+
+      const opts = (window.ShiftDurations && window.ShiftDurations.getOptionsForMark)
+        ? window.ShiftDurations.getOptionsForMark(mk)
+        : (function(){
+            const out = [];
+            for (let m = 300; m <= 1200; m += 15) {
+              out.push({ value: m, label: `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}` });
+            }
+            return out;
+          })();
+
+      opts.forEach(o => {
+        const op = document.createElement('option');
+        op.value = String(o.value);
+        op.textContent = o.label;
+        sel.appendChild(op);
+      });
+
+      const per = empAttr.shiftDurations[mk];
+      const global = (window.ShiftDurations && typeof window.ShiftDurations.getGlobalDefault === 'function')
+        ? window.ShiftDurations.getGlobalDefault(mk) : undefined;
+      const def = (window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function')
+        ? window.ShiftDurations.getDefaultForMark(mk) : 480;
+      const currentValue = Number.isFinite(per) ? per : (Number.isFinite(global) ? global : def);
+      sel.value = String(currentValue);
+
+      sel.addEventListener('change', () => {
+        const newValue = parseInt(sel.value, 10);
+        if (!isNaN(newValue)) {
+          empAttr.shiftDurations[mk] = newValue;
+          if (typeof window.saveMetaOnly === 'function') window.saveMetaOnly();
+          if (typeof window.renderGrid === 'function') window.renderGrid();
+        }
+      });
+
+      fieldWrap.appendChild(lbl);
+      fieldWrap.appendChild(sel);
+      container.appendChild(fieldWrap);
+    });
+
+    return container;
   }
 
   function createLevelSelect(currentLevel){
@@ -1257,74 +1536,20 @@ function readAttrDialogToState(){
       // 明示的に data-role で取得するように変更（より堅牢）
       const selLv = row.querySelector('select[data-role="level"]') || row.querySelector('select.level-select');
       const selWt = row.querySelector('select[data-role="worktype"]') || row.querySelector('select.worktype-select');
-      const nameInput = row.querySelector('input[data-role="name"]');
-      const quotaInput = row.querySelector('.quota-input');
-      const twoShiftQuotaInput = row.querySelector('.two-shift-quota-input'); 
-      const threeShiftNfQuotaInput = row.querySelector('.three-shift-nf-quota-input');
-      const threeShiftNsQuotaInput = row.querySelector('.three-shift-ns-quota-input');
-      // duration-select はクラスで取得（各 select に data-mark 属性は既に設定済み）
-      const durSelects = Array.from(row.querySelectorAll('select.duration-select'));
+const nameInput = row.querySelector('input[data-role="name"]');
 
-      const nm = (nameInput?.value || '').trim();
-      State.employees[i] = nm || `職員${pad2(i+1)}`;
+const nm = (nameInput?.value || '').trim();
+State.employees[i] = nm || `職員${pad2(i+1)}`;
 
-      const nightQuota = quotaInput ? parseInt(quotaInput.value, 10) : undefined;
-      const twoShiftQuota = twoShiftQuotaInput ? parseInt(twoShiftQuotaInput.value, 10) : undefined;  
-      const threeShiftNfQuota = threeShiftNfQuotaInput ? parseInt(threeShiftNfQuotaInput.value, 10) : undefined;
-      const threeShiftNsQuota = threeShiftNsQuotaInput ? parseInt(threeShiftNsQuotaInput.value, 10) : undefined;
-  
-
-   // 既存の属性を保持しつつ更新（shiftDurations 等を上書きしない）
-      const prev = State.employeesAttr[i] || {};
-      const merged = Object.assign({}, prev, {
-        level: selLv ? selLv.value : (prev.level || 'B'),
-        workType: selWt ? selWt.value : (prev.workType || 'three'),
-        nightQuota: (selWt && selWt.value === 'night' && Number.isInteger(nightQuota)) ? nightQuota : (prev.nightQuota),
-        twoShiftQuota: (selWt && selWt.value === 'two' && Number.isInteger(twoShiftQuota)) ? twoShiftQuota : (prev.twoShiftQuota),
-        threeShiftNfQuota: (selWt && selWt.value === 'three' && Number.isInteger(threeShiftNfQuota)) ? threeShiftNfQuota : (prev.threeShiftNfQuota),
-        threeShiftNsQuota: (selWt && selWt.value === 'three' && Number.isInteger(threeShiftNsQuota)) ? threeShiftNsQuota : (prev.threeShiftNsQuota)
-      });
+// 既存の属性を保持しつつ更新（個人設定ダイアログで設定される項目は保持）
+const prev = State.employeesAttr[i] || {};
+const merged = Object.assign({}, prev, {
+  level: selLv ? selLv.value : (prev.level || 'B'),
+  workType: selWt ? selWt.value : (prev.workType || 'three')
+});
 
 
-      // 読み取り：早出セレクトの状態を取り込む
-      const earlySel = row.querySelector('.early-select');
-      if (earlySel) {
-        const v = earlySel.value;
-        if (v === 'none') {
-          merged.hasEarlyShift = false;
-          delete merged.earlyShiftType;
-        } else {
-          merged.hasEarlyShift = true;
-          merged.earlyShiftType = v;
-        }
-      }
-
-      // 読み取り：遅出セレクトの状態を取り込む
-      const lateSel = row.querySelector('.late-select');
-      if (lateSel) {
-        const v = lateSel.value;
-        if (v === 'none') {
-          merged.hasLateShift = false;
-          delete merged.lateShiftType;
-        } else {
-          merged.hasLateShift = true;
-          merged.lateShiftType = v;
-        }
-      }
-
-
-      // 更新：duration selects の値を読み取って empAttr.shiftDurations を更新
-      if (!merged.shiftDurations) merged.shiftDurations = {};
-      const sd = Object.assign({}, merged.shiftDurations);
-      durSelects.forEach(s => {
-        const mk = s.dataset.mark;
-        if (!mk) return;
-        const v = parseInt(s.value, 10);
-        if (!isNaN(v)) {
-          sd[mk] = v;
-        }
-      });
-      merged.shiftDurations = sd;
+      // 早出・遅出・☆◆●回数・勤務時間は個人設定ダイアログで即時保存されるためここでは読み取り不要
 
       State.employeesAttr[i] = merged;
 

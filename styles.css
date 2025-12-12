@@ -352,42 +352,50 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
   padding:4px 6px;
 }
 
-/* 従業員ダイアログ: 上段（名前 + トグル左寄せ） */
+/* 従業員ダイアログ: 全要素を一行に配置 */
+.attr .row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  overflow-x: auto;
+}
+
 .attr .row input[data-role="name"] {
   flex: 0 0 auto;
-  max-width: 200px;
-  min-width: 150px;
+  /* 全角8文字ぶん（= 8em） + 左右padding(14px×2) を目安に固定 */
+  width: calc(8em + 28px);
+  min-width: calc(8em + 28px);
+  max-width: calc(8em + 28px);
 }
 
 .attr .row .mini-select {
   flex: 0 0 auto;
+  min-width: 80px;
 }
 
-/* 従業員ダイアログ: 下段（ボタンを均等幅） */
-.attr .ctrls {
+
+.attr .row .quota-wrap,
+.attr .row .forbid-wrap,
+.attr .row .btn-personal-settings {
+  flex: 0 0 auto;
+}
+
+.attr .row .ctrls {
   display: flex;
-  justify-content: flex-start;
-  gap: 6px;
-  width: 100%;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
-.attr .ctrls .btn {
-  flex: 1 1 0;
-  min-width: 0;
+.attr .row .ctrls .btn {
   padding: 6px 8px;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 
-/* 従業員編集ダイアログの操作ボタン */
-.attr .ctrls{ display:flex; justify-content:flex-end; gap:6px; }
-.attr .ctrls .btn{ padding:6px 8px; font-size:12px; }
-
-
-.attr .ctrls .btn:active{ transform: translateY(1px); }
-
-/* 既存のスタイル */
-.attr .content .row .ctrls button + button { margin-left: .4rem; }
 
 /* 禁忌ペア選択UIのスタイル */
 .forbid-wrap {
