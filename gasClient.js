@@ -27,7 +27,7 @@
     }
   }
 
-  async function get(k){
+async function get(k){
     try{
       const r = await fetch(`${getEndpoint()}?k=${encodeURIComponent(k)}`, {
         mode: 'cors',
@@ -36,13 +36,11 @@
       if (r.ok){
         setCloudStatus('ok');
         const text = await r.text();
-        if (!text || text.trim() === '') return null; // ★修正：空は null（データなし）
+        if (!text || text.trim() === '') return null;
         try { 
           const parsed = JSON.parse(text);
-          // ★修正：空オブジェクトもデータなしとして扱う
-          if (parsed && typeof parsed === 'object' && Object.keys(parsed).length === 0) {
-            return null;
-          }
+          //  空オブジェクトは null ではなく空オブジェクトとして返す
+          // （呼び出し側で isValidObj で判定するため整合性を保つ）
           return parsed;
         } catch(e){ 
           console.error('JSON parse error:', e, text); 
@@ -56,7 +54,7 @@
       console.error('Remote GET error:', err);
       setCloudStatus('offline');
     }
-    return null; // フェイルセーフ
+    return null;
   }
 
   async function put(k, data){

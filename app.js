@@ -69,24 +69,31 @@ window.updateFooterCounts = null;
   const toast    = $('#toast');
 
   const modeRadios = $$('input[name="mode"]');
-  // auth.js からのログイン完了通知（クラウド→ローカル同期を先に）
+
 // （エラーハンドリングを追加）
 document.addEventListener('auth:logged-in', async (ev)=>{
   try {
     State.userId = (ev?.detail?.userId) || 'user';
 
-    // ★修正：cloudKeyの存在を確認
-    const ck = sessionStorage.getItem('sched:cloudKey');
-    if (!ck) {
-      console.warn('cloudKey not set yet, waiting...');
+    // ★修正：cloudKeyの存在を確認（リトライ付き）
+    let ck = sessionStorage.getItem('sched:cloudKey');
+    let retries = 0;
+    while (!ck && retries < 10) {
       await new Promise(r => setTimeout(r, 50));
+      ck = sessionStorage.getItem('sched:cloudKey');
+      retries++;
+    }
+    if (!ck) {
+      console.error('cloudKey not set after retries');
+      showToast && showToast('認証キーの取得に失敗しました');
     }
 
-    
     // 接続テストを実行
     const testResult = await testRemoteConnection();
     if (!testResult.success) {
       console.warn('Cloud connection test failed:', testResult.message);
+      // ★追加：接続失敗をユーザーに通知
+      showToast && showToast(testResult.message || 'クラウド接続に失敗しました');
     }
     
     // クラウドからデータを同期
@@ -94,6 +101,7 @@ document.addEventListener('auth:logged-in', async (ev)=>{
       await syncFromRemote(); 
     } catch(error) {
       console.error('Sync from remote failed:', error);
+      showToast && showToast('クラウド同期に失敗しました。ローカルデータで動作します');
     }
     
     // 画面遷移を実行
@@ -532,15 +540,16 @@ async function remoteGetBundle(ck){
 
 // ログイン直後にクラウド→ローカルへ取り込み
 async function syncFromRemote(){
-await new Promise(r => setTimeout(r, 10));
+  await new Promise(r => setTimeout(r, 10));
   const keys = cloudKeys(); 
   if (!keys.length) {
     console.warn('Cloud keys not found. Skipping remote sync.');
-    return;
+    return { success: false, reason: 'no_keys' };  // ★戻り値追加
   }
   
   console.log('Syncing from remote with keys:', keys);
   let metaBest = null, datesBest = null, countsBest = null;
+  let syncedAny = false;  // ★追加
 
   for (const ck of keys){
     console.log('Fetching data for key:', ck);
@@ -575,7 +584,6 @@ await new Promise(r => setTimeout(r, 10));
       }
     } catch (e) {
       console.error(`Failed to fetch data for key ${ck}:`, e);
-      // 次のキーを試行
       continue;
     }
   }
@@ -583,10 +591,12 @@ await new Promise(r => setTimeout(r, 10));
   if (metaBest) {
     localStorage.setItem(storageKey('meta'),  JSON.stringify(metaBest));
     console.log('Meta data synced to local storage');
+    syncedAny = true;
   }
   if (datesBest) {
     localStorage.setItem(storageKey('dates'), JSON.stringify(datesBest));
     console.log('Dates data synced to local storage');
+    syncedAny = true;
   }
   if (countsBest) {
     try{
@@ -595,6 +605,7 @@ await new Promise(r => setTimeout(r, 10));
         window.Counts.load();
       }
       console.log('Counts data synced to local storage');
+      syncedAny = true;
     }catch(e){
       console.error('Failed to sync counts data from remote', e);
     }
@@ -603,6 +614,9 @@ await new Promise(r => setTimeout(r, 10));
   if (!metaBest && !datesBest && !countsBest) {
     console.log('No remote data found. Using local data only.');
   }
+
+  // 同期結果を返す
+  return { success: true, synced: syncedAny, meta: !!metaBest, dates: !!datesBest, counts: !!countsBest };
 }
 
 
