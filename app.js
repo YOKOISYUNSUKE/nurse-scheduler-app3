@@ -784,8 +784,12 @@ function saveMetaOnly(){
     meta.shiftDurationsDefaults = window.ShiftDurations.getAllGlobalDefaults();
   }
   writeMeta(meta);
-  // 追加：クラウドへ非同期送信（失敗は無視）
-  pushToRemote();
+  // 追加：クラウドへ非同期送信（エラーハンドリング付き）
+  pushToRemote()
+    .catch(e => {
+      console.error('[saveMetaOnly] Failed to push to remote:', e);
+      setCloudStatus('offline', 'クラウド同期エラー');
+    });
 }
 window.saveMetaOnly = saveMetaOnly; // ★追加
 
@@ -809,15 +813,9 @@ function writeDatesStore(store){
     console.log('[writeDatesStore] Data saved to localStorage');
   } catch (e) {
     console.error('[writeDatesStore] Failed to save to localStorage:', e);
-    return;
+ 
   }
 
-  // ★修正：クラウドへ非同期送信（エラーハンドリング付き）
-  pushToRemote()
-    .catch(e => {
-      console.error('[writeDatesStore] Failed to push to remote:', e);
-      setCloudStatus('offline', 'クラウド同期エラー');
-    });
 }
 
 
@@ -2165,18 +2163,6 @@ function setAssign(r, ds, mk){
 
   if (mk === '〇' || mk === '□') removeNextStarByDs(r, ds);
   
-  // ★修正：writeDatesStore を呼び出す（従業員データと同じパターン）
-  const store = readDatesStore();
-  if (!store.assign) store.assign = {};
-  const asgObj = store.assign[r] || (store.assign[r] = {});
-  
-  if (mk) {
-    asgObj[ds] = mk;
-  } else {
-    delete asgObj[ds];
-  }
-  
-  writeDatesStore(store);
 }
 
 window.setAssign = setAssign; // ★追加
@@ -2187,16 +2173,6 @@ function clearAssign(r, ds){
     if(m.size===0) State.assignments.delete(r);
   }
   
-  // ★修正：writeDatesStore を呼び出す（従業員データと同じパターン）
-  const store = readDatesStore();
-  if (store.assign && store.assign[r]) {
-    delete store.assign[r][ds];
-    if (Object.keys(store.assign[r]).length === 0) {
-      delete store.assign[r];
-    }
-  }
-  
-  writeDatesStore(store);
 }
 
 window.clearAssign = clearAssign; // ★追加
