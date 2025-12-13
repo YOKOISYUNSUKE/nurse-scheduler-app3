@@ -518,9 +518,12 @@ async function remoteGetBundle(ck){
     try{
       const res = await GAS.getAll(ck);
       const meta   = res && res.meta   || null;
-      const dates  = res && res.dates  || null;
+      // dates は 9KB 対策の分割保存にも対応（:dates:index / :dates:YYYY-MM）
+      const dates0 = res && res.dates  || null;
+      const dates  = dates0 || await remoteGetDatesSmart(ck);
       const counts = res && res.counts || null;
       return { meta, dates, counts };
+
     }catch(e){
       console.error('GAS.getAll failed, fallback to legacy remoteGet:', e);
       // 落ちた場合はフォールバックに回す（下に続く）
@@ -677,10 +680,20 @@ async function pushToRemote(){
   try{
     meta  = readMeta();
     dates = readDatesStore();
+
+    // --- 9KB対策: dates のJSONサイズをログ ---
+    const datesBytes = jsonByteLength(dates);
+    if (datesBytes >= 0){
+      console.log(`[pushToRemote] dates JSON size = ${datesBytes} bytes`);
+      if (datesBytes > 8800){
+        console.warn('[pushToRemote] dates is near/over 9KB limit. Will use month-split upload.');
+      }
+    }
     
     // counts設定を確実に取得（早出・遅出含む全項目）
     try{
       const raw = localStorage.getItem('sched:counts');
+
       if (raw) countsCfg = JSON.parse(raw);
     }catch(_){}
     
@@ -708,18 +721,42 @@ async function pushToRemote(){
   for (const ck of keys){
     console.log(`[pushToRemote] Pushing data for key: ${ck.substring(0, 16)}...`);
     
+    // dates は 9KB 近傍なら月単位に分割して保存
+    const datesBytes = jsonByteLength(dates);
+    const useSplit = (datesBytes >= 0 && datesBytes > 8800);
+    let datesPromises = [];
+    if (useSplit){
+      const { months, parts } = splitDatesByMonth(dates || {});
+      console.log(`[pushToRemote] dates split months = ${months.length}`, months);
+      // まずインデックスを書き込み（復元時の探索キー）
+      datesPromises.push(
+        remotePut(`${ck}:dates:index`, { months, v: 1 })
+          .catch(e => { console.error(`[pushToRemote] Failed to push dates:index for ${ck.substring(0, 16)}...`, e); return { success:false, error:e }; })
+      );
+      // 各月データ
+      for (const m of months){
+        const part = parts.get(m) || { holidays:{}, off:{}, leave:{}, assign:{}, lock:{} };
+        const partBytes = jsonByteLength(part);
+        console.log(`[pushToRemote] dates part ${m} size = ${partBytes} bytes`);
+        datesPromises.push(
+          remotePut(`${ck}:dates:${m}`, part)
+            .catch(e => { console.error(`[pushToRemote] Failed to push dates:${m} for ${ck.substring(0, 16)}...`, e); return { success:false, error:e }; })
+        );
+      }
+    }else{
+      datesPromises.push(
+        remotePut(`${ck}:dates`, dates)
+          .catch(e => { console.error(`[pushToRemote] Failed to push dates for ${ck.substring(0, 16)}...`, e); return { success:false, error:e }; })
+      );
+    }
+
     const promises = [
       remotePut(`${ck}:meta`,  meta)
-        .catch(e => {
-          console.error(`[pushToRemote] Failed to push meta for ${ck.substring(0, 16)}...`, e);
-          return { success: false, error: e };
-        }),
-      remotePut(`${ck}:dates`, dates)
-        .catch(e => {
-          console.error(`[pushToRemote] Failed to push dates for ${ck.substring(0, 16)}...`, e);
-          return { success: false, error: e };
-        })
+        .catch(e => { console.error(`[pushToRemote] Failed to push meta for ${ck.substring(0, 16)}...`, e); return { success:false, error:e }; })
     ];
+
+    promises.push(...datesPromises);
+
     
     if (countsCfg) {
       promises.push(
