@@ -70,12 +70,11 @@ window.updateFooterCounts = null;
 
   const modeRadios = $$('input[name="mode"]');
 
-// （エラーハンドリングを追加）
 document.addEventListener('auth:logged-in', async (ev)=>{
   try {
     State.userId = (ev?.detail?.userId) || 'user';
 
-    // ★修正：cloudKeyの存在を確認（リトライ付き）
+    // cloudKey の取得（リトライ付き）
     let ck = sessionStorage.getItem('sched:cloudKey');
     let retries = 0;
     while (!ck && retries < 10) {
@@ -83,41 +82,47 @@ document.addEventListener('auth:logged-in', async (ev)=>{
       ck = sessionStorage.getItem('sched:cloudKey');
       retries++;
     }
-    if (!ck) {
-      console.error('cloudKey not set after retries');
-      showToast && showToast('認証キーの取得に失敗しました');
-    }
 
-    // 接続テストを実行
-    const testResult = await testRemoteConnection();
-    if (!testResult.success) {
-      console.warn('Cloud connection test failed:', testResult.message);
-      // ★追加：接続失敗をユーザーに通知
-      showToast && showToast(testResult.message || 'クラウド接続に失敗しました');
-    }
-    
-    // クラウドからデータを同期
+    // meta / counts のみクラウド同期
+    console.log('[auth:logged-in] Syncing meta/counts from cloud (assignments local only)');
     try { 
       await syncFromRemote(); 
-    } catch(error) {
+    } catch (error) {
       console.error('Sync from remote failed:', error);
-      showToast && showToast('クラウド同期に失敗しました。ローカルデータで動作します');
+      if (typeof showToast === 'function') {
+        showToast('クラウド同期に失敗しました。ローカルデータで動作します');
+      }
     }
     
-    // 画面遷移を実行
+    // ログイン時に従業員データと人数設定をローカル/クラウドに保存
+    try {
+      saveMetaOnly(); // ローカルストレージに保存
+      if (typeof pushToRemote === 'function') {
+        await pushToRemote(); // クラウドにも保存
+      }
+      console.log('[auth:logged-in] Employee data and count saved to local/cloud');
+    } catch (error) {
+      console.error('Failed to save employee data on login:', error);
+    }
+
+    // 画面遷移
     await enterApp();
-    
-  } catch(error) {
+
+  } catch (error) {
     console.error('Login process failed:', error);
-    // ログイン画面に戻す
-    const loginView = document.getElementById('loginView');
-    const appView = document.getElementById('appView');
+
+    const loginView  = document.getElementById('loginView');
+    const appView    = document.getElementById('appView');
     const loginError = document.getElementById('loginError');
+
     if (loginView) loginView.classList.add('active');
-    if (appView) appView.classList.remove('active');
-    if (loginError) loginError.textContent = 'ログイン処理中にエラーが発生しました。再度お試しください。';
+    if (appView)   appView.classList.remove('active');
+    if (loginError) {
+      loginError.textContent = 'ログイン処理中にエラーが発生しました。再度お試しください。';
+    }
   }
 });
+
 
 
 
@@ -201,13 +206,8 @@ document.addEventListener('auth:logged-in', async (ev)=>{
     return `sched:${uid}:${k}`;
   }
 
-  function cloudKeys(){
-    const keys = [];
-    const main = sessionStorage.getItem('sched:cloudKey');
-    const sha  = sessionStorage.getItem('sched:cloudKeySha');
-    const b64  = sessionStorage.getItem('sched:cloudKeyCompat');
-    [main, sha, b64].forEach(v => { if (v && !keys.includes(v)) keys.push(v); });
-    return keys;
+  function cloudKey(){
+    return sessionStorage.getItem('sched:cloudKey');
   }
 
 
@@ -497,294 +497,45 @@ function initControls(){
 }
    
 
+// ==============================
+// ★クラウド同期：meta（従業員設定）と counts（人数設定）のみ対象
+// ★割り当てデータ（dates）はローカル保存のみ
+// ==============================
 
-
-/* 重複していた storageKey / cloudKeys の後段定義は削除（先頭側を正とする） */
-
-
-// 接続層は gasClient.js に委譲（薄いラッパ）
-function setCloudStatus(state, message){ if (window.GAS) GAS.setCloudStatus(state, message); }
-async function remoteGet(k){ return (window.GAS ? GAS.get(k) : null); }
-async function remotePut(k, data){ return (window.GAS ? GAS.put(k, data) : null); }
-async function testRemoteConnection(){ return (window.GAS ? GAS.testConnection() : { success:false, message:'gasClient未読込' }); }
-
-
-// meta/dates/counts をまとめて取得するヘルパー
-// 1) GAS.getAll(key) があればそれを使用（1リクエスト）
-// 2) なければ従来通り remoteGet を3本投げる（Promise.allで並列）
-async function remoteGetBundle(ck){
-  // 新API（推奨）
-  if (window.GAS && typeof GAS.getAll === 'function'){
-    try{
-      const res = await GAS.getAll(ck);
-      const meta   = res && res.meta   || null;
-      // dates は 9KB 対策の分割保存にも対応（:dates:index / :dates:YYYY-MM）
-      const dates0 = res && res.dates  || null;
-      const dates  = dates0 || await remoteGetDatesSmart(ck);
-      const counts = res && res.counts || null;
-      return { meta, dates, counts };
-
-    }catch(e){
-      console.error('GAS.getAll failed, fallback to legacy remoteGet:', e);
-      // 落ちた場合はフォールバックに回す（下に続く）
-    }
+// 接続層はgasClient.jsに委譲
+function setCloudStatus(state, message){ 
+  if (window.GAS && typeof window.GAS.setCloudStatus === 'function') {
+    window.GAS.setCloudStatus(state, message);
   }
+}
 
-  // 旧API（互換用）：3キーを並列取得（個別エラーは null として扱う）
-  const [m, d, c] = await Promise.all([
+async function remoteGet(k){ 
+  return (window.GAS && typeof window.GAS.get === 'function') ? window.GAS.get(k) : null; 
+}
+
+async function remotePut(k, data){ 
+  return (window.GAS && typeof window.GAS.put === 'function') ? window.GAS.put(k, data) : null; 
+}
+
+// ログイン時：meta/countsのみ取得（datesは取得しない）
+async function syncFromRemote(){
+  // ... meta と counts のみ取得
+  const [m, c] = await Promise.all([
     remoteGet(`${ck}:meta`).catch(() => null),
-    remoteGet(`${ck}:dates`).catch(() => null),
     remoteGet(`${ck}:counts`).catch(() => null)
   ]);
-  return { meta: m, dates: d, counts: c };
+  // dates は取得しない
 }
 
-
-
-// ログイン直後にクラウド→ローカルへ取り込み
-async function syncFromRemote(){
-  await new Promise(r => setTimeout(r, 10));
-  const keys = cloudKeys(); 
-  if (!keys.length) {
-    console.warn('Cloud keys not found. Skipping remote sync.');
-    return { success: false, reason: 'no_keys' };  // ★戻り値追加
-  }
-  
-  console.log('Syncing from remote with keys:', keys);
-  let metaBest = null, datesBest = null, countsBest = null;
-  let syncedAny = false;  // ★追加
-
-  for (const ck of keys){
-    console.log('Fetching data for key:', ck);
-
-    try {
-      const { meta: m, dates: d, counts: c } = await remoteGetBundle(ck);
-
-      // タイムスタンプ取得（将来的な競合解決用）
-      const ts = await remoteGet(`${ck}:meta:ts`).catch(() => null);
-      if (ts) console.log('Remote data timestamp:', new Date(Number(ts)).toISOString());
-
-      if (m) console.log('Meta data received:', Object.keys(m));
-      if (d) console.log('Dates data received:', Object.keys(d));
-      if (c) console.log('Counts data received');
-
-      // 空オブジェクトでないことを確認
-     const isValidObj = (obj) => {
-  if (!obj || typeof obj !== 'object') return false;
-  
-  // 最上位のキーが存在するか確認
-  if (Object.keys(obj).length === 0) return false;
-  
-  // assign / off / leave / lock / holidays のいずれかに実データがあるか確認
-  const hasData = (obj.assign && Object.keys(obj.assign).length > 0) ||
-                  (obj.off && Object.keys(obj.off).length > 0) ||
-                  (obj.leave && Object.keys(obj.leave).length > 0) ||
-                  (obj.lock && Object.keys(obj.lock).length > 0) ||
-                  (obj.holidays && Object.keys(obj.holidays).length > 0);
-  
-  console.log('[syncFromRemote] isValidObj check:', {
-    hasTopKeys: Object.keys(obj).length > 0,
-    hasData: hasData,
-    keys: Object.keys(obj)
-  });
-  
-  return hasData;
-};
-      
-      // どちらか取れた時点で採用（先勝ち）。次鍵により良いものがあれば上書き。
-      if (isValidObj(m) && !metaBest)  metaBest  = m;
-if (d){
-  const score = (obj)=> {
-    try{
-      const asg = obj?.assign || {};
-      return Object.values(asg).reduce((s,day)=> s + Object.keys(day||{}).length, 0);
-    }catch(_){ return 0; }
-  };
-  
-  // ★修正：空データでない場合のみ採用
-  if (isValidObj(d) && (!datesBest || score(d) > score(datesBest))) {
-    datesBest = d;
-    console.log('[syncFromRemote] Using dates data with score:', score(d));
-  }
-}
-      if (isValidObj(c) && !countsBest){
-        countsBest = c;
-      }
-    } catch (e) {
-      console.error(`Failed to fetch data for key ${ck}:`, e);
-      continue;
-    }
-  }
-  
-  if (metaBest) {
-    localStorage.setItem(storageKey('meta'),  JSON.stringify(metaBest));
-    console.log('Meta data synced to local storage');
-    syncedAny = true;
-  }
-  if (datesBest) {
-    localStorage.setItem(storageKey('dates'), JSON.stringify(datesBest));
-    console.log('Dates data synced to local storage');
-    syncedAny = true;
-  }
-  if (countsBest) {
-    try{
-      localStorage.setItem('sched:counts', JSON.stringify(countsBest));
-      if (window.Counts && typeof window.Counts.load === 'function') {
-        window.Counts.load();
-      }
-      console.log('Counts data synced to local storage');
-      syncedAny = true;
-    }catch(e){
-      console.error('Failed to sync counts data from remote', e);
-    }
-  }
-  
-  if (!metaBest && !datesBest && !countsBest) {
-    console.log('No remote data found. Using local data only.');
-  }
-
-  // 同期結果を返す
-  return { success: true, synced: syncedAny, meta: !!metaBest, dates: !!datesBest, counts: !!countsBest };
-}
-
-
-
-
-// 保存のたびにクラウドへ送信（失敗は無視）
+// 保存時：meta/countsのみ送信（datesは送信しない）
 async function pushToRemote(){
-  const keys = cloudKeys(); 
-  
-  // ★修正：cloudKeys が空の場合、少し待機してリトライ
-  if(!keys.length) {
-    console.warn('[pushToRemote] No cloud keys available. Retrying...');
-    
-    // 最大1秒間、100ms間隔で待機
-    for (let i = 0; i < 10; i++) {
-      await new Promise(r => setTimeout(r, 100));
-      const retryKeys = cloudKeys();
-      if (retryKeys.length) {
-        console.log('[pushToRemote] Cloud keys found after retry');
-        keys.push(...retryKeys);
-        break;
-      }
-    }
-    
-    if (!keys.length) {
-      console.warn('[pushToRemote] Still no cloud keys. Skipping remote push.');
-      return;
-    }
-  }
-  
-  let meta, dates, countsCfg;
-  
-  try{
-    meta  = readMeta();
-    dates = readDatesStore();
-
-    // --- 9KB対策: dates のJSONサイズをログ ---
-    const datesBytes = jsonByteLength(dates);
-    if (datesBytes >= 0){
-      console.log(`[pushToRemote] dates JSON size = ${datesBytes} bytes`);
-      if (datesBytes > 8800){
-        console.warn('[pushToRemote] dates is near/over 9KB limit. Will use month-split upload.');
-      }
-    }
-    
-    // counts設定を確実に取得（早出・遅出含む全項目）
-    try{
-      const raw = localStorage.getItem('sched:counts');
-
-      if (raw) countsCfg = JSON.parse(raw);
-    }catch(_){}
-    
-    // フォールバック：ローカルストレージになければwindow.Countsから全項目取得
-    if (!countsCfg && window.Counts){
-      countsCfg = {
-        DAY_TARGET_WEEKDAY: window.Counts.DAY_TARGET_WEEKDAY,
-        DAY_TARGET_WEEKEND_HOLIDAY: window.Counts.DAY_TARGET_WEEKEND_HOLIDAY,
-        EARLY_TARGET_WEEKDAY: window.Counts.EARLY_TARGET_WEEKDAY,
-        EARLY_TARGET_WEEKEND_HOLIDAY: window.Counts.EARLY_TARGET_WEEKEND_HOLIDAY,
-        LATE_TARGET_WEEKDAY: window.Counts.LATE_TARGET_WEEKDAY,
-        LATE_TARGET_WEEKEND_HOLIDAY: window.Counts.LATE_TARGET_WEEKEND_HOLIDAY,
-        FIXED_NF: window.Counts.FIXED_NF,
-        FIXED_NS: window.Counts.FIXED_NS,
-        FIXED_BY_DATE: window.Counts.FIXED_BY_DATE
-      };
-    }
-  }catch(e){
-    console.error('[pushToRemote] Failed to read local data:', e);
-    throw e;
-  }
-
-  // ★修正：各キーに対して並列送信（個別エラーは記録するが継続）
-  const results = [];
-  for (const ck of keys){
-    console.log(`[pushToRemote] Pushing data for key: ${ck.substring(0, 16)}...`);
-    
-    // dates は 9KB 近傍なら月単位に分割して保存
-    const datesBytes = jsonByteLength(dates);
-    const useSplit = (datesBytes >= 0 && datesBytes > 8800);
-    let datesPromises = [];
-    if (useSplit){
-      const { months, parts } = splitDatesByMonth(dates || {});
-      console.log(`[pushToRemote] dates split months = ${months.length}`, months);
-      // まずインデックスを書き込み（復元時の探索キー）
-      datesPromises.push(
-        remotePut(`${ck}:dates:index`, { months, v: 1 })
-          .catch(e => { console.error(`[pushToRemote] Failed to push dates:index for ${ck.substring(0, 16)}...`, e); return { success:false, error:e }; })
-      );
-      // 各月データ
-      for (const m of months){
-        const part = parts.get(m) || { holidays:{}, off:{}, leave:{}, assign:{}, lock:{} };
-        const partBytes = jsonByteLength(part);
-        console.log(`[pushToRemote] dates part ${m} size = ${partBytes} bytes`);
-        datesPromises.push(
-          remotePut(`${ck}:dates:${m}`, part)
-            .catch(e => { console.error(`[pushToRemote] Failed to push dates:${m} for ${ck.substring(0, 16)}...`, e); return { success:false, error:e }; })
-        );
-      }
-    }else{
-      datesPromises.push(
-        remotePut(`${ck}:dates`, dates)
-          .catch(e => { console.error(`[pushToRemote] Failed to push dates for ${ck.substring(0, 16)}...`, e); return { success:false, error:e }; })
-      );
-    }
-
-    const promises = [
-      remotePut(`${ck}:meta`,  meta)
-        .catch(e => { console.error(`[pushToRemote] Failed to push meta for ${ck.substring(0, 16)}...`, e); return { success:false, error:e }; })
-    ];
-
-    promises.push(...datesPromises);
-
-    
-    if (countsCfg) {
-      promises.push(
-        remotePut(`${ck}:counts`, countsCfg)
-          .catch(e => {
-            console.error(`[pushToRemote] Failed to push counts for ${ck.substring(0, 16)}...`, e);
-            return { success: false, error: e };
-          })
-      );
-    }
-    
-    const res = await Promise.all(promises);
-    results.push({ key: ck, results: res });
-  }
-  
-  // ★追加：送信結果をログ出力
-  const allSuccess = results.every(r => r.results.every(res => res !== false));
-  if (allSuccess) {
-    console.log('[pushToRemote] All data pushed successfully');
-    setCloudStatus('ok', '同期OK');
-  } else {
-    console.warn('[pushToRemote] Some data failed to push');
-    setCloudStatus('offline', '一部同期エラー');
-  }
+  // ... meta と counts のみ送信
+  const promises = [
+    remotePut(`${ck}:meta`, meta),
+    remotePut(`${ck}:counts`, countsCfg)
+  ];
+  // dates は送信しない
 }
-
-
-
 
 
   // ---- 永続化（メタ／日付データ） ----

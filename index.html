@@ -67,7 +67,9 @@
         <button id="btnCancel" class="btn btn-outline" type="button">キャンセル</button>
         <button id="btnGlobalLock" class="btn btn-outline" type="button" title="指定された4週間をロック（編集禁止）">🔓 4週間ロック</button>
        <button id="btnFullCancel" class="btn btn-danger" type="button" title="完全クリア（4週間の全データ消去）">完全クリア</button>
-        <button id="btnExportExcel" class="btn btn-outline" type="button" title="表示中31日をCSVで出力（Excel対応）">Excelダウンロード</button>
+        <button id="btnExportExcel" class="btn btn-outline" type="button" title="表示中4週間をCSVで出力">CSV出力</button>
+        <button id="btnExportXlsx" class="btn btn-outline" type="button" title="表示中4週間をExcelで出力">Excel出力</button>
+        <button id="btnImportData" class="btn btn-outline" type="button" title="CSV/Excelから割り当てデータをインポート">📥 インポート</button>
         <button id="btnLogout" class="btn btn-danger" type="button" title="ログアウト時は自動保存">ログアウト</button>
         <button id="installBtn" style="display:none;">インストール</button>
       </div>
@@ -277,12 +279,13 @@
 
 
   <script>
-    window.REMOTE_ENDPOINT = "https://script.google.com/macros/s/AKfycbw9ngjgsRZX57IbmC2cT92RtlJQ3hJossISQMFVPNhii5CtZGlktDqdF48B0W7FLMCc/exec";
+    window.REMOTE_ENDPOINT = "https://script.google.com/macros/s/AKfycbyIhYVUv8McMdZknoCHtpuXsGp-T7Xcg4txHna5WaQatbBrkr3FDOvZeBDjbpi96vpA/exec";
   </script>
   <script src="gasClient.js"></script>
   <script src="auth.js"></script>
   <script src="pwa.js"></script>
   <script src="employeeDialog.js"></script>
+  <script src="dataExportImport.js"></script>
   <script src="app.js"></script>
   <script src="buttonHandlers.js"></script>
   <script src="cellOperations.js"></script>

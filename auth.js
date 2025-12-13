@@ -261,8 +261,11 @@
         ssSet('sched:userId', id);
         ssSet('sched:cloudKey', ck);
         
-        // 互換性のため、SHA-256キーも保存
-        ssSet('sched:cloudKeySha', ck);
+        // レガシーキーのクリーンアップ
+        try {
+          sessionStorage.removeItem('sched:cloudKeySha');
+          sessionStorage.removeItem('sched:cloudKeyCompat');
+        } catch (_) {}
 
         // ログイン完了イベント発火
         await new Promise(r => setTimeout(r, 0));

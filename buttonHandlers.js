@@ -9,7 +9,7 @@
   // 必要な要素参照を取得
   let btnJumpMonth, monthPicker, btnPrevDay, btnNextDay, btnHolidayAuto;
   let btnAutoAssign, btnCancel, btnFullCancel, btnUndo, btnSave;
-  let btnExportExcel, btnLogout, btnLockRange, btnUnlockRange, btnGlobalLock;
+  let btnExportExcel, btnExportXlsx, btnImportData, btnLogout, btnLockRange, btnUnlockRange, btnGlobalLock;
   let fullCancelDlg, fullCancelAllBtn, fullCancelCloseBtn;
   let btnLeaveHoliday, btnLeaveSub, btnLeavePaid, btnLeaveRefresh;
   let btnAttrOpen, attrDlg, attrSave, attrClose;
@@ -42,6 +42,8 @@
       btnUndo = document.getElementById('btnUndo');
       btnSave = document.getElementById('btnSave');
       btnExportExcel = document.getElementById('btnExportExcel');
+      btnExportXlsx = document.getElementById('btnExportXlsx');
+      btnImportData = document.getElementById('btnImportData');
       btnLogout = document.getElementById('btnLogout');
       btnLockRange = document.getElementById('btnLockRange');
       btnUnlockRange = document.getElementById('btnUnlockRange');
@@ -102,6 +104,7 @@
       setupLockButtons();
       setupGlobalLockButton();
       setupExportButton();
+      setupExportImportButtons();  // ★追加
       setupLogoutButton();
       setupModeRadios();
       setupLeaveButtons();
@@ -458,38 +461,74 @@ if (fullCancelCloseBtn) {
     }
   }
 
+  // === Excel/CSV エクスポート・インポートボタン ===
+  function setupExportImportButtons() {
+    // Excelエクスポート（xlsx形式）
+    if (btnExportXlsx) {
+      btnExportXlsx.addEventListener('click', async () => {
+        if (window.DataExportImport && typeof window.DataExportImport.exportExcel === 'function') {
+          await window.DataExportImport.exportExcel();
+        } else {
+          showToast('Excelエクスポート機能が利用できません');
+        }
+      });
+    }
+
+    // インポート（CSV/Excel対応）
+    if (btnImportData) {
+      btnImportData.addEventListener('click', () => {
+        if (window.DataExportImport && typeof window.DataExportImport.openImportDialog === 'function') {
+          window.DataExportImport.openImportDialog();
+        } else {
+          showToast('インポート機能が利用できません');
+        }
+      });
+    }
+  }
+
   // === ログアウトボタン ===
   function setupLogoutButton() {
     if (!btnLogout) return;
 
     btnLogout.addEventListener('click', async () => {
-      // ログアウト時は自動保存
-      saveWindow();
-      // 保存後にクラウドへも送信（完了を待つ）
       try {
-        await pushToRemote();
-      } catch (e) {
-        console.error('ログアウト時のクラウド保存に失敗:', e);
-      }
+        // ログアウト時は自動保存（ローカル）
+        if (typeof saveWindow === 'function') {
+          saveWindow();
+        }
 
-      try {
+        // セッション情報を破棄
         sessionStorage.removeItem('sched:loggedIn');
-      } catch (_) {}
-      try {
         sessionStorage.removeItem('sched:userId');
-      } catch (_) {}
 
-      const appView = document.getElementById('appView');
-      const loginView = document.getElementById('loginView');
-      const loginForm = document.getElementById('loginForm');
+        // クラウドキー類も破棄（存在する場合のみ）
+        sessionStorage.removeItem('sched:cloudKey');
+        sessionStorage.removeItem('sched:cloudKeySha');
+        sessionStorage.removeItem('sched:cloudKeyCompat');
 
-      if (appView) appView.classList.remove('active');
-      if (loginView) loginView.classList.add('active');
-      if (loginForm) loginForm.reset();
+        // 画面遷移：アプリ → ログイン
+        const appView = document.getElementById('appView');
+        const loginView = document.getElementById('loginView');
+        const loginForm = document.getElementById('loginForm');
+        const loginError = document.getElementById('loginError');
 
-      showToast('保存してログアウトしました');
+        if (appView) appView.classList.remove('active');
+        if (loginView) loginView.classList.add('active');
+        if (loginForm && typeof loginForm.reset === 'function') loginForm.reset();
+        if (loginError) loginError.textContent = '';
+
+        if (typeof showToast === 'function') {
+          showToast('保存してログアウトしました');
+        }
+      } catch (e) {
+        console.error('Logout failed:', e);
+        if (typeof showToast === 'function') {
+          showToast('ログアウトに失敗しました');
+        }
+      }
     });
   }
+
 
 // === モード切替ラジオボタン ===
 function setupModeRadios() {
