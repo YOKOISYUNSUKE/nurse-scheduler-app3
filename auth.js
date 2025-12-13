@@ -268,38 +268,9 @@
         } catch (_) {}
 
         // ログイン完了イベント発火
+        // ★注：クラウドデータの読み込みはapp.jsのsyncFromRemoteで行う
         await new Promise(r => setTimeout(r, 0));
         emitLogin(id);
-        
-// ログイン成功後、クラウドからデータを読み込む
-        try {
-          console.log(`[Auth] Loading user data from cloud...`);
-          const userData = await remoteGet(ck);
-          if (userData && typeof userData === 'object') {
-            console.log(`[Auth] User data loaded successfully`);
-            // localStorageに復元
-            Object.keys(userData).forEach(key => {
-              try {
-                localStorage.setItem(key, userData[key]);
-              } catch (e) {
-                console.warn(`[Auth] Failed to restore key: ${key}`, e);
-              }
-            });
-          } else {
-            console.log(`[Auth] No existing cloud data found for user`);
-          }
-        } catch (e) {
-          console.warn('[Auth] Failed to load cloud data:', e);
-          // データ読み込み失敗は警告のみ(ログインは継続)
-        }
-
-        // 従業員データの明示的な読み込み
-        try {
-          console.log(`[Auth] Loading employee data...`);
-          await loadEmployeeData(ck);
-        } catch (e) {
-          console.warn('[Auth] Failed to load employee data:', e);
-        }
 
       } catch (error) {
         console.error('[Auth] Login failed:', error);
@@ -309,79 +280,6 @@
         hideLoginLoading();
       }
     });
-  }
-
-// --- 従業員データ読み込み ---
-  /**
-   * ログイン後に従業員データを読み込む
-   * 優先順位: クラウド > ローカル
-   * @param {string} cloudKey - 認証キー
-   */
-  async function loadEmployeeData(cloudKey) {
-    const EMPLOYEE_KEY = 'sched:employees';
-    let employeeData = null;
-    let source = 'none';
-
-    // 1. クラウドから取得を試みる
-    try {
-      const cloudData = await remoteGet(cloudKey);
-      if (cloudData && typeof cloudData === 'object') {
-        const cloudEmployees = cloudData[EMPLOYEE_KEY];
-        if (cloudEmployees) {
-          try {
-            const parsed = JSON.parse(cloudEmployees);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              employeeData = parsed;
-              source = 'cloud';
-              console.log(`[Auth] Employee data loaded from cloud: ${parsed.length} employees`);
-            }
-          } catch (e) {
-            console.warn('[Auth] Failed to parse cloud employee data:', e);
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[Auth] Failed to fetch employee data from cloud:', e);
-    }
-
-    // 2. クラウドにデータがない場合、ローカルから取得
-    if (!employeeData) {
-      try {
-        const localData = localStorage.getItem(EMPLOYEE_KEY);
-        if (localData) {
-          const parsed = JSON.parse(localData);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            employeeData = parsed;
-            source = 'local';
-            console.log(`[Auth] Employee data loaded from local: ${parsed.length} employees`);
-          }
-        }
-      } catch (e) {
-        console.warn('[Auth] Failed to load local employee data:', e);
-      }
-    }
-
-    // 3. データが見つかった場合、従業員ダイアログに通知
-    if (employeeData) {
-      console.log(`[Auth] Notifying employee dialog (source: ${source})`);
-      document.dispatchEvent(new CustomEvent('auth:employees-loaded', {
-        detail: { 
-          employees: employeeData,
-          source: source,
-          cloudKey: cloudKey
-        }
-      }));
-    } else {
-      console.log('[Auth] No employee data found (new user or empty)');
-      // 空配列で初期化
-      document.dispatchEvent(new CustomEvent('auth:employees-loaded', {
-        detail: { 
-          employees: [],
-          source: 'new',
-          cloudKey: cloudKey
-        }
-      }));
-    }
   }
 
   // --- 公開API ---
