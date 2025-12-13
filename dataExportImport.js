@@ -130,21 +130,71 @@
     if(lines.length < 2) throw new Error('データが不足しています');
 
     // ヘッダ行解析
-    const header = parseCSVLine(lines[0]);
-    if(header[0] !== '従業員') throw new Error('ヘッダー形式が不正です（1列目は「従業員」である必要があります）');
+    const header = parseCSVLine(lines[0]).map(v => String(v ?? '').replace(/\uFEFF/g,'').trim());
+    if(!/^従業員/.test(header[0] || '')){
+      throw new Error('ヘッダー形式が不正です（1列目は「従業員」である必要があります）');
+    }
 
-    // 日付列を抽出（ヘッダから日付部分を取得）
+    // 現在表示中（先頭28日）の日付セット & 月日→日付(YYYY-MM-DD)の変換表
+    const windowDays = (State.windowDates || []).slice(0, 28);
+    const windowSet = new Set(windowDays.map(d => safeDate(d)).filter(Boolean));
+    const mdToDs = new Map(); // "M/D" -> "YYYY-MM-DD"
+    windowDays.forEach(dt => {
+      const ds = safeDate(dt);
+      if(!ds) return;
+      const m = dt.getMonth() + 1;
+      const d = dt.getDate();
+      mdToDs.set(`${m}/${d}`, ds);
+      mdToDs.set(`${m}月${d}日`, ds);
+    });
+
+    function normalizeYMD(y, m, d){
+      const yy = String(y).padStart(4,'0');
+      const mm = String(m).padStart(2,'0');
+      const dd = String(d).padStart(2,'0');
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    // ヘッダ文字列から YYYY-MM-DD を取り出す（YYYY/MM/DD, M/D, M月D日 も対応）
+    function resolveHeaderDateToDs(label){
+      const s = String(label ?? '').trim();
+
+      // 1) ISO or slash (YYYY-MM-DD / YYYY/MM/DD)
+      let m = s.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+      if(m){
+        return normalizeYMD(Number(m[1]), Number(m[2]), Number(m[3]));
+      }
+
+      // 2) month/day (M/D)
+      m = s.match(/^(\d{1,2})\/(\d{1,2})/);
+      if(m){
+        return mdToDs.get(`${Number(m[1])}/${Number(m[2])}`) || null;
+      }
+
+      // 3) Japanese (M月D日)
+      m = s.match(/^(\d{1,2})月(\d{1,2})日/);
+      if(m){
+        return mdToDs.get(`${Number(m[1])}月${Number(m[2])}日`) || null;
+      }
+
+      return null;
+    }
+
     const dateCols = [];
-    for(let c = 1; c < header.length; c++){
-      const col = header[c];
-      // "2025-01-15(水)" or "2025-01-15" 形式から日付を抽出
-      const match = col.match(/(\d{4}-\d{2}-\d{2})/);
-      if(match){
-        dateCols.push({ col: c, ds: match[1] });
+    for(let c=1; c<header.length; c++){
+      const ds = resolveHeaderDateToDs(header[c]);
+      if(ds && windowSet.has(ds)){
+        dateCols.push({ col: c, ds });
       }
     }
 
-    if(dateCols.length === 0) throw new Error('日付列が見つかりません');
+    if(dateCols.length === 0){
+      const s = safeDate(windowDays[0]);
+      const e = safeDate(windowDays[windowDays.length - 1]);
+      throw new Error(`ファイルの日付が現在の表示期間（${s}〜${e}）と一致しません。先に該当期間へ移動してからインポートしてください。`);
+    }
+
+
 
     // 従業員名→インデックスのマップ
     const empMap = new Map();
@@ -171,52 +221,49 @@
         continue;
       }
 
-      // 各日付セルを処理
-      for(const { col, ds } of dateCols){
-        const cellValue = (row[col] || '').trim();
-        if(!cellValue) continue;
+// 各日付セルを処理
+for(const { col, ds } of dateCols){
+  const cellValue = (row[col] || '').trim();
 
-        // 値を解釈
-        if(cellValue === '休'){
-          // 希望休として設定
-          let s = State.offRequests.get(r);
-          if(!s){ s = new Set(); State.offRequests.set(r, s); }
-          s.add(ds);
-          // 既存の割当・特休をクリア
-          if(window.clearAssign) window.clearAssign(r, ds);
-          if(window.clearLeaveType) window.clearLeaveType(r, ds);
-          appliedCount++;
+  // まず既存データをクリア（= 上書きの土台）
+  const hadOff  = window.hasOffByDate ? window.hasOffByDate(r, ds) : false;
+  const hadLeave = window.getLeaveType ? window.getLeaveType(r, ds) : null;
+  const hadMk   = window.getAssign ? window.getAssign(r, ds) : null;
 
-        } else if(['祝','代','年','リ'].includes(cellValue)){
-          // 特別休暇として設定
-          if(window.setLeaveType){
-            window.setLeaveType(r, ds, cellValue);
-          }
-          // 希望休をクリア
-          const s = State.offRequests.get(r);
-          if(s) s.delete(ds);
-          // 既存の割当をクリア
-          if(window.clearAssign) window.clearAssign(r, ds);
-          appliedCount++;
+  const offSet = State.offRequests.get(r);
+  if(offSet) { offSet.delete(ds); if(offSet.size === 0) State.offRequests.delete(r); }
+  if(window.clearLeaveType) window.clearLeaveType(r, ds);
+  if(window.clearAssign) window.clearAssign(r, ds);
 
-        } else if(['〇','○','☆','★','◆','●','早','遅','□'].includes(cellValue)){
-          // 割当マークとして設定（○を〇に正規化）
-          let mark = cellValue;
-          if(mark === '○') mark = '〇'; // 全角丸
-          if(window.setAssign){
-            window.setAssign(r, ds, mark);
-          }
-          // 希望休・特休をクリア
-          const s = State.offRequests.get(r);
-          if(s) s.delete(ds);
-          if(window.clearLeaveType) window.clearLeaveType(r, ds);
-          appliedCount++;
+  // 空なら「未割当」上書きとして完了
+  if(!cellValue){
+    if(hadOff || hadLeave || hadMk) appliedCount++;
+    continue;
+  }
 
-        } else {
-          warnings.push(`行${lineIdx + 1}列${col + 1}: 不明な値「${cellValue}」をスキップ`);
-          skippedCount++;
-        }
-      }
+  // 値を解釈（ここに来る時点で、必ず上書きできる）
+  if(cellValue === '休'){
+    let s = State.offRequests.get(r);
+    if(!s){ s = new Set(); State.offRequests.set(r, s); }
+    s.add(ds);
+    appliedCount++;
+
+  } else if(['祝','代','年','リ'].includes(cellValue)){
+    if(window.setLeaveType) window.setLeaveType(r, ds, cellValue);
+    appliedCount++;
+
+  } else if(['〇','○','☆','★','◆','●','早','遅','□'].includes(cellValue)){
+    let mark = cellValue;
+    if(mark === '○') mark = '〇';
+    if(window.setAssign) window.setAssign(r, ds, mark);
+    appliedCount++;
+
+  } else {
+    warnings.push(`行${lineIdx + 1}列${col + 1}: 不明な値「${cellValue}」をスキップ`);
+    skippedCount++;
+  }
+}
+
     }
 
     // 画面更新
@@ -234,7 +281,7 @@ if(typeof window.saveWindow === 'function') window.saveWindow();
   }
 
   // CSV行をパース（クオート対応）
-  function parseCSVLine(line){
+  function parseCSVLine(line, delimiter=','){
     const result = [];
     let current = '';
     let inQuote = false;
@@ -300,7 +347,7 @@ if(typeof window.saveWindow === 'function') window.saveWindow();
     days.forEach(dt => {
       const ds = safeDate(dt);
       const w = '日月火水木金土'[dt.getDay()];
-      header.push(`${dt.getMonth()+1}/${dt.getDate()}(${w})`);
+      header.push(`${ds}(${w})`);
     });
     header.push('4週時間');
     wsData.push(header);
@@ -345,11 +392,12 @@ if(typeof window.saveWindow === 'function') window.saveWindow();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
     // 列幅設定
-    ws['!cols'] = [
-      { wch: 12 }, // 従業員名
-      ...days.map(() => ({ wch: 8 })), // 日付列
-      { wch: 8 }  // 時間列
-    ];
+ws['!cols'] = [
+  { wch: 12 }, // 従業員名
+  ...days.map(() => ({ wch: 8 })), // 日付列
+  { wch: 8 }  // 時間列
+];
+
 
     // ワークブック作成
     const wb = XLSX.utils.book_new();

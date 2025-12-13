@@ -1,7 +1,5 @@
 // sw.js
-const VERSION = 'v2025-12.13.41';
-const STATIC_CACHE = `static-${VERSION}`;
-const ENTRY_HTML = './index.html'; // ← `!doctype (1).html` のまま使うなら './!doctype (1).html' に変更
+const VERSION = 'v2025-12.13.50';
 
 const STATIC_ASSETS = [
   './',
@@ -17,10 +15,13 @@ const STATIC_ASSETS = [
   './marks.js',
   './holidayRules.js',
   './nightBand.js',
+  './dataExportImport.js',
+
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];
+
 
 
 self.addEventListener('install', (e) => {

@@ -1982,9 +1982,27 @@ window.clearAssign = clearAssign; // ★追加
   }
 
 
+  // インポート等で、ファイル側の期間へ自動的に移動したい場合に利用
+  function jumpToDateString(ds){
+    const s = String(ds || '').trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return false;
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    if(!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return false;
+    const dt = new Date(y, mo - 1, d);
+    if(String(dt) === 'Invalid Date') return false;
+    switchAnchor(dt);
+    return true;
+  }
+  window.jumpToDateString = jumpToDateString;
+
+
   function shiftDays(n){
     switchAnchor(addDays(State.anchor, n));
   }
+
 
 
   // ---- ドラッグで日単位スクロール ----
