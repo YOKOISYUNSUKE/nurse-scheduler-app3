@@ -462,11 +462,15 @@ if (fullCancelCloseBtn) {
   function setupLogoutButton() {
     if (!btnLogout) return;
 
-    btnLogout.addEventListener('click', () => {
+    btnLogout.addEventListener('click', async () => {
       // ログアウト時は自動保存
       saveWindow();
-      // 保存後にクラウドへも送信
-      pushToRemote();
+      // 保存後にクラウドへも送信（完了を待つ）
+      try {
+        await pushToRemote();
+      } catch (e) {
+        console.error('ログアウト時のクラウド保存に失敗:', e);
+      }
 
       try {
         sessionStorage.removeItem('sched:loggedIn');

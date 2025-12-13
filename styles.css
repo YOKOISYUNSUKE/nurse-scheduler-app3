@@ -14,28 +14,65 @@
 
 
 *{ box-sizing: border-box; }
-html,body{ height:100%; }
-body{
-  margin:0; background:var(--bg); color:var(--text);
-  font-family: "Noto Sans JP", system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-}
-.hidden{ display:none !important; }
-.view{ display:none; }
-.view.active{ display:block; }
 
-/* ▼▼ 追加：アプリ表示中は“カレンダー領域のみ”がスクロール ▼▼ */
-html, body { height: 100%; }                 /* ビューポート基準を安定化 */
+/* ★修正：html, bodyの初期化を改善 */
+html{
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+body{
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Noto Sans JP", system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+.hidden{ display:none !important; }
+
+/* ★修正：.viewの基本スタイルを改善 */
+.view{ 
+  display: none;
+  width: 100%;
+  height: 100%;
+}
+.view.active{ 
+  display: flex;
+  flex-direction: column;
+}
+
+/* ★修正：ログイン画面の表示スタイルを追加 */
+#loginView.view.active{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+  padding: 0;
+  margin: 0;
+}
+
+/* ▼▼ 追加：アプリ表示中は"カレンダー領域のみ"がスクロール ▼▼ */
 #appView.view.active{
   display: flex;                              /* 縦レイアウト（active のときのみ表示） */
   flex-direction: column;
-  height: 100vh;                              /* 全高にフィット（親をスクロールさせない） */
+  height: 100%;                               /* 全高にフィット（親をスクロールさせない） */
+  width: 100%;
   overflow: hidden;                           /* 画面本体の縦スクロールを抑止 */
 }
 /* ▲▲ 追加ここまで ▲▲ */
 
 /* ---- Login ---- */
 .app-title{ margin:0 0 12px; font-size:22px; font-weight:700; letter-spacing:.02em; }
-.login-card{ width:min(420px, calc(100% - 32px)); margin:8vh auto; padding:28px; background:var(--panel);
+.login-card{ width:min(420px, calc(100% - 32px)); margin:0 auto; padding:28px; background:var(--panel);
   border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); position:relative; }
 .lbl{ font-size:13px; color:var(--muted); display:block; margin:12px 0 6px; }
 .txt{ width:100%; padding:12px 14px; border:1px solid var(--border); border-radius:10px; font-size:16px; outline:none; }
@@ -327,379 +364,72 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
   min-height:4.5em;
 }
 #countsDlg .fixed-hint{
-  margin-top:4px;
   font-size:11px;
   color:var(--muted);
-}
-
-
-.attr footer{ display:flex; justify-content:flex-end; gap:10px; padding:12px 14px; border-top:1px solid var(--border); }
-
-
-
-/* ---- 名列のインライン属性セレクタ ---- */
-.col-emp .emp-wrap{ display:flex; align-items:center; gap:8px; }
-.mini-select{
-  padding:4px 6px; border:1px solid var(--border); border-radius:8px; background:#fff; font-size:12px;
-}
-.mini-select:focus{ border-color:var(--accent); box-shadow:0 0 0 2px rgba(37,99,235,.18); outline:none; }
-.mini-select.level{ min-width:40px; } /* 幅を縮小 */
-.mini-select.work { min-width:60px; }
-
-.level-select{
-  width:50px;          /* 一文字分だけあればよい */
-  min-width:50px;
-  padding:4px 6px;
-}
-
-/* 従業員ダイアログ: 全要素を一行に配置 */
-.attr .row {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 0;
-  overflow-x: auto;
-}
-
-.attr .row input[data-role="name"] {
-  flex: 0 0 auto;
-  /* 全角8文字ぶん（= 8em） + 左右padding(14px×2) を目安に固定 */
-  width: calc(8em + 28px);
-  min-width: calc(8em + 28px);
-  max-width: calc(8em + 28px);
-}
-
-.attr .row .mini-select {
-  flex: 0 0 auto;
-  min-width: 80px;
-}
-
-
-.attr .row .quota-wrap,
-.attr .row .forbid-wrap,
-.attr .row .btn-personal-settings {
-  flex: 0 0 auto;
-}
-
-.attr .row .ctrls {
-  display: flex;
-  gap: 4px;
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
-.attr .row .ctrls .btn {
-  padding: 6px 8px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-
-
-/* 禁忌ペア選択UIのスタイル */
-.forbid-wrap {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.forbid-select {
-  min-width: 100px;
-  max-width: 200px;
-  height: auto;
-  padding: 4px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  font-size: 0.875rem;
-}
-
-.forbid-select option {
-  padding: 2px 4px;
-}
-
-.forbid-select option:checked {
-  background-color: #3b82f6;
-  color: white;
+  margin-top:4px;
 }
 
 .counts-table{
-  width:100%;
   border-collapse:collapse;
-  margin:10px 0 18px;
+  width:100%;
+  margin:0 0 16px;
 }
-.counts-table th,
-.counts-table td{
+.counts-table thead th, .counts-table tbody td{
   border:1px solid var(--border);
-  padding:8px;
+  padding:8px 10px;
   text-align:center;
 }
-.counts-table th{
-  background:#f8fafc;
-  font-weight:600;
+.counts-table thead th{
+  background:#f9fafb;
+  font-weight:700;
 }
-.counts-table input.txt{
-  width:70px;
-  text-align:right;
+.counts-table tbody th{
+  text-align:left;
+  background:#f9fafb;
+  font-weight:700;
 }
-
-
-/* --- 末尾に追加 --- */
-
-/* 勤務時間設定フィールド */
-.durations-wrap {
-  animation: slideDown 0.2s ease-out;
+.counts-table .txt{
+  width:100%;
+  padding:6px 8px;
 }
 
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    max-height: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    max-height: 500px;
-    transform: translateY(0);
-  }
+.counts-and-fixed-options{
+  display:flex;
+  gap:12px;
+  margin-bottom:12px;
+  flex-wrap:wrap;
 }
 
-.duration-field {
-  transition: all 0.2s ease;
+.counts-and-fixed-options label{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:14px;
 }
 
-.duration-field:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  transform: translateY(-1px);
+.counts-and-fixed-options input[type="checkbox"]{
+  width:18px;
+  height:18px;
+  cursor:pointer;
 }
 
-.duration-select {
-  cursor: pointer;
-  transition: border-color 0.2s ease;
-}
+/* ---- Dialog footer ---- */
+dialog footer{ display:flex; gap:8px; justify-content:flex-end; padding:14px; border-top:1px solid var(--border); }
+dialog .btn{ margin:0; }
 
-.duration-select:hover {
-  border-color: #3b82f6;
-}
+/* ---- Toast ---- */
+.toast{ position:fixed; bottom:20px; right:20px; padding:12px 16px; background:var(--text); color:#fff;
+  border-radius:12px; box-shadow:var(--shadow); z-index:999; opacity:0; transform:translateY(20px);
+  transition:opacity .3s ease, transform .3s ease; pointer-events:none; }
+.toast.show{ opacity:1; transform:translateY(0); pointer-events:auto; }
 
-.duration-select:focus {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+/* ---- Responsive ---- */
+@media(max-width:768px){
+  .topbar{ flex-wrap:wrap; gap:6px; padding:8px 10px; }
+  .topbar .left, .topbar .right{ gap:6px; }
+  .toolbar{ gap:8px; padding:8px 10px; }
+  .tool{ gap:6px; }
+  .btn{ padding:8px 12px; font-size:14px; }
+  .grid-wrap{ padding:8px; }
+  .grid th, .grid td{ padding:6px 8px; font-size:13px; }
 }
-
-.current-duration-label {
-  font-style: italic;
-}
-
-/* 勤務時間編集ボタンの強調 */
-.btn-duration-toggle {
-  font-size: 0.9em;
-  padding: 6px 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  transition: all 0.3s ease;
-}
-
-.btn-duration-toggle:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-/* === レスポンシブ対応の追加 === */
-
-/* タッチデバイス用のタップ領域拡大 */
-@media (hover: none) and (pointer: coarse) {
-  .btn {
-    min-height: 44px;
-    min-width: 44px;
-    padding: 12px 16px;
-  }
-  
-  .btn-sm {
-    min-height: 36px;
-    padding: 6px 12px;
-  }
-  
-  .grid th, .grid td {
-    min-height: 44px;
-    padding: 12px 10px;
-  }
-  
-  .mini-select {
-    min-height: 36px;
-    padding: 6px 8px;
-  }
-}
-
-/* スマートフォン向け調整 (600px以下) */
-@media (max-width: 600px) {
-  /* トップバーを縦積み */
-  .topbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    padding: 8px;
-  }
-  
-  .topbar .left,
-  .topbar .right {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 6px;
-  }
-  
-  /* ボタンテキストを短縮表示 */
-  .topbar .btn {
-    font-size: 12px;
-    padding: 8px 10px;
-  }
-  
-  /* ツールバーも縦積み */
-  .toolbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-  
-  .tool {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-  
-  /* 期間表示を大きく */
-  .period {
-    font-size: 16px;
-    font-weight: 600;
-    text-align: center;
-    width: 100%;
-  }
-  
-  /* グリッドのフォントサイズ調整 */
-  .grid th, .grid td {
-    font-size: 12px;
-    padding: 6px 4px;
-    min-width: 40px;
-  }
-  
-  .grid .col-emp {
-    min-width: 120px;
-    font-size: 11px;
-  }
-  
-  .mark {
-    font-size: 14px;
-  }
-  
-  /* ダイアログを全画面に近い表示 */
-  dialog.attr {
-    width: calc(100% - 16px);
-    max-width: none;
-    margin: 8px;
-  }
-  
-  .attr .content {
-    max-height: calc(100vh - 200px);
-  }
-  
-  /* ログインカードの調整 */
-  .login-card {
-    margin: 4vh auto;
-    padding: 20px;
-  }
-  
-  .app-title {
-    font-size: 20px;
-  }
-}
-
-/* タブレット向け調整 (601px〜1024px) */
-@media (min-width: 601px) and (max-width: 1024px) {
-  .topbar {
-    flex-wrap: wrap;
-  }
-  
-  .topbar .right {
-    flex-wrap: wrap;
-  }
-  
-  .grid th, .grid td {
-    font-size: 13px;
-    padding: 8px 6px;
-  }
-  
-  .grid .col-emp {
-    min-width: 160px;
-  }
-}
-
-/* 横向き表示時の最適化 */
-@media (orientation: landscape) and (max-height: 500px) {
-  .topbar {
-    padding: 6px 10px;
-  }
-  
-  .topbar .btn {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-  
-  .toolbar {
-    padding: 6px 10px;
-  }
-  
-  .grid th, .grid td {
-    padding: 4px 6px;
-  }
-}
-
-/* タッチデバイスでのスクロール改善 */
-.grid-wrap {
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
-
-/* 選択UIの改善（モバイル） */
-@media (max-width: 600px) {
-  .select,
-  .mini-select {
-    font-size: 14px;
-    -webkit-appearance: none;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23475569' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-    padding-right: 28px;
-  }
-  
-  /* ヒントテキストを小さく */
-  .hint {
-    font-size: 11px;
-  }
-  
-  /* チップのサイズ調整 */
-  .chip {
-    font-size: 10px;
-    padding: 1px 4px;
-  }
-}
-
-/* フォーカス表示の改善（キーボード使用時のみ） */
-@media (hover: hover) and (pointer: fine) {
-  .btn:focus-visible,
-  .txt:focus-visible,
-  .select:focus-visible {
-    outline: 3px solid rgba(37,99,235,.35);
-    outline-offset: 2px;
-  }
-}
-
-/* タッチデバイスではアウトライン非表示 */
-@media (hover: none) and (pointer: coarse) {
-  .btn:focus,
-  .txt:focus,
-  .select:focus {
-    outline: none;
-  }
-}
-
