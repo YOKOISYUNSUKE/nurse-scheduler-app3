@@ -43,6 +43,31 @@ html, body { height: 100%; }                 /* ビューポート基準を安�
 .error{ color:var(--danger); min-height:1.2em; margin-top:8px; }
 .w-100{ width:100%; }
 
+/* ★追加：ログイン画面の注意書き */
+.login-note{
+  margin-top: 12px;
+  padding: 12px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #7c2d12;
+  line-height: 1.5;
+}
+.login-note-title{
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.login-note-body strong{
+  font-weight: 800;
+}
+.login-note-sub{
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #9a3412;
+}
+
+
 /* 追加：ログイン送信ボタンを非表示（Enterで送信） */
 #loginForm [type="submit"]{ display:none !important; }
 
