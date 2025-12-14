@@ -19,6 +19,13 @@
     return `${y}-${m}-${dd}`;
   }
 
+  // 現在の「指定4週間」（range4wStart〜+27）を返す（range4wStartが無ければ先頭28日）
+  function getCurrent4wDays(State){
+    const start = Number.isInteger(State && State.range4wStart) ? State.range4wStart : 0;
+    const dates = (State && Array.isArray(State.windowDates)) ? State.windowDates : [];
+    return dates.slice(start, start + 28);
+  }
+
   // ==============================
   // CSVエクスポート（割り当てデータ専用・インポート対応形式）
   // ==============================
@@ -30,8 +37,9 @@
     }
 
     // 表示中の4週間（28日）をエクスポート
-    const days = State.windowDates.slice(0, 28);
+    const days = getCurrent4wDays(State);
     const rows = [];
+
 
     // ヘッダ行: 従業員名, 日付1, 日付2, ... 
     const header = ['従業員'];
@@ -61,7 +69,7 @@
         } else if(off){
           cell = '休';
         } else if(mk){
-          cell = mk; // 〇, ☆, ★, ◆, ●, 早, 遅, □
+          cell = mk; // 〇, ☆, ★, ◆, ●, 早, 遅
         }
         row.push(cell);
       }
@@ -122,8 +130,29 @@
     const State = getState();
     if(!State) throw new Error('State not available');
 
+    // --- インポート用：特別休暇を「検証なし」で反映する ---
+    // app.js 側の setLeaveType は UI 入力制約を持つため、
+    // インポート時は “保存データの復元” を優先して State.leaveRequests を直接更新する。
+    function rawSetLeave(empIdx, ds, code){
+      if(!State.leaveRequests) State.leaveRequests = new Map();
+      let mp = State.leaveRequests.get(empIdx);
+      if(!mp){
+        mp = new Map();
+        State.leaveRequests.set(empIdx, mp);
+      }
+      mp.set(ds, code);
+    }
+    function rawClearLeave(empIdx, ds){
+      const mp = State.leaveRequests && State.leaveRequests.get(empIdx);
+      if(mp){
+        mp.delete(ds);
+        if(mp.size === 0) State.leaveRequests.delete(empIdx);
+      }
+    }
+
     // BOM除去
     if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
 
     // 行分割（CRLF/LF/CR対応）
     const lines = text.split(/\r\n|\n|\r/).filter(line => line.trim() !== '');
@@ -136,7 +165,7 @@
     }
 
     // 現在表示中（先頭28日）の日付セット & 月日→日付(YYYY-MM-DD)の変換表
-    const windowDays = (State.windowDates || []).slice(0, 28);
+    const windowDays = getCurrent4wDays(State);
     const windowSet = new Set(windowDays.map(d => safeDate(d)).filter(Boolean));
     const mdToDs = new Map(); // "M/D" -> "YYYY-MM-DD"
     windowDays.forEach(dt => {
@@ -232,11 +261,12 @@ for(const { col, ds } of dateCols){
 
   const offSet = State.offRequests.get(r);
   if(offSet) { offSet.delete(ds); if(offSet.size === 0) State.offRequests.delete(r); }
-  if(window.clearLeaveType) window.clearLeaveType(r, ds);
+  rawClearLeave(r, ds);
   if(window.clearAssign) window.clearAssign(r, ds);
 
   // 空なら「未割当」上書きとして完了
   if(!cellValue){
+
     if(hadOff || hadLeave || hadMk) appliedCount++;
     continue;
   }
@@ -249,10 +279,10 @@ for(const { col, ds } of dateCols){
     appliedCount++;
 
   } else if(['祝','代','年','リ'].includes(cellValue)){
-    if(window.setLeaveType) window.setLeaveType(r, ds, cellValue);
+    rawSetLeave(r, ds, cellValue);
     appliedCount++;
 
-  } else if(['〇','○','☆','★','◆','●','早','遅','□'].includes(cellValue)){
+  } else if(['〇','○','☆','★','◆','●','早','遅'].includes(cellValue)){
     let mark = cellValue;
     if(mark === '○') mark = '〇';
     if(window.setAssign) window.setAssign(r, ds, mark);
@@ -425,7 +455,7 @@ ws['!cols'] = [
     if(window.ShiftDurations && typeof window.ShiftDurations.getDefaultForMark === 'function'){
       return Number(window.ShiftDurations.getDefaultForMark(mark) || 0);
     }
-    const fallback = { '〇': 480, '早': 480, '遅': 540, '☆': 480, '★': 480, '◆': 240, '●': 240, '□': 540 };
+    const fallback = { '〇': 480, '早': 480, '遅': 540, '☆': 480, '★': 480, '◆': 240, '●': 240 };
     return fallback[mark] || 0;
   }
 
