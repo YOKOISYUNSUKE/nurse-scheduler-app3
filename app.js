@@ -84,19 +84,46 @@ document.addEventListener('auth:logged-in', async (ev)=>{
     }
 
     // meta / counts のみクラウド同期
-    console.log('[auth:logged-in] Syncing meta/counts from cloud (assignments local only)');
-    try { 
-      await syncFromRemote(); 
-    } catch (error) {
-      console.error('Sync from remote failed:', error);
+    console.log('[auth:logged-in] Checking cloud connectivity...');
+    let cloudOk = false;
+    try {
+      // まずは「接続できるか」だけ確認（データ内容は問わない）
+      const probeKey = `${ck}:meta`;
+      await remoteGet(probeKey);
+      const ind = document.getElementById('cloudIndicator');
+      cloudOk = !!(ind && ind.classList.contains('online'));
+    } catch (e) {
+      cloudOk = false;
+    }
+
+    if (cloudOk) {
+      // ② 同期できていたら：ローカルの（クラウド対象）データを消去 → ③④ クラウドから取得してローカルへ保存
+      console.log('[auth:logged-in] Cloud OK. Clearing local meta/counts then syncing from cloud.');
+      try {
+        localStorage.removeItem('sched:meta');
+        localStorage.removeItem(storageKey('counts'));
+      } catch (_) {}
+
+      console.log('[auth:logged-in] Syncing meta/counts from cloud (assignments local only)');
+      try {
+        await syncFromRemote();
+      } catch (error) {
+        console.error('Sync from remote failed:', error);
+        if (typeof showToast === 'function') {
+          showToast('クラウド同期に失敗しました。ローカルデータで動作します');
+        }
+      }
+    } else {
+      // ②' 同期できていなかったら：ローカルは維持したままログイン
+      console.warn('[auth:logged-in] Cloud is offline. Keeping local data.');
       if (typeof showToast === 'function') {
-        showToast('クラウド同期に失敗しました。ローカルデータで動作します');
+        showToast('クラウド未接続：ローカルデータでログインします');
       }
     }
-   
 
     // 画面遷移
     await enterApp();
+
 
   } catch (error) {
     console.error('Login process failed:', error);
@@ -148,21 +175,6 @@ document.addEventListener('auth:logged-in', async (ev)=>{
   };
  // グローバル公開
   window.SchedulerState = State;
-
-  // ---- 起動 ----
-  // ★ DOMが完全に準備された後に自動ログインを試行
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      if (window.Auth && typeof window.Auth.tryAutoLogin === 'function') {
-        setTimeout(() => window.Auth.tryAutoLogin(), 100);
-      }
-    });
-  } else {
-    // 既にDOMが準備されている場合
-    if (window.Auth && typeof window.Auth.tryAutoLogin === 'function') {
-      setTimeout(() => window.Auth.tryAutoLogin(), 100);
-    }
-  }
 
   // ---- Util ----
   // 手動割り当てはルール無視で通す（canAssign / precheckPlace / applyAfterAssign をスキップ）

@@ -1,5 +1,5 @@
 // sw.js
-const VERSION = 'v2025-12.14.3';
+const VERSION = 'v2025-12.14.4';
 
 const STATIC_ASSETS = [
   './',
