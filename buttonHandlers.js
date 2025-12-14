@@ -461,7 +461,7 @@ if (fullCancelCloseBtn) {
     }
   }
 
-  // === Excel/CSV エクスポート・インポートボタン ===
+  // === エクスポート・インポートボタン ===
   function setupExportImportButtons() {
     // Excelエクスポート（xlsx形式）
     if (btnExportXlsx) {

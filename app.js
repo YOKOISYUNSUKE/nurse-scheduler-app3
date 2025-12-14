@@ -93,17 +93,7 @@ document.addEventListener('auth:logged-in', async (ev)=>{
         showToast('クラウド同期に失敗しました。ローカルデータで動作します');
       }
     }
-    
-    // ログイン時に従業員データと人数設定をローカル/クラウドに保存
-    try {
-      saveMetaOnly(); // ローカルストレージに保存
-      if (typeof pushToRemote === 'function') {
-        await pushToRemote(); // クラウドにも保存
-      }
-      console.log('[auth:logged-in] Employee data and count saved to local/cloud');
-    } catch (error) {
-      console.error('Failed to save employee data on login:', error);
-    }
+   
 
     // 画面遷移
     await enterApp();
@@ -1483,10 +1473,11 @@ function updateRange4wLabel(){
 }
 window.updateRange4wLabel = updateRange4wLabel;
 
+function renderGrid(){
+  grid.innerHTML = '';
+  // ★重要：描画前にキャッシュをクリア（現在のウィンドウの日付で集計を行う）
+  _winDateSet = null;
 
-// 追加：表示月（年月区切りのカレンダー月）をExcelで開けるCSVとして保存（UTF-8 BOM付き）
-function exportExcelCsv(){
-  const rows = [];
 
 
       // カレンダー月の範囲を決定（表示ウィンドウの先頭日を基準に、その月の1日〜末日）
@@ -2575,7 +2566,6 @@ function deleteEmployee(idx){
   window.switchAnchor = switchAnchor;
   window.shiftDays = shiftDays;
   window.paintRange4w = paintRange4w;
-  window.exportExcelCsv = exportExcelCsv;
   window.cancelChanges = cancelChanges;
   window.makeCancelBackup = makeCancelBackup;
   

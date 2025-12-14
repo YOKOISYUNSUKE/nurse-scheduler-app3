@@ -514,26 +514,26 @@ ws['!cols'] = [
   // ==============================
   // ファイル選択ダイアログを開く
   // ==============================
-  function openImportDialog(){
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv,.xlsx,.xls';
-    
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
+function openImportDialog(){
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls';
+  
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+
       if(!file) return;
 
       try{
         let result;
-        const ext = file.name.split('.').pop().toLowerCase();
+const ext = file.name.split('.').pop().toLowerCase();
 
-        if(ext === 'csv'){
-          result = await importAssignmentCSV(file);
-        } else if(ext === 'xlsx' || ext === 'xls'){
-          result = await importAssignmentExcel(file);
-        } else {
-          throw new Error('対応していないファイル形式です');
-        }
+if(ext === 'xlsx' || ext === 'xls'){
+  result = await importAssignmentExcel(file);
+} else {
+  throw new Error('対応していないファイル形式です');
+}
+
 
         if(typeof window.showToast === 'function'){
           window.showToast(result.message);
@@ -558,8 +558,6 @@ ws['!cols'] = [
   // グローバル公開
   // ==============================
   global.DataExportImport = {
-    exportCSV: exportAssignmentCSV,
-    importCSV: importAssignmentCSV,
     exportExcel: exportAssignmentExcel,
     importExcel: importAssignmentExcel,
     openImportDialog: openImportDialog
