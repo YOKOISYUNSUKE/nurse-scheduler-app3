@@ -67,80 +67,162 @@ window.updateFooterCounts = null;
   const gridWrap = $('#gridWrap');
   const grid     = $('#grid');
   const toast    = $('#toast');
-
   const modeRadios = $$('input[name="mode"]');
 
-document.addEventListener('auth:logged-in', async (ev)=>{
-  try {
-    State.userId = (ev?.detail?.userId) || 'user';
+  // sessionStorage ヘルパー関数の定義
+  function ssGet(key) {
+    try { return sessionStorage.getItem(key); } catch (_) { return null; }
+  }
+  function ssSet(key, val) {
+    try { sessionStorage.setItem(key, val); } catch (_) {}
+  }
 
-    // cloudKey の取得（リトライ付き）
-    let ck = sessionStorage.getItem('sched:cloudKey');
-    let retries = 0;
-    while (!ck && retries < 10) {
-      await new Promise(r => setTimeout(r, 50));
-      ck = sessionStorage.getItem('sched:cloudKey');
-      retries++;
-    }
+  // currentUser 変数の宣言
+  let currentUser = null;
 
-    // meta / counts のみクラウド同期
-    console.log('[auth:logged-in] Checking cloud connectivity...');
-    let cloudOk = false;
+// ログイン完了時の処理
+  document.addEventListener('auth:logged-in', async (ev) => {
+    const uid = ev.detail?.userId || 'user';
+    currentUser = uid;
+
+    // ★変更点1: まずローカルデータのみ復元
+    console.log('[App] Step 1: Loading local data...');
+    loadWindow(State.anchor);
+    
+    // ★変更点2: 画面遷移
+    console.log('[App] Step 2: Switching to calendar view...');
+    await enterApp();
+    
+    // ★変更点3: 画面遷移後に同期を実行（視覚的フィードバック付き）
+    console.log('[App] Step 3: Starting cloud sync...');
+    await performCloudSync(uid);
+  });
+
+  // ★新規追加: 同期処理を独立した関数として定義
+  async function performCloudSync(userId) {
+    const syncIndicator = document.getElementById('cloudIndicator');
+    
     try {
-      // まずは「接続できるか」だけ確認（データ内容は問わない）
-      const probeKey = `${ck}:meta`;
-      await remoteGet(probeKey);
-      const ind = document.getElementById('cloudIndicator');
-      cloudOk = !!(ind && ind.classList.contains('online'));
-    } catch (e) {
-      cloudOk = false;
-    }
+      // 同期中の表示
+      if (syncIndicator) {
+        syncIndicator.classList.remove('online', 'offline');
+        syncIndicator.classList.add('syncing');
+        syncIndicator.textContent = '同期中...';
+        syncIndicator.title = 'クラウドと同期しています';
+      }
 
-    if (cloudOk) {
-      // ② 同期できていたら：ローカルの（クラウド対象）データを消去 → ③④ クラウドから取得してローカルへ保存
-      console.log('[auth:logged-in] Cloud OK. Clearing local meta/counts then syncing from cloud.');
-      try {
-        localStorage.removeItem('sched:meta');
-        localStorage.removeItem(storageKey('counts'));
-      } catch (_) {}
+      // クラウドキーの取得
+      const ck = ssGet('sched:cloudKey');
+      if (!ck) {
+        console.warn('[App] No cloud key found, skipping sync');
+        if (syncIndicator) {
+          syncIndicator.classList.remove('syncing');
+          syncIndicator.classList.add('offline');
+          syncIndicator.textContent = '未接続';
+        }
+        return;
+      }
 
-      console.log('[auth:logged-in] Syncing meta/counts from cloud (assignments local only)');
-      try {
-        await syncFromRemote();
-      } catch (error) {
-        console.error('Sync from remote failed:', error);
-        if (typeof showToast === 'function') {
-          showToast('クラウド同期に失敗しました。ローカルデータで動作します');
+      console.log('[App] Fetching cloud data...');
+      
+      // ★変更点4: クラウドデータ取得（GAS.getAll使用）
+      if (!window.GAS || typeof window.GAS.getAll !== 'function') {
+        console.warn('[App] GAS.getAll is not available');
+        if (syncIndicator) {
+          syncIndicator.classList.remove('syncing');
+          syncIndicator.classList.add('offline');
+          syncIndicator.textContent = 'GAS未接続';
+        }
+        return;
+      }
+
+      const bundle = await GAS.getAll(ck);
+      const cloudMeta = bundle?.meta || null;
+      const cloudCounts = bundle?.counts || null;
+
+      // ★変更点5: クラウドデータで上書き（meta/countsのみ）
+      if (cloudMeta || cloudCounts) {
+        console.log('[App] Applying cloud data...');
+        
+        // meta の反映
+        if (cloudMeta && typeof cloudMeta === 'object') {
+          if (typeof cloudMeta.employeeCount === 'number' && cloudMeta.employeeCount > 0) {
+            State.employeeCount = cloudMeta.employeeCount;
+          }
+          if (Array.isArray(cloudMeta.employees) && cloudMeta.employees.length > 0) {
+            State.employees = cloudMeta.employees.slice();
+          }
+          if (Array.isArray(cloudMeta.employeesAttr) && cloudMeta.employeesAttr.length > 0) {
+            State.employeesAttr = cloudMeta.employeesAttr.map(attr => normalizeEmployeeAttrByWorkType({
+              level: attr.level || 'B',
+              workType: attr.workType || 'three',
+              nightQuota: attr.nightQuota,
+              twoShiftQuota: attr.twoShiftQuota,
+              threeShiftNfQuota: attr.threeShiftNfQuota,
+              threeShiftNsQuota: attr.threeShiftNsQuota,
+              shiftDurations: attr.shiftDurations ? {...attr.shiftDurations} : {},
+              hasEarlyShift: attr.hasEarlyShift || false,
+              earlyShiftType: attr.earlyShiftType || 'all',
+              hasLateShift: attr.hasLateShift || false,
+              lateShiftType: attr.lateShiftType || 'all'
+            }));
+          }
+          if (Array.isArray(cloudMeta.forbiddenPairs)) {
+            State.forbiddenPairs = new Map(
+              cloudMeta.forbiddenPairs.map(([k, arr]) => [k, new Set(arr)])
+            );
+          }
+          if (typeof cloudMeta.range4wStart === 'number') {
+            State.range4wStart = cloudMeta.range4wStart;
+          }
+        }
+
+        // counts の反映
+        if (cloudCounts && typeof cloudCounts === 'object' && window.Counts) {
+          const keys = [
+            'DAY_TARGET_WEEKDAY','DAY_TARGET_WEEKEND_HOLIDAY',
+            'EARLY_TARGET_WEEKDAY','EARLY_TARGET_WEEKEND_HOLIDAY',
+            'LATE_TARGET_WEEKDAY','LATE_TARGET_WEEKEND_HOLIDAY',
+            'FIXED_NF','FIXED_NS',
+            'FIXED_NF_WEEKEND_HOLIDAY','FIXED_NS_WEEKEND_HOLIDAY',
+            'FIXED_BY_DATE'
+          ];
+          for (const k of keys) {
+            if (k in cloudCounts) {
+              window.Counts[k] = cloudCounts[k];
+            }
+          }
+        }
+        
+        // ローカルストレージにも保存
+        saveMetaOnly();
+        
+        // カレンダー再描画
+        renderGrid();
+        
+        console.log('[App] Cloud sync completed successfully');
+        
+        if (syncIndicator) {
+          syncIndicator.classList.remove('syncing');
+          GAS.setCloudStatus('ok', '同期完了');
+        }
+      } else {
+        console.log('[App] No cloud data found, keeping local data');
+        if (syncIndicator) {
+          syncIndicator.classList.remove('syncing');
+          GAS.setCloudStatus('ok', 'ローカル優先');
         }
       }
-    } else {
-      // ②' 同期できていなかったら：ローカルは維持したままログイン
-      console.warn('[auth:logged-in] Cloud is offline. Keeping local data.');
-      if (typeof showToast === 'function') {
-        showToast('クラウド未接続：ローカルデータでログインします');
+      
+    } catch (error) {
+      console.error('[App] Cloud sync failed:', error);
+      if (syncIndicator) {
+        syncIndicator.classList.remove('syncing');
+        GAS.setCloudStatus('offline', '同期失敗');
       }
-    }
-
-    // 画面遷移
-    await enterApp();
-
-
-  } catch (error) {
-    console.error('Login process failed:', error);
-
-    const loginView  = document.getElementById('loginView');
-    const appView    = document.getElementById('appView');
-    const loginError = document.getElementById('loginError');
-
-    if (loginView) loginView.classList.add('active');
-    if (appView)   appView.classList.remove('active');
-    if (loginError) {
-      loginError.textContent = 'ログイン処理中にエラーが発生しました。再度お試しください。';
+      // エラーが発生してもローカルデータは保持される
     }
   }
-});
-
-
 
 
   // ---- 状態 ----

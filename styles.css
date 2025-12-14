@@ -352,6 +352,17 @@ dialog.attr{ border:1px solid var(--border); border-radius:16px; padding:0; widt
   padding:4px 6px;
 }
 
+#cloudIndicator.syncing {
+  background-color: #fbbf24; /* 黄色 */
+  color: #1f2937;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 /* 従業員ダイアログ: 全要素を一行に配置 */
 .attr .row {
   display: flex;
