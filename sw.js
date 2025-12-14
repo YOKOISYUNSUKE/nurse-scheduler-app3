@@ -1,5 +1,8 @@
 // sw.js
-const VERSION = 'v2025-12.14.10';
+const VERSION = 'v2025-12.14.12';
+
+const STATIC_CACHE = 'static-' + VERSION;
+const ENTRY_HTML = './index.html';
 
 const STATIC_ASSETS = [
   './',
