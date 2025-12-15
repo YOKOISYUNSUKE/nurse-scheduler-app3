@@ -1,5 +1,5 @@
 // sw.js
-const VERSION = 'v2025-12.15.7';
+const VERSION = 'v2025-12.15.8';
 
 // ここは必須：未定義だとSWが起動直後に落ちます
 const ENTRY_HTML = './index.html';
