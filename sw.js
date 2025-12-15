@@ -1,8 +1,9 @@
 // sw.js
-const VERSION = 'v2025-12.14.12';
+const VERSION = 'v2025-12.15.0';
 
-const STATIC_CACHE = 'static-' + VERSION;
+// ここは必須：未定義だとSWが起動直後に落ちます
 const ENTRY_HTML = './index.html';
+const STATIC_CACHE = `static-${VERSION}`;
 
 const STATIC_ASSETS = [
   './',
@@ -45,7 +46,28 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// 手動同期：クライアントからの要求でキャッシュを作り直す
+self.addEventListener('message', (e) => {
+  if (!e.data || e.data.type !== 'MANUAL_SYNC') return;
+
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys
+      .filter((k) => k !== STATIC_CACHE)
+      .map((k) => caches.delete(k)));
+
+    const c = await caches.open(STATIC_CACHE);
+    await c.addAll(STATIC_ASSETS);
+
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clients) {
+      client.postMessage({ type: 'MANUAL_SYNC_DONE', version: VERSION });
+    }
+  })());
+});
+
 self.addEventListener('fetch', (e) => {
+
   const url = new URL(e.request.url);
 
   // 同一オリジンの GET のみ対応（GAS などクロスオリジンは触らない）

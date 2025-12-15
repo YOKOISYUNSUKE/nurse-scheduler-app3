@@ -80,11 +80,13 @@
        <button id="btnFullCancel" class="btn btn-danger" type="button" title="完全クリア（4週間の全データ消去）">完全クリア</button>
         <button id="btnExportXlsx" class="btn btn-outline" type="button" title="表示中4週間をExcelで出力">📤 エクスポート</button>
 
-        <button id="btnImportData" class="btn btn-outline" type="button" title="CSV/Excelから割り当てデータをインポート">📥 インポート</button>
+                <button id="btnImportData" class="btn btn-outline" type="button" title="CSV/Excelから割り当てデータをインポート">📥 インポート</button>
+        <button id="btnManualSync" class="btn btn-outline" type="button" title="キャッシュ更新と最新データ反映を手動実行">🔄 手動同期</button>
         <button id="btnLogout" class="btn btn-danger" type="button" title="ログアウト時は自動保存">ログアウト</button>
         <button id="installBtn" style="display:none;">インストール</button>
       </div>
     </header>
+
 
     <div class="toolbar">
       <div class="tool">
@@ -298,8 +300,62 @@
   <script src="employeeDialog.js"></script>
   <script src="dataExportImport.js"></script>
   <script src="app.js"></script>
-  <script src="buttonHandlers.js"></script>
+    <script src="buttonHandlers.js"></script>
   <script src="cellOperations.js"></script>
   <script src="autoAssignLogic.js"></script>
+
+  <script>
+    // 手動同期：Service Worker 更新 + キャッシュ再取得（可能なら）
+    (function(){
+      const btn = document.getElementById('btnManualSync');
+      if(!btn) return;
+
+      const indicator = document.getElementById('cloudIndicator');
+
+      function toast(msg){
+        if (typeof window.showToast === 'function') {
+          try { window.showToast(msg); return; } catch(_) {}
+        }
+        const el = document.getElementById('toast');
+        if(!el){ alert(msg); return; }
+        el.textContent = msg;
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), 2200);
+      }
+
+      async function manualSync(){
+        try{
+          if(indicator) indicator.classList.add('syncing');
+          toast('同期中…');
+
+          if(!('serviceWorker' in navigator)){
+            toast('このブラウザは同期に未対応です');
+            return;
+          }
+
+          const reg = await navigator.serviceWorker.getRegistration();
+          if(!reg){
+            toast('Service Worker が未登録です');
+            return;
+          }
+
+          await reg.update();
+
+          if(reg.active){
+            reg.active.postMessage({ type: 'MANUAL_SYNC' });
+          }
+
+          setTimeout(() => location.reload(), 600);
+        }catch(e){
+          console.error(e);
+          toast('同期に失敗しました');
+        }finally{
+          if(indicator) indicator.classList.remove('syncing');
+        }
+      }
+
+      btn.addEventListener('click', manualSync);
+    })();
+  </script>
 </body>
 </html>
