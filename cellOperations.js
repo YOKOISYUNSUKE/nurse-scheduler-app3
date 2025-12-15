@@ -281,7 +281,7 @@ function toggleLeave(r, d, td){
     
     // 特別休暇を設定
     const ok = setLeaveType(r, ds, code);
-    if (!ok) return;
+  
 
     td.textContent = '';
     td.classList.add('off');

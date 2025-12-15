@@ -2116,9 +2116,55 @@ function isWeekendByDs(ds){
   const w  = dt ? dt.getDay() : (new Date(ds)).getDay();
   return w === 0 || w === 6;
 }
-  // ★追加：翌日の★を日付文字列ベースで消去（cellOperations.jsと共通利用）
+
+// ==============================
+// CellOperations フォールバック
+// （cellOperations.js が未読込でも、希望休など最低限の操作が動作するようにする）
+// ==============================
+if (!window.CellOperations) window.CellOperations = {};
+
+if (typeof window.CellOperations.toggleOff !== 'function') {
+  window.CellOperations.toggleOff = function toggleOffFallback(r, dayIdx, td){
+    const dt = State.windowDates[dayIdx];
+    if (!dt) return;
+    const ds = dateStr(dt);
+
+    // 特別休暇がある日は希望休を置かない（表示優先の衝突を回避）
+    const lv = (typeof getLeaveType === 'function') ? getLeaveType(r, ds) : undefined;
+    if (lv) {
+      showToast('このセルは特別休暇が設定されています（解除してから希望休を置いてください）');
+      return;
+    }
+
+    // 既存の割当があればクリア（☆なら翌日の★も連動して外す）
+    const prevMk = (typeof getAssign === 'function') ? getAssign(r, ds) : undefined;
+    if (prevMk) {
+      clearAssign(r, ds);
+      if (prevMk === '☆') removeNextStarByDs(r, ds);
+    }
+
+    let s = State.offRequests.get(r);
+    if (!s) { s = new Set(); State.offRequests.set(r, s); }
+
+    if (s.has(ds)) {
+      s.delete(ds);
+      if (s.size === 0) State.offRequests.delete(r);
+      td.classList.remove('off');
+      td.textContent = '';
+    } else {
+      s.add(ds);
+      td.classList.add('off');
+      td.textContent = '休';
+    }
+
+    if (typeof updateFooterCounts === 'function') updateFooterCounts();
+  };
+}
+
+  // 翌日の★を日付文字列ベースで消去（cellOperations.jsと共通利用）
   function removeNextStarByDs(r, ds){
     const idx = State.windowDates.findIndex(dt => dateStr(dt) === ds);
+
     if (idx < 0) return;
     const nextIndex = idx + 1;
     if (nextIndex >= State.windowDates.length) return;
