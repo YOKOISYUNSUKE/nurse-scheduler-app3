@@ -300,12 +300,12 @@
         <tr>
           <td><span class="tag tag-btn">祝</span></td>
           <td>祝</td>
-          <td>祝日に勤務した代わりの「祝日出勤扱い」。4週8休では「勤務日」としてカウント。</td>
+          <td>祝日勤務。後の代休がつく。</td>
         </tr>
         <tr>
           <td><span class="tag tag-btn">代</span></td>
           <td>代</td>
-          <td>代休。4週8休では「勤務日」として扱います。</td>
+          <td>祝日勤務による代休。</td>
         </tr>
         <tr>
           <td><span class="tag tag-btn">年</span></td>
@@ -334,7 +334,7 @@
 
     <!-- 5. 自動割り当て -->
     <section id="sec-auto" class="manual-section">
-      <h2>5. 自動割り当てとキャンセル／アンドゥ</h2>
+      <h2>5. 自動割り当てとキャンセル</h2>
 
       <h3>5-1. 自動割り当て（4週間分）</h3>
       <ol>
@@ -355,7 +355,6 @@
         <li><span class="tag tag-btn">キャンセル</span> ボタン  
           → 対象4週間について、「希望休は残し、勤務マークだけを削除」します。
         </li>
-        <li>この操作は <span class="tag tag-btn">元に戻す（Undo）</span> が 1 回だけ可能です。</li>
       </ul>
 
       <h3>5-3. 完全クリア（4週間の全データ削除）</h3>
@@ -364,7 +363,6 @@
           → ダイアログで確認後、対象4週間の
           <strong>勤務マーク／希望休／特別休暇／ロックをすべて削除</strong> します。
         </li>
-        <li>完全クリアは「元に戻す」はできません。</li>
       </ul>
 
       <div class="manual-warn">
@@ -436,33 +434,23 @@
       <h3>7-3. 人数設定（Counts）</h3>
       <p><span class="tag tag-btn">人数設定</span> ボタンで、以下の条件を設定できます。</p>
       <ul>
-        <li>平日の日勤人数（目標）</li>
-        <li>土日祝の日勤人数（目標）</li>
-        <li>平日・土日祝の早出 / 遅出の目標人数</li>
-        <li>夜勤 NF（☆＋◆）の固定人数</li>
-        <li>夜勤 NS（★＋●）の固定人数</li>
-        <li>特定日ごとの固定人数（「YYYY-MM-DD 〇 早 遅 ☆＋◆ ★＋●」形式）</li>
+        <li>平日・土日祝の日勤総数</li>
+        <li>平日・土日祝の早出 / 遅出の人数</li>
+        <li>平日・土日祝の準夜/深夜の人数</li>
+        <li>特定日ごとの固定人数</li>
       </ul>
 
-      <div class="manual-note">
-        これらの設定は、自動割当の際の基準値として使用されます。  
-        「この日は日勤 20 人にしたい」といった特定日指定も可能です。
-      </div>
-    </section>
 
     <!-- 8. Excel -->
     <section id="sec-export" class="manual-section">
       <h2>8. Excel ダウンロード</h2>
 
       <ul>
-        <li><span class="tag tag-btn">Excelダウンロード</span> ボタンを押すと、<strong>表示中の31日分</strong>が CSV 形式で出力されます。</li>
+        <li><span class="tag tag-btn">エクスポート</span> ボタンを押すと、<strong>表示中の28日分</strong>が Excel 形式で出力されます。</li>
         <li>Excel で開けば、そのまま印刷・加工が可能です。</li>
+        <li><span class="tag tag-btn">インポート</span>ボタンを押すと、ファイルを勤務表に反映させます。</li>
       </ul>
 
-      <div class="manual-note">
-        CSV は「文字だけ」のシンプルな形式ですが、Excel に読み込ませることで、
-        院内の様式にコピー＆ペーストしやすくなっています。
-      </div>
     </section>
 
     <!-- 9. FAQ -->
