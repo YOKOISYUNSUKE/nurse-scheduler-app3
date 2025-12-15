@@ -158,13 +158,86 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  min-width: 80px;  /* テーブルのセル幅に合わせる */
+  min-width: 120px;  /* ← 1.5倍 */
 }
 
 .fixed-num-input .txt {
   flex: 1;
   min-width: 50px;  /* 最小幅を確保 */
 }
+/* ===== 特定日設定：登録済み一覧（表形式） ===== */
+
+.fixed-list {
+  margin-top: 10px;
+}
+
+.fixed-date-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 14px;
+}
+
+.fixed-date-list-table th,
+.fixed-date-list-table td {
+  border: 1px solid #ccc;
+  padding: 6px 4px;
+  text-align: center;
+}
+
+.fixed-date-list-table thead th {
+  background: #f3f3f3;
+  font-weight: 600;
+}
+
+.fixed-date-list-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+/* 日付列はやや広め */
+.fixed-date-list-table th:first-child,
+.fixed-date-list-table td:first-child {
+  width: 110px;
+}
+
+/* 数値入力欄 */
+.fixed-date-list-table input[type="number"] {
+  width: 60px;
+  padding: 2px 4px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+
+
+
+/* 削除ボタン列 */
+.fixed-date-list-table th:last-child,
+.fixed-date-list-table td:last-child {
+  width: 56px;
+}
+
+.fixed-date-list-table button {
+  padding: 2px 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* 登録データなし表示用 */
+.fixed-date-list-table .empty-row td {
+  text-align: center;
+  color: #666;
+  padding: 12px 0;
+}
+
+/* 補足説明 */
+.fixed-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #555;
+}
+
+
   </style>
 
   <!-- 属性ダイアログ -->
@@ -216,11 +289,11 @@
           <tbody>
     <tr>
       <th>平日</th>
-      <td><input id="cfgDayTarget" type="number" class="txt" min="0" step="1"></td>
-      <td><input id="cfgEarlyTargetWeekday" type="number" class="txt" min="0" step="1"></td>
-      <td><input id="cfgLateTargetWeekday" type="number" class="txt" min="0" step="1"></td>
-      <td><input id="cfgFixedNF" type="number" class="txt" min="0" step="1"></td>
-      <td><input id="cfgFixedNS" type="number" class="txt" min="0" step="1"></td>
+      <td><input id="cfgDayTarget" type="number" class="txt" min="0" max="30" step="1"></td>
+      <td><input id="cfgEarlyTargetWeekday" type="number" class="txt" min="0" max="30" step="1"></td>
+      <td><input id="cfgLateTargetWeekday" type="number" class="txt" min="0" max="30" step="1"></td>
+      <td><input id="cfgFixedNF" type="number" class="txt" min="0" max="30" step="1"></td>
+      <td><input id="cfgFixedNS" type="number" class="txt" min="0" max="30" step="1"></td>
     </tr>
     <tr>
       <th>土日祝</th>
@@ -235,41 +308,61 @@
 
 
 
-    <div class="row row-fixed-by-date">
-      <label>特定日 固定条件</label>
-      <div class="fixed-block">
-        <div class="fixed-control-row">
-          <input id="cfgFixedDate" type="date" class="txt">
-          <div class="fixed-num fixed-num-input">
-            <span class="fixed-mark">日勤全員</span>
-            <input id="cfgFixedDay" type="number" class="txt" min="0" step="1">
+<table class="fixed-date-table">
+  <thead>
+    <tr>
+      <th>日付</th>
+      <th>日勤全員</th>
+      <th>早出</th>
+      <th>遅出</th>
+      <th>準夜</th>
+      <th>深夜</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><input id="cfgFixedDate" type="date" class="txt"></td>
+      <td><input id="cfgFixedDay" type="number" class="txt" min="0" max="30" step="1"></td>
+      <td><input id="cfgFixedEarlyDate" type="number" class="txt" min="0" max="30" step="1"></td>
+      <td><input id="cfgFixedLateDate" type="number" class="txt" min="0" max="30" step="1"></td>
+      <td><input id="cfgFixedNFDate" type="number" class="txt" min="0" max="30" step="1"></td>
+      <td><input id="cfgFixedNSDate" type="number" class="txt" min="0" max="30" step="1"></td>
+      <td>
+        <button id="btnFixedByDateAdd" class="btn btn-outline">追加</button>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+        <!-- 登録済み：特定日設定の一覧（表形式） -->
+        <div class="fixed-list">
+          <table class="fixed-date-list-table" aria-label="特定日設定（登録済み一覧）">
+            <thead>
+              <tr>
+                <th>日付</th>
+                <th>日勤全員</th>
+                <th>早出</th>
+                <th>遅出</th>
+                <th>準夜</th>
+                <th>深夜</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="fixedByDateListBody">
+              <!-- JSで描画 -->
+            </tbody>
+          </table>
+          <div class="fixed-hint">
+            上の行で入力 → 「追加」。登録済みデータはこの表で確認・修正・削除できます。
           </div>
-          <div class="fixed-num fixed-num-input">
-            <span class="fixed-mark">早出</span>
-            <input id="cfgFixedEarlyDate" type="number" class="txt" min="0" step="1">
-          </div>
-          <div class="fixed-num fixed-num-input">
-            <span class="fixed-mark">遅出</span>
-            <input id="cfgFixedLateDate" type="number" class="txt" min="0" step="1">
-          </div>
-          <div class="fixed-num fixed-num-input">
-            <span class="fixed-mark">準夜</span>
-            <input id="cfgFixedNFDate" type="number" class="txt" min="0" step="1">
-          </div>
-          <div class="fixed-num fixed-num-input">
-            <span class="fixed-mark">深夜</span>
-            <input id="cfgFixedNSDate" type="number" class="txt" min="0" step="1">
-          </div>
-          <button id="btnFixedByDateAdd" class="btn btn-outline" type="button">追加</button>
         </div>
-        <textarea id="cfgFixedByDate" class="txt fixed-text" rows="4"
-                  placeholder="2025-11-03 8 1 1 3 3&#10;2025-11-04 7 1 1 2 3"></textarea>
-        <div class="fixed-hint">
-          1行ごとに「日付 日勤全員 早出 遅出 準夜 深夜」を入力（例: 2025-11-03 8 1 1 3 3）。
-          日付だけの行はその日の固定解除として扱われます。
-        </div>
+
+        <!-- 互換用：内部保存（ユーザーには見せない） -->
+        <textarea id="cfgFixedByDate" class="txt fixed-text" rows="4" style="display:none;"
+                  aria-hidden="true"></textarea>
       </div>
-    </div>
+
 
 
 

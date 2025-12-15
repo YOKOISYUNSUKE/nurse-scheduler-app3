@@ -241,9 +241,17 @@
       const ds = parts[0];
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) continue;
 
-      const nums = parts.slice(1)
-        .map(v => parseInt(v,10))
-        .filter(v => !Number.isNaN(v));
+const clamp0to30 = (v) => {
+  const n = parseInt(v, 10);
+  if (Number.isNaN(n)) return null;
+  return Math.min(30, Math.max(0, n));
+};
+
+// 数値は 0〜30 に丸める（UI側のmin/maxだけだと手入力で負数が残るため）
+const nums = parts.slice(1)
+  .map(v => clamp0to30(v))
+  .filter(v => v !== null);
+
 
       const entry = {};
 
@@ -283,9 +291,12 @@
     for (const ds of dates){
       const v = src[ds] || {};
       const parts = [ds];
-      if (Number.isFinite(v.day)) parts.push(String(v.day));
-      if (Number.isFinite(v.nf))  parts.push(String(v.nf));
-      if (Number.isFinite(v.ns))  parts.push(String(v.ns));
+      if (Number.isFinite(v.day))   parts.push(String(v.day));
+      if (Number.isFinite(v.early)) parts.push(String(v.early));
+      if (Number.isFinite(v.late))  parts.push(String(v.late));
+      if (Number.isFinite(v.nf))    parts.push(String(v.nf));
+      if (Number.isFinite(v.ns))    parts.push(String(v.ns));
+
       lines.push(parts.join(' '));
     }
     return lines.join('\n');
@@ -328,6 +339,57 @@
     const inpFixedNSDate = $('cfgFixedNSDate');
     const btnFixedAdd    = $('btnFixedByDateAdd');
 
+    // 登録済み一覧（表）
+    const fixedListBody = dlg.querySelector('#fixedByDateListBody');
+
+    // 0〜30に丸め（手入力やプログラム更新でも負数を残さない）
+    const clamp0to30 = (v) => {
+      const n = parseInt(v, 10);
+      if (Number.isNaN(n)) return null;
+      return Math.min(30, Math.max(0, n));
+    };
+
+    function getMapFromTextarea(){
+      return parseFixedByDateText(inpFixedByDate ? (inpFixedByDate.value || '') : '');
+    }
+
+    function setTextareaFromMap(map){
+      if (!inpFixedByDate) return;
+      inpFixedByDate.value = exportFixedByDateText(map || {});
+    }
+
+    function renderFixedByDateList(){
+      if (!fixedListBody || !inpFixedByDate) return;
+
+      const map = getMapFromTextarea();
+      const dates = Object.keys(map).sort();
+      fixedListBody.innerHTML = '';
+
+      if (dates.length === 0){
+        const tr = document.createElement('tr');
+        tr.className = 'empty-row';
+        tr.innerHTML = '<td colspan="7">登録データがありません</td>';
+        fixedListBody.appendChild(tr);
+        return;
+      }
+
+      for (const ds of dates){
+        const v = map[ds] || {};
+        const tr = document.createElement('tr');
+        tr.dataset.ds = ds;
+        tr.innerHTML = `
+          <td>${ds}</td>
+          <td><input type="number" min="0" max="30" step="1" data-field="day" value="${Number.isFinite(v.day) ? v.day : ''}"></td>
+          <td><input type="number" min="0" max="30" step="1" data-field="early" value="${Number.isFinite(v.early) ? v.early : ''}"></td>
+          <td><input type="number" min="0" max="30" step="1" data-field="late" value="${Number.isFinite(v.late) ? v.late : ''}"></td>
+          <td><input type="number" min="0" max="30" step="1" data-field="nf" value="${Number.isFinite(v.nf) ? v.nf : ''}"></td>
+          <td><input type="number" min="0" max="30" step="1" data-field="ns" value="${Number.isFinite(v.ns) ? v.ns : ''}"></td>
+          <td><button type="button" class="btn btn-outline btn-sm" data-action="del">削除</button></td>
+        `;
+        fixedListBody.appendChild(tr);
+      }
+    }
+
 
 
     function populate(){
@@ -358,7 +420,9 @@
         inpFixedByDate.value = Counts.exportFixedByDateText
           ? Counts.exportFixedByDateText()
           : '';
+        renderFixedByDateList();
       }
+
 
       if (inpFixedDate){
         inpFixedDate.value = '';
@@ -435,9 +499,55 @@
         inpFixedByDate.value = sortedDates
           .map(key => map.get(key))
           .join('\n');
+
+        renderFixedByDateList();
       });
     }
+    // 登録済み一覧（表）：直接編集 → テキストエリアへ反映
+    if (fixedListBody && inpFixedByDate){
+      fixedListBody.addEventListener('input', (e)=>{
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.tagName !== 'INPUT') return;
+        const field = target.getAttribute('data-field');
+        if (!field) return;
 
+        const tr = target.closest('tr');
+        const ds = tr ? tr.dataset.ds : null;
+        if (!ds) return;
+
+        const v = target.value.trim();
+        const n = (v === '') ? null : clamp0to30(v);
+
+        const map = getMapFromTextarea();
+        const entry = map[ds] ? { ...map[ds] } : {};
+
+        if (n === null) delete entry[field];
+        else entry[field] = n;
+
+        // 全部空なら日付ごと消す
+        const hasAny = ['day','early','late','nf','ns'].some(k => Number.isFinite(entry[k]));
+        if (!hasAny) delete map[ds];
+        else map[ds] = entry;
+
+        setTextareaFromMap(map);
+      });
+
+      // 削除ボタン
+      fixedListBody.addEventListener('click', (e)=>{
+        const btnEl = e.target;
+        if (!(btnEl instanceof HTMLElement)) return;
+        if (btnEl.getAttribute('data-action') !== 'del') return;
+        const tr = btnEl.closest('tr');
+        const ds = tr ? tr.dataset.ds : null;
+        if (!ds) return;
+
+        const map = getMapFromTextarea();
+        delete map[ds];
+        setTextareaFromMap(map);
+        renderFixedByDateList();
+      });
+    }
     btn.addEventListener('click', ()=>{
 
       populate();
