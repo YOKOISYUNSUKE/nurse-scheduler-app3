@@ -60,6 +60,15 @@ async function remotePut(k, data){
   return (window.GAS && typeof window.GAS.put === 'function') ? window.GAS.put(k, data) : null; 
 }
 
+// Supabase（任意）：設定されていれば二重保存
+async function supaGet(k){
+  return (window.SUPA && typeof window.SUPA.get === 'function') ? window.SUPA.get(k) : null;
+}
+
+async function supaPut(k, data){
+  return (window.SUPA && typeof window.SUPA.put === 'function') ? window.SUPA.put(k, data) : null;
+}
+
 // ログイン時：meta/countsのみ取得（datesは取得しない）
 async function syncFromRemote(){
   const ck = cloudKey();
@@ -67,6 +76,7 @@ async function syncFromRemote(){
     console.warn('[syncFromRemote] cloudKey is not set');
     return;
   }
+
 
   console.log('[syncFromRemote] Fetching meta/counts from cloud...');
   
@@ -237,12 +247,22 @@ async function pushToRemote(){
 
   // クラウドへ送信
   try {
+    // 1) 既存のGASへ保存（従来どおり：ここが失敗したらエラー扱い）
     await Promise.all([
       remotePut(`${ck}:meta`, meta),
       remotePut(`${ck}:counts`, countsCfg)
     ]);
+
+    // 2) Supabaseへ二重保存（設定されていれば）
+    const supaTasks = [
+      supaPut(`${ck}:meta`, meta),
+      supaPut(`${ck}:counts`, countsCfg)
+    ];
+    const supaResults = await Promise.allSettled(supaTasks);
+    const supaFailed = supaResults.some(r => r.status === 'rejected');
+
     console.log('[pushToRemote] Push completed');
-    setCloudStatus('ok', '同期OK');
+    setCloudStatus('ok', supaFailed ? '同期OK（Supabase未同期）' : '同期OK');
   } catch (e) {
     console.error('[pushToRemote] Push failed:', e);
     setCloudStatus('offline', '同期エラー');

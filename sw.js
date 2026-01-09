@@ -1,7 +1,7 @@
 // sw.js - Service Worker
 // 修正版：app.js分割に対応、キャッシュ戦略最適化
 
-const VERSION = 'v2026-01.09.1';
+const VERSION = 'v2026-01.09.3';
 
 // ここは必須：未定義だとSWが起動直後に落ちます
 const ENTRY_HTML = './index.html';
@@ -13,7 +13,7 @@ const STATIC_ASSETS = [
   ENTRY_HTML,
   './styles.css?v=20251031',
   
-  // ★修正：app.js分割モジュール（元のapp.jsは削除）
+  // app.js分割モジュール
   './app-core.js',
   './app-utils.js',
   './app-init.js',
@@ -27,6 +27,7 @@ const STATIC_ASSETS = [
   './pwa.js',
   './auth.js',
   './gasClient.js',
+  './supabaseClient.js',
   './core.dates.js',
   './assignRules.js',
   './rules.js',
@@ -51,8 +52,10 @@ const STATIC_ASSETS = [
 const NON_CACHEABLE_PATTERNS = [
   /script\.google\.com/,
   /googleapis\.com/,
-  /gstatic\.com/
+  /gstatic\.com/,
+  /supabase\.co/
 ];
+
 
 /**
  * URLがキャッシュ対象外か判定

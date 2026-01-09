@@ -64,6 +64,8 @@
   document.addEventListener('auth:logged-in', async (ev) => {
     const uid = ev.detail?.userId || 'user';
     currentUser = uid;
+    // Supabase二重保存で使用（監査用）
+    window.currentUserId = uid;
 
     // ★変更点1: まずローカルデータのみ復元
     console.log('[App] Step 1: Loading local data...');
