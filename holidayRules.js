@@ -1,10 +1,8 @@
 /* holidayRules.js */
 ;(function (global) {
-  function pad2(n){ return String(n).padStart(2,'0'); }
-  function dateStr(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
   function isWeekend(dt){ const w = (dt instanceof Date ? dt : new Date(dt)).getDay(); return w===0 || w===6; }
   function isHolidayDate(date, isHoliday){
-    const ds = dateStr(date instanceof Date ? date : new Date(date));
+    const ds = App.Dates.dateStr(date instanceof Date ? date : new Date(date));
     if (typeof isHoliday === 'function') return !!isHoliday(ds);
     if (isHoliday && typeof isHoliday.has === 'function') return !!isHoliday.has(ds);
     return false;

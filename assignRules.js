@@ -31,7 +31,7 @@
   function countForDay(dayIndex, dates, employeeCount, getAssign, override){
     // override: {rowIndex, mark} を当該日の仮置きに反映（optional）
     let day=0, nf=0, ns=0; // day=〇+□, nf=(☆+◆), ns=(★+●)
-    const ds = dateStr(dates[dayIndex]);
+    const ds = App.Dates.dateStr(dates[dayIndex]);
     for(let r=0; r<employeeCount; r++){
       let mk = getAssign(r, ds);
       if (override && override.rowIndex===r) mk = override.mark || undefined;
@@ -41,11 +41,10 @@
     }
     return { day, nf, ns };
   }
-  function dateStr(d){ const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 
 // ★新規追加：指定日の夜勤専従カウント（NF帯 or NS帯）
   function countNightOnlyWorkers(p, dayIndex, band) {
-    const ds = dateStr(p.dates[dayIndex]);
+    const ds = App.Dates.dateStr(p.dates[dayIndex]);
     let count = 0;
     
     for(let r = 0; r < p.employeeCount; r++){
@@ -76,7 +75,7 @@
 function precheckPlace(p){
   if (!p || !p.mark) return { ok:true };           // 消去は常に可
   const d = p.dayIndex;
-  const dsNext = (p.dates[d+1] ? dateStr(p.dates[d+1]) : null);
+  const dsNext = (p.dates[d+1] ? App.Dates.dateStr(p.dates[d+1]) : null);
   // ★追加：勤務形態ごとのペア間インターバル（夜勤専従＝0日、その他＝3日）
   const wt = (typeof p.getWorkType === 'function') ? (p.getWorkType(p.rowIndex) || 'three') : 'three';
   const pairGapMinDays = (wt === 'night') ? 0 : 3;
@@ -84,7 +83,7 @@ function precheckPlace(p){
 
 // ★追加：禁忌ペアチェック（NF帯・NS帯のみ適用、〇は対象外）
   if (p.mark && typeof p.getForbiddenPairs === 'function') {
-    const ds = dateStr(p.dates[d]);
+    const ds = App.Dates.dateStr(p.dates[d]);
     const forbidden = p.getForbiddenPairs(p.rowIndex);
     if (forbidden && forbidden.size > 0) {
       // NF帯（☆/◆）またはNS帯（★/●）のみチェック（〇は対象外）
@@ -141,7 +140,7 @@ function precheckPlace(p){
   if (p.mark === '☆' && wt !== 'night'){
     const prev = d - 1;
     if (prev >= 0){
-      const dsPrev = dateStr(p.dates[prev]);
+      const dsPrev = App.Dates.dateStr(p.dates[prev]);
       if (p.getAssign(p.rowIndex, dsPrev) === '★'){
         return { ok:false, message:'前日が「★」のため当日の「☆」は不可（逆順通し禁止）' };
       }
@@ -152,10 +151,10 @@ function precheckPlace(p){
   if (p.mark === '☆' && wt === 'night'){
     const d1 = d - 1, d2 = d - 2, d3 = d - 3, d4 = d - 4;
     if (d4 >= 0){
-      const ds1 = dateStr(p.dates[d1]);
-      const ds2 = dateStr(p.dates[d2]);
-      const ds3 = dateStr(p.dates[d3]);
-      const ds4 = dateStr(p.dates[d4]);
+      const ds1 = App.Dates.dateStr(p.dates[d1]);
+      const ds2 = App.Dates.dateStr(p.dates[d2]);
+      const ds3 = App.Dates.dateStr(p.dates[d3]);
+      const ds4 = App.Dates.dateStr(p.dates[d4]);
       const mk1 = p.getAssign(p.rowIndex, ds1);
       const mk2 = p.getAssign(p.rowIndex, ds2);
       const mk3 = p.getAssign(p.rowIndex, ds3);
@@ -172,7 +171,7 @@ function precheckPlace(p){
 if (p.mark === '★'){
     const prev = d - 1;
     if (prev < 0) return { ok:false, message:'「★」は前日に「☆」がある場合のみ可' };
-    const dsPrev = dateStr(p.dates[prev]);
+    const dsPrev = App.Dates.dateStr(p.dates[prev]);
     const prevMk = p.getAssign(p.rowIndex, dsPrev);  // ← 追加：prevMkを定義
 
   if (prevMk === '★'){  // ← 正常に参照可能
@@ -188,7 +187,7 @@ if (p.mark === '★'){
     {
       let nextStart = -1;
       for (let i=d+1; i<p.dates.length; i++){
-        const dsI = dateStr(p.dates[i]);
+        const dsI = App.Dates.dateStr(p.dates[i]);
         if (p.getAssign(p.rowIndex, dsI) === '☆'){ nextStart = i; break; }
       }
       if (nextStart !== -1 && (nextStart - d) < idxDiffMin){
@@ -205,7 +204,7 @@ if (p.mark === '★'){
       if (d - need >= 0){
         let allDay = true;
         for(let i=1;i<=need;i++){
-          const ds = dateStr(p.dates[d - i]);
+          const ds = App.Dates.dateStr(p.dates[d - i]);
           const mk = p.getAssign(p.rowIndex, ds);
           if (mk !== '〇' && mk !== '□'){ allDay = false; break; }
         }
@@ -227,12 +226,12 @@ if (p.mark === '★'){
       if (start >= 0 && prev1 >= 0){
         let allPrev5Day = true;
         for (let i = start; i < start + need; i++){
-          const ds5 = dateStr(p.dates[i]);
+          const ds5 = App.Dates.dateStr(p.dates[i]);
           const mk5 = p.getAssign(p.rowIndex, ds5);
           if (mk5 !== '〇' && mk5 !== '□'){ allPrev5Day = false; break; }
         }
         if (allPrev5Day){
-          const dsPrev1 = dateStr(p.dates[prev1]);
+          const dsPrev1 = App.Dates.dateStr(p.dates[prev1]);
           const mkPrev1 = p.getAssign(p.rowIndex, dsPrev1);
           const prev1IsRest = (!mkPrev1) || (p.hasOffByDate && p.hasOffByDate(p.rowIndex, dsPrev1));
           if (prev1IsRest){
@@ -247,7 +246,7 @@ if (p.mark === '★'){
     if (p.mark === '〇' || p.mark === '□'){
       const prev = d - 1;
       if (prev >= 0){
-        const dsPrev = dateStr(p.dates[prev]);
+        const dsPrev = App.Dates.dateStr(p.dates[prev]);
         if (p.getAssign(p.rowIndex, dsPrev) === '◆'){
           return { ok:false, message:'「◆」の翌日に日勤（〇/□）は不可（十分な休息を確保してください）' };
         }
@@ -257,7 +256,7 @@ if (p.mark === '★'){
     if (p.mark === '◆'){
       const next = d + 1;
       if (next < p.dates.length){
-        const dsNext2 = dateStr(p.dates[next]);
+        const dsNext2 = App.Dates.dateStr(p.dates[next]);
         const mkNext2 = p.getAssign(p.rowIndex, dsNext2);
         if (mkNext2 === '〇' || mkNext2 === '□'){
           return { ok:false, message:'「◆→〇/□」の並びは不可です（翌日は休を確保）' };
@@ -269,7 +268,7 @@ if (p.mark === '★'){
     if (p.mark === '◆'){
       const next = d + 1;
       if (next < p.dates.length){
-        const dsNext = dateStr(p.dates[next]);
+        const dsNext = App.Dates.dateStr(p.dates[next]);
         if (p.getAssign(p.rowIndex, dsNext) === '●'){
           return { ok:false, message:'「◆●」は禁止（☆★と同義）' };
         }
@@ -278,7 +277,7 @@ if (p.mark === '★'){
     if (p.mark === '●'){
       const prev = d - 1;
       if (prev >= 0){
-        const dsPrev = dateStr(p.dates[prev]);
+        const dsPrev = App.Dates.dateStr(p.dates[prev]);
         if (p.getAssign(p.rowIndex, dsPrev) === '◆'){
           return { ok:false, message:'「◆●」は禁止（☆★と同義）' };
         }
@@ -289,8 +288,8 @@ if (p.mark === '★'){
     if (p.mark === '●' || p.mark === '◆'){
       const starts = [];
       for (let i = 0; i < p.dates.length - 1; i++){
-        const ds0 = dateStr(p.dates[i]);
-        const ds1 = dateStr(p.dates[i+1]);
+        const ds0 = App.Dates.dateStr(p.dates[i]);
+        const ds1 = App.Dates.dateStr(p.dates[i+1]);
         let mk0 = p.getAssign(p.rowIndex, ds0);
         let mk1 = p.getAssign(p.rowIndex, ds1);
         // 仮置き反映
@@ -313,7 +312,7 @@ if (p.mark === '★'){
 
     // ★追加：NS帯での「A・C・夜勤専従」同席禁止（当日★/●を置く場合）
     if (p.mark==='★' || p.mark==='●'){
-      const ds = dateStr(p.dates[d]);
+      const ds = App.Dates.dateStr(p.dates[d]);
 
       const nsRows = [];
       for(let r=0;r<p.employeeCount;r++){
@@ -334,7 +333,7 @@ if (p.mark === '★'){
 
 // 当日：NF側（☆+◆）は設定の固定値「のみ」（特定日設定を優先）
     if (p.mark==='☆' || p.mark==='◆'){
-      const ds = dateStr(p.dates[d]);
+      const ds = App.Dates.dateStr(p.dates[d]);
       const FIXED_NF = (window.Counts && typeof window.Counts.getFixedNF === 'function')
         ? window.Counts.getFixedNF(ds)
         : ((window.Counts && Number.isInteger(window.Counts.FIXED_NF)) ? window.Counts.FIXED_NF : 3);
@@ -345,7 +344,7 @@ if (p.mark === '★'){
 
     // 当日：NS側（★+●）は設定の固定値「のみ」（特定日設定を優先）
     if (p.mark==='★' || p.mark==='●'){
-      const ds = dateStr(p.dates[d]);
+      const ds = App.Dates.dateStr(p.dates[d]);
       const FIXED_NS = (window.Counts && typeof window.Counts.getFixedNS === 'function')
         ? window.Counts.getFixedNS(ds)
         : ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
@@ -356,7 +355,7 @@ if (p.mark === '★'){
 
     // ★追加：夜勤帯で「A・C・夜勤専従」の同席禁止（NF帯）
     if (p.mark==='☆' || p.mark==='◆'){
-      const ds = dateStr(p.dates[d]);
+      const ds = App.Dates.dateStr(p.dates[d]);
       // その日のNF帯メンバー（仮置き含む）
       const nfRows = [];
       for(let r=0;r<p.employeeCount;r++){
@@ -429,8 +428,8 @@ if (p.mark==='☆'){
         // 直前ペアの終了日（★）を探索
         let prevEnd = -1;
         for (let i=d-1; i>=1; i--){
-          const dsI  = dateStr(p.dates[i]);
-          const dsIm = dateStr(p.dates[i-1]);
+          const dsI  = App.Dates.dateStr(p.dates[i]);
+          const dsIm = App.Dates.dateStr(p.dates[i-1]);
           if (p.getAssign(p.rowIndex, dsI) === '★' && p.getAssign(p.rowIndex, dsIm) === '☆'){ prevEnd = i; break; }
         }
         // (★)と次の(☆)のインデックス差が規定未満なら不可
@@ -440,7 +439,7 @@ if (p.mark==='☆'){
         // 新規ペアの★は d+1。そこから次の☆まで idxDiffMin 以上必要
         let nextStart = -1;
         for (let i=d+2; i<p.dates.length; i++){
-          const dsI = dateStr(p.dates[i]);
+          const dsI = App.Dates.dateStr(p.dates[i]);
           if (p.getAssign(p.rowIndex, dsI) === '☆'){ nextStart = i; break; }
         }
         if (nextStart !== -1 && (nextStart - (d+1)) < idxDiffMin){
@@ -453,8 +452,8 @@ if (p.mark==='☆'){
 
     // 追加：日勤連続≦5（6個目の〇/□は不可／前後合算）
     if (p.mark === '〇' || p.mark === '□'){
-      const countPrev = (()=>{ let c=0; for(let i=d-1;i>=0;i--){ const ds=dateStr(p.dates[i]); const mk=p.getAssign(p.rowIndex, ds); if (mk==='〇'||mk==='□') c++; else break; } return c; })();
-      const countNext = (()=>{ let c=0; for(let i=d+1;i<p.dates.length;i++){ const ds=dateStr(p.dates[i]); const mk=p.getAssign(p.rowIndex, ds); if (mk==='〇'||mk==='□') c++; else break; } return c; })();
+      const countPrev = (()=>{ let c=0; for(let i=d-1;i>=0;i--){ const ds=App.Dates.dateStr(p.dates[i]); const mk=p.getAssign(p.rowIndex, ds); if (mk==='〇'||mk==='□') c++; else break; } return c; })();
+      const countNext = (()=>{ let c=0; for(let i=d+1;i<p.dates.length;i++){ const ds=App.Dates.dateStr(p.dates[i]); const mk=p.getAssign(p.rowIndex, ds); if (mk==='〇'||mk==='□') c++; else break; } return c; })();
       const total = countPrev + 1 + countNext;
       if (total > 5) return { ok:false, message:'日勤（〇/□）の連続は最大5日までです' };
     }
@@ -463,7 +462,7 @@ if (p.mark==='☆'){
     {
       const r = p.rowIndex;
       const isOffAt = (idx)=>{
-        const ds = dateStr(p.dates[idx]);
+        const ds = App.Dates.dateStr(p.dates[idx]);
         if (idx === p.dayIndex) {
           if (p.mark) return false;            // いま置こうとしている日は勤務扱い
         } else if (p.mark === '☆' && idx === p.dayIndex + 1) {
@@ -489,7 +488,7 @@ if (p.mark==='☆'){
     {
       const r = p.rowIndex;
       const isOffAt = (idx) => {
-        const ds = dateStr(p.dates[idx]);
+        const ds = App.Dates.dateStr(p.dates[idx]);
         // 当日を仮置き後として扱う（何かマークを置いたら“休”ではない）
         if (idx === p.dayIndex) {
           if (p.mark) return false;
@@ -530,7 +529,7 @@ if (p.mark==='☆'){
       if (p.mark){
         const prev = idx - 1;
         if (prev >= 0){
-          const dsPrev = dateStr(p.dates[prev]);
+          const dsPrev = App.Dates.dateStr(p.dates[prev]);
           const mkPrev = p.getAssign(r, dsPrev);
           if (mkPrev === '□'){
             return { ok:false, message:'「□」の翌日には勤務マークを配置できません' };
@@ -542,7 +541,7 @@ if (p.mark==='☆'){
       if (p.mark === '□'){
         const next = idx + 1;
         if (next < p.dates.length){
-          const dsNext2 = dateStr(p.dates[next]);
+          const dsNext2 = App.Dates.dateStr(p.dates[next]);
           const mkNext = p.getAssign(r, dsNext2);
           if (mkNext){
             return { ok:false, message:'「□」の翌日は未割当にしてください（先に翌日の勤務マークを外してください）' };
@@ -556,8 +555,8 @@ if (p.mark==='☆'){
     {
       const prev1 = p.dayIndex - 1;
       const prev2 = p.dayIndex - 2;
-      const dsPrev1 = prev1>=0 ? dateStr(p.dates[prev1]) : null;
-      const dsPrev2 = prev2>=0 ? dateStr(p.dates[prev2]) : null;
+      const dsPrev1 = prev1>=0 ? App.Dates.dateStr(p.dates[prev1]) : null;
+      const dsPrev2 = prev2>=0 ? App.Dates.dateStr(p.dates[prev2]) : null;
       const mkPrev1 = dsPrev1 ? p.getAssign(p.rowIndex, dsPrev1) : undefined;
       const mkPrev2 = dsPrev2 ? p.getAssign(p.rowIndex, dsPrev2) : undefined;
       const isAfterPair = (mkPrev2==='☆' && mkPrev1==='★'); // d = k+2（★の翌日）
@@ -575,7 +574,7 @@ if (p.mark==='☆'){
         if (stats && typeof stats.workMinutes === 'number'){
           const limitMinutes = 155 * 60; // 4週155時間
           // 既存のマーク分を差し引き、今回のマークを仮置きした場合の総時間を計算
-          const ds = dateStr(endDt);
+          const ds = App.Dates.dateStr(endDt);
           let currentMk = null;
           if (typeof p.getAssign === 'function'){
             currentMk = p.getAssign(p.rowIndex, ds) || null;
@@ -607,7 +606,7 @@ if (p.mark==='☆'){
             const isNightMark = (p.mark === '☆' || p.mark === '◆' || p.mark === '★' || p.mark === '●');
             if (isNightMark && typeof countForDay === 'function'){
               try {
-                const dsDay = dateStr(p.dates[d]);
+                const dsDay = App.Dates.dateStr(p.dates[d]);
 
                 const FIXED_NF2 = (window.Counts && typeof window.Counts.getFixedNF === 'function')
                   ? window.Counts.getFixedNF(dsDay)
@@ -628,7 +627,7 @@ if (p.mark==='☆'){
 
                 // 「☆」は翌日のNS（★）も埋めるため、翌日分の不足も確認
                 if (p.mark === '☆' && d + 1 < p.dates.length){
-                  const dsNext2 = dateStr(p.dates[d+1]);
+                  const dsNext2 = App.Dates.dateStr(p.dates[d+1]);
                   const FIXED_NS_NEXT = (window.Counts && typeof window.Counts.getFixedNS === 'function')
                     ? window.Counts.getFixedNS(dsNext2)
                     : ((window.Counts && Number.isInteger(window.Counts.FIXED_NS)) ? window.Counts.FIXED_NS : 3);
@@ -669,7 +668,7 @@ if (p.mark==='☆'){
     const errors = [];
     for (let d = 0; d < p.dates.length; d++){
       const dt = p.dates[d];
-      const ds = dateStr(dt);
+      const ds = App.Dates.dateStr(dt);
 
       // その日の総数（〇, NF, NS）
       const cnt = countForDay(d, p.dates, p.employeeCount, p.getAssign);
@@ -780,7 +779,7 @@ if (p.mark==='☆'){
 
    // ★追加：帯内の禁止組成「A・C・夜勤専従」の同席（NF/NS）を日ごとに検証
     for (let d2 = 0; d2 < p.dates.length; d2++){
-      const ds = dateStr(p.dates[d2]);
+      const ds = App.Dates.dateStr(p.dates[d2]);
       const nfRows = [], nsRows = [];
       for(let r=0;r<p.employeeCount;r++){
         const mk = p.getAssign(r, ds);
@@ -818,7 +817,7 @@ if (p.mark==='☆'){
     })();
 
     for (let d = 0; d < p.dates.length; d++){
-      const ds = dateStr(p.dates[d]);
+      const ds = App.Dates.dateStr(p.dates[d]);
       const mk = p.getAssign(r, ds);
       if (!mk) continue; // 未割当は対象外
       if (!allow.has(mk)){
@@ -840,7 +839,7 @@ if (p.mark==='☆'){
         const start = d;
         let run = 0;
         while (d < p.dates.length){
-          const ds = dateStr(p.dates[d]);
+          const ds = App.Dates.dateStr(p.dates[d]);
           const mk = p.getAssign(r, ds);
           if (mk === '〇' || mk === '□') { run++; d++; } else break;
         }
@@ -856,7 +855,7 @@ if (p.mark==='☆'){
             let ok2 = 0;
             const isRest = (idx)=>{
               if (idx >= p.dates.length) return false;
-              const ds = dateStr(p.dates[idx]);
+              const ds = App.Dates.dateStr(p.dates[idx]);
               const mk = p.getAssign(r, ds);
               const off = (typeof p.hasOffByDate === 'function') ? p.hasOffByDate(r, ds) : false;
               return off || !mk;
@@ -875,8 +874,8 @@ if (p.mark==='☆'){
     // 隣接禁止パターン「◆→〇」「◆→□」
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 1; d++){
-        const ds = dateStr(p.dates[d]);
-        const dsN = dateStr(p.dates[d+1]);
+        const ds = App.Dates.dateStr(p.dates[d]);
+        const dsN = App.Dates.dateStr(p.dates[d+1]);
         const mk  = p.getAssign(r, ds);
         const mkN = p.getAssign(r, dsN);
         if (mk === '◆' && (mkN === '〇' || mkN === '□')){
@@ -887,8 +886,8 @@ if (p.mark==='☆'){
     // 「遅出（□）」の翌日は勤務マーク禁止
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 1; d++){
-        const ds  = dateStr(p.dates[d]);
-        const dsN = dateStr(p.dates[d+1]);
+        const ds  = App.Dates.dateStr(p.dates[d]);
+        const dsN = App.Dates.dateStr(p.dates[d+1]);
         const mk  = p.getAssign(r, ds);
         const mkN = p.getAssign(r, dsN);
         if (mk === '□' && mkN){
@@ -900,8 +899,8 @@ if (p.mark==='☆'){
     // NG「◆→●」（☆★と同義のため禁止）
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 1; d++){
-        const ds  = dateStr(p.dates[d]);
-        const dsN = dateStr(p.dates[d+1]);
+        const ds  = App.Dates.dateStr(p.dates[d]);
+        const dsN = App.Dates.dateStr(p.dates[d+1]);
         const mk  = p.getAssign(r, ds);
         const mkN = p.getAssign(r, dsN);
         if (mk === '◆' && mkN === '●'){
@@ -912,8 +911,8 @@ if (p.mark==='☆'){
 // 「★★」の並びを禁止
 for (let r = 0; r < p.employeeCount; r++){
   for (let d = 0; d < p.dates.length - 1; d++){
-    const ds  = dateStr(p.dates[d]);
-    const dsN = dateStr(p.dates[d+1]);
+    const ds  = App.Dates.dateStr(p.dates[d]);
+    const dsN = App.Dates.dateStr(p.dates[d+1]);
     const mk  = p.getAssign(r, ds);
     const mkN = p.getAssign(r, dsN);
     if (mk === '★' && mkN === '★'){
@@ -934,8 +933,8 @@ for (let r = 0; r < p.employeeCount; r++){
     for (let r = 0; r < p.employeeCount; r++){
       const starts = [];
       for (let d = 0; d < p.dates.length - 1; d++){
-        const ds  = dateStr(p.dates[d]);
-        const dsN = dateStr(p.dates[d+1]);
+        const ds  = App.Dates.dateStr(p.dates[d]);
+        const dsN = App.Dates.dateStr(p.dates[d+1]);
         const mk  = p.getAssign(r, ds);
         const mkN = p.getAssign(r, dsN);
         if (mk === '●' && mkN === '◆') starts.push(d);
@@ -960,8 +959,8 @@ for (let r = 0; r < p.employeeCount; r++){
 
       let lastEnd = null; // 直近ペアの★インデックス
       for (let d = 0; d < p.dates.length - 1; d++){
-        const ds  = dateStr(p.dates[d]);
-        const dsN = dateStr(p.dates[d+1]);
+        const ds  = App.Dates.dateStr(p.dates[d]);
+        const dsN = App.Dates.dateStr(p.dates[d+1]);
         const mk  = p.getAssign(r, ds);
         const mkN = p.getAssign(r, dsN);
       if (mk === '☆' && mkN === '★'){
@@ -981,8 +980,8 @@ for (let r = 0; r < p.employeeCount; r++){
     let consec = 0;
     let lastEnd = null; // 直近ペアの★インデックス
     for (let d = 0; d < p.dates.length - 1; d++){
-      const ds  = dateStr(p.dates[d]);
-      const dsN = dateStr(p.dates[d+1]);
+      const ds  = App.Dates.dateStr(p.dates[d]);
+      const dsN = App.Dates.dateStr(p.dates[d+1]);
       const mk  = p.getAssign(r, ds);
       const mkN = p.getAssign(r, dsN);
       if (mk === '☆' && mkN === '★'){
@@ -1001,11 +1000,11 @@ for (let r = 0; r < p.employeeCount; r++){
 
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 2; d++){
-        const ds0 = dateStr(p.dates[d]);
-        const ds1 = dateStr(p.dates[d+1]);
+        const ds0 = App.Dates.dateStr(p.dates[d]);
+        const ds1 = App.Dates.dateStr(p.dates[d+1]);
 if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
   const wt = (typeof p.getWorkType === 'function') ? (p.getWorkType(r) || 'three') : 'three';
-  const ds2 = dateStr(p.dates[d+2]);
+  const ds2 = App.Dates.dateStr(p.dates[d+2]);
   const mk2 = p.getAssign(r, ds2);
   const off2 = (typeof p.hasOffByDate==='function') ? p.hasOffByDate(r, ds2) : false;
   const isRest2 = off2 || !mk2;
@@ -1022,7 +1021,7 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
       let consecSingles = 0;
       let d = 0;
       const isOffAt = (idx) => {
-        const ds = dateStr(p.dates[idx]);
+        const ds = App.Dates.dateStr(p.dates[idx]);
         const mk = p.getAssign(r, ds);
         const off = (typeof p.hasOffByDate === 'function') ? p.hasOffByDate(r, ds) : false;
         // 休（希望休）または未割当を“休”と扱う
@@ -1055,7 +1054,7 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
     for (let r = 0; r < p.employeeCount; r++){
       let streak = 0;
       for (let d = 0; d < p.dates.length; d++){
-        const ds = dateStr(p.dates[d]);
+        const ds = App.Dates.dateStr(p.dates[d]);
         const mk = p.getAssign(r, ds);
         const off = (typeof p.hasOffByDate === 'function') ? p.hasOffByDate(r, ds) : false;
         const isOff = off || !mk;
@@ -1074,7 +1073,7 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
       const blocks = [];
       let i = 0;
       const isOffAt2 = (idx) => {
-        const ds = dateStr(p.dates[idx]);
+        const ds = App.Dates.dateStr(p.dates[idx]);
         const mk = p.getAssign(r, ds);
         const off = (typeof p.hasOffByDate === 'function') ? p.hasOffByDate(r, ds) : false;
         return off || !mk;
@@ -1106,7 +1105,7 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
       const blocks = [];
       let i = 0;
       const isOffAt = (idx) => {
-        const ds = dateStr(p.dates[idx]);
+        const ds = App.Dates.dateStr(p.dates[idx]);
         const mk = p.getAssign(r, ds);
         const off = (typeof p.hasOffByDate === 'function') ? p.hasOffByDate(r, ds) : false;
         return off || !mk; // 希望休 or 未割当 を“休”と扱う
@@ -1133,7 +1132,7 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
       // 4週間の休日数を集計
       let offCount = 0;
       for (let d = 0; d < p.dates.length && d < 28; d++){
-        const ds = dateStr(p.dates[d]);
+        const ds = App.Dates.dateStr(p.dates[d]);
         const mk = p.getAssign(r, ds);
         const hasLv = (typeof p.getLeaveType === 'function') ? !!p.getLeaveType(r, ds) : false;
         const off = (typeof p.hasOffByDate === 'function') ? p.hasOffByDate(r, ds) : false;
@@ -1143,8 +1142,8 @@ if (p.getAssign(r, ds0) === '☆' && p.getAssign(r, ds1) === '★'){
       }
 
       // ★始まり/☆終わりを判定
-      const dsStart = dateStr(p.dates[0]);
-      const dsEnd = dateStr(p.dates[Math.min(27, p.dates.length - 1)]);
+      const dsStart = App.Dates.dateStr(p.dates[0]);
+      const dsEnd = App.Dates.dateStr(p.dates[Math.min(27, p.dates.length - 1)]);
       const mkStart = p.getAssign(r, dsStart);
       const mkEnd = p.getAssign(r, dsEnd);
       const starStart = (mkStart === '★');

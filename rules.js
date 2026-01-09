@@ -21,7 +21,7 @@ if (p.mark === '☆') {
     if (next >= p.dates.length) {
       return { ok: false, message: '月末のため「通し夜勤（☆→★）」を設定できません' };
     }
-    const nds = dateStr(p.dates[next]);
+    const nds = App.Dates.dateStr(p.dates[next]);
     if (p.hasOffByDate(p.rowIndex, nds)) {
       return { ok: false, message: '翌日が希望休のため「通し夜勤」は設定できません' };
     }
@@ -37,7 +37,7 @@ if (p.mark === '☆') {
       if (wt === 'night') {
         const next2 = next + 1;
         if (next2 < p.dates.length) {
-          const nds2 = dateStr(p.dates[next2]);
+          const nds2 = App.Dates.dateStr(p.dates[next2]);
           const mk2  = p.getAssign(p.rowIndex, nds2);
           // 新しく置く ☆ の 2日後が既に「★」なら、「☆★★」になってしまうので禁止
           if (mk2 === '★') {
@@ -69,7 +69,7 @@ if (!isNight) {
     return { ok:false, message:'月末のため「☆★→休休」を設定できません' };
   }
   [rest1, rest2].forEach(idx=>{
-    const rds = dateStr(p.dates[idx]);
+    const rds = App.Dates.dateStr(p.dates[idx]);
     p.clearAssign(p.rowIndex, rds);
     if (p.gridEl) {
       const td2 = p.gridEl.querySelector(`td[data-row="${p.rowIndex}"][data-day="${idx}"]`);
@@ -83,13 +83,7 @@ if (!isNight) {
 }
 
 
-  // 共通ユーティリティ（app.js と同名で使用される想定）
-  function dateStr(d) {
-    const y = d.getFullYear();
-    const m = ('0' + (d.getMonth() + 1)).slice( -2 );
-    const dd = ('0' + d.getDate()).slice( -2 );
-    return `${y}-${m}-${dd}`;
-  }
+
 
   // app.js の markToClass を参照（未定義なら簡易版）
   function markToClass(mk) {

@@ -17,12 +17,11 @@
   };
 
 
-  function pad2(n){ return String(n).padStart(2,'0'); }
   function toDs(dtOrString){
     if (!dtOrString) return null;
     if (typeof dtOrString === 'string') return dtOrString;
     if (dtOrString instanceof Date){
-      return `${dtOrString.getFullYear()}-${pad2(dtOrString.getMonth()+1)}-${pad2(dtOrString.getDate())}`;
+      return `${dtOrString.getFullYear()}-${App.Dates.pad2(dtOrString.getMonth()+1)}-${App.Dates.pad2(dtOrString.getDate())}`;
     }
     return null;
   }

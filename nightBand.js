@@ -1,13 +1,11 @@
 /* nightBand.js - 夜勤帯の確認と候補抽出（副作用なし） */
 ;(function (global) {
-  function pad2(n){ return String(n).padStart(2,'0'); }
-  function dateStr(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
 
   // その日の集計（〇, NF, NS と A存在の帯別有無）
   function countDayStats(ctx, dayIdx){
     let day=0, nf=0, ns=0;
     let hasADay=false, hasANf=false, hasANs=false;
-    const ds = dateStr(ctx.dates[dayIdx]);
+    const ds = App.Dates.dateStr(ctx.dates[dayIdx]);
     for(let r=0; r<ctx.employeeCount; r++){
       const mk = ctx.getAssign(r, ds);
       const isA = (ctx.getEmpAttr(r)?.level) === 'A';
@@ -16,7 +14,7 @@
 
       // NS＝当日の「★ or ●」。★未反映の旧データ対策として前日の☆もフォールバックで許容
       const prevDate = new Date(ctx.dates[dayIdx].getFullYear(), ctx.dates[dayIdx].getMonth(), ctx.dates[dayIdx].getDate() - 1);
-      const prevDs = dateStr(prevDate);
+      const prevDs = App.Dates.dateStr(prevDate);
       const prevMk = ctx.getAssign(r, prevDs);
       const nsHit = (mk === '★' || mk === '●' || prevMk === '☆');
       if (nsHit){ ns++; if (isA) hasANs = true; }
@@ -32,7 +30,7 @@
   function countNightStatsForEmp(ctx, r, startIdx, endIdx){
     let star=0, half=0; // star=☆の数（＝☆★ペア数）、half=◆+●
     for(let d=startIdx; d<=endIdx; d++){
-      const ds = dateStr(ctx.dates[d]);
+      const ds = App.Dates.dateStr(ctx.dates[d]);
       const mk = ctx.getAssign(r, ds);
       if (mk === '☆') star++;
       if (mk === '◆' || mk === '●') half++;
@@ -43,7 +41,7 @@
   function countNfForEmp(ctx, r, startIdx, endIdx){
     let count = 0;
     for(let d=startIdx; d<=endIdx; d++){
-      const ds = dateStr(ctx.dates[d]);
+      const ds = App.Dates.dateStr(ctx.dates[d]);
       const mk = ctx.getAssign(r, ds);
       if (mk === '◆') count++;
     }
@@ -54,7 +52,7 @@
   function countNsForEmp(ctx, r, startIdx, endIdx){
     let count = 0;
     for(let d=startIdx; d<=endIdx; d++){
-      const ds = dateStr(ctx.dates[d]);
+      const ds = App.Dates.dateStr(ctx.dates[d]);
       const mk = ctx.getAssign(r, ds);
       if (mk === '●') count++;
     }
@@ -120,7 +118,7 @@ if (mark === '◆' || mark === '●'){
   // ★追加：帯と属性を見て「A＋C＋夜勤専従」同席を避けるためのペナルティ
   function _bandOf(mark){ return (mark==='☆'||mark==='◆') ? 'NF' : (mark==='★'||mark==='●') ? 'NS' : null; }
   function _bandRows(ctx, dayIdx, band){
-    const ds = dateStr(ctx.dates[dayIdx]);
+    const ds = App.Dates.dateStr(ctx.dates[dayIdx]);
     const rows = [];
     for (let r=0; r<ctx.employeeCount; r++){
       const mk = ctx.getAssign(r, ds);
@@ -188,7 +186,7 @@ if (mark === '◆' || mark === '●'){
     let lastIdx = -1;
     let count = 0;
     for (let i = startIdx; i <= endIdx; i++){
-      const ds2 = dateStr(ctx.dates[i]);
+      const ds2 = App.Dates.dateStr(ctx.dates[i]);
       const mk2 = ctx.getAssign(r, ds2);
       if (groupMarks.includes(mk2)){
         count++;
@@ -292,7 +290,7 @@ if (mark === '◆' || mark === '●'){
   // 候補抽出（空き・希望休なし・勤務形態OK）→不足度でスコアリング→重み付きランダム→勤務形態優先
   function candidatesFor(ctx, dayIdx, mark){
 
-    const ds = dateStr(ctx.dates[dayIdx]);
+    const ds = App.Dates.dateStr(ctx.dates[dayIdx]);
     const startIdx = ctx.range4wStart;
     const endIdx   = ctx.range4wStart + 27;
 
@@ -344,12 +342,12 @@ out = out
     // 土日祝公平化：当該日が土日祝なら、直近4週間の土日祝勤務が少ない人を優先
     const isWeekend = (dt)=> dt.getDay()===0 || dt.getDay()===6;
     const isHoliday = (ds)=> (typeof ctx.isHolidayDs === 'function') ? !!ctx.isHolidayDs(ds) : false;
-    const isWH = (idx)=> { const dt = ctx.dates[idx]; const ds = dateStr(dt); return isWeekend(dt) || isHoliday(ds); };
+    const isWH = (idx)=> { const dt = ctx.dates[idx]; const ds = App.Dates.dateStr(dt); return isWeekend(dt) || isHoliday(ds); };
     const whCount28 = (r)=> {
       let c=0;
       for (let i=startIdx; i<=endIdx; i++){
         if (!isWH(i)) continue;
-        const ds2 = dateStr(ctx.dates[i]);
+        const ds2 = App.Dates.dateStr(ctx.dates[i]);
         const mk2 = ctx.getAssign(r, ds2);
         if (mk2==='〇' || mk2==='☆' || mk2==='★' || mk2==='◆' || mk2==='●') c++;
       }
