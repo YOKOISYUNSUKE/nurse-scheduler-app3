@@ -1,7 +1,7 @@
 // sw.js - Service Worker
 // 修正版：app.js分割に対応、キャッシュ戦略最適化
 
-const VERSION = 'v2026-01.10.1';
+const VERSION = 'v2026-01.10.4';
 
 // ここは必須：未定義だとSWが起動直後に落ちます
 const ENTRY_HTML = './index.html';
@@ -38,6 +38,13 @@ const STATIC_ASSETS = [
   './buttonHandlers.js',
   './cellOperations.js',
   './autoAssignLogic.js',
+  './autoAssignGlobals.js',
+  './autoAssignHelpers.js',
+  './autoAssignFill.js',
+  './autoAssignEnforce.js',
+  './autoAssignNormalize.js',
+  './autoAssignMain.js',
+  './autoAssignLeave.js',
   './employeeDialog.js',
   
   // マニフェスト
