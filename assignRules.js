@@ -243,23 +243,29 @@ if (p.mark === '★'){
       }
     }
 
-// ★拡張：NG並び（個人）
-// 禁止：◆→早 / ◆→〇 / ◆◆→遅
+// ★拡張：◆翌日制約（改善版）
+// ◆の翌日に許可：「未割り当て（空白）」「遅」「◆」のみ
+// 禁止：「〇」「早」「☆」「★」「●」
 {
   const prev = d - 1;
   if (prev >= 0){
     const dsPrev = App.Dates.dateStr(p.dates[prev]);
     const prevMk = p.getAssign(p.rowIndex, dsPrev);
 
-    // ◆→〇 / ◆→早
-    if (prevMk === '◆' && /^[〇○早]$/.test(p.mark)) {
-      return {
-        ok: false,
-        message: '「◆」の翌日に「〇 / 早」は配置できません（休息確保）'
-      };
+    // ◆の翌日チェック：許可されていない記号を禁止
+    if (prevMk === '◆') {
+      // 許可：未割り当て（p.mark が undefined または null）、「遅」、「◆」
+      // 禁止：「〇」「早」「☆」「★」「●」
+      const forbiddenMarks = ['〇', '〇', '早', '☆', '★', '●'];
+      if (forbiddenMarks.includes(p.mark)) {
+        return {
+          ok: false,
+          message: '「◆」の翌日に「〇 / 早 / ☆ / ★ / ●」は配置できません。許可：未割り当て（休み）/ 遅 / ◆ のみ'
+        };
+      }
     }
 
-    // ◆◆→遅
+    // ◆◆→遅 の禁止チェック（連続夜勤後の遅出禁止）
     if (p.mark === '遅' && prev >= 1){
       const dsPrev2 = App.Dates.dateStr(p.dates[prev - 1]);
       const prevMk2 = p.getAssign(p.rowIndex, dsPrev2);
@@ -274,7 +280,7 @@ if (p.mark === '★'){
   }
 }
 
-    // 2) 当日が◆で、翌日に既に「〇」「早」「遅」があるなら不可
+    // 当日が◆で、翌日に既に「〇」「早」「遅」があるなら不可
     if (p.mark === '◆'){
       const next = d + 1;
       if (next < p.dates.length){
@@ -544,36 +550,7 @@ if (p.mark==='☆'){
         }
       }
     }
-    // ★新規：「遅出（□）」の翌日は勤務マーク禁止
-    {
-      const r = p.rowIndex;
-      const idx = p.dayIndex;
 
-      // 1) 前日が「□」なら当日の勤務マークは禁止
-      if (p.mark){
-        const prev = idx - 1;
-        if (prev >= 0){
-          const dsPrev = App.Dates.dateStr(p.dates[prev]);
-          const mkPrev = p.getAssign(r, dsPrev);
-          if (mkPrev === '□'){
-            return { ok:false, message:'「□」の翌日には勤務マークを配置できません' };
-          }
-        }
-      }
-
-      // 2) 当日に「□」を置く場合、翌日は未割当であることを要求
-      if (p.mark === '□'){
-
-        const next = idx + 1;
-        if (next < p.dates.length){
-          const dsNext2 = App.Dates.dateStr(p.dates[next]);
-          const mkNext = p.getAssign(r, dsNext2);
-          if (mkNext){
-            return { ok:false, message:'「□」の翌日は未割当にしてください（先に翌日の勤務マークを外してください）' };
-          }
-        }
-      }
-    }
 
 // 「☆★」直後1日は休専用（配置禁止）
     // ※4週間で最低2回の二連休は別途チェック（validateWindow内）
@@ -774,7 +751,7 @@ if (p.mark==='☆'){
         
         if (!mk) continue;
         
-        if (mk === '〇' || mk === '□'){
+        if (mk === '〇'){
           countDay++;
           if (isA) hasADay = true;
           if (isNonNight) hasNonNightDay = true;
@@ -860,13 +837,13 @@ if (p.mark==='☆'){
     for (let r = 0; r < p.employeeCount; r++){
       let d = 0;
       while (d < p.dates.length){
-        // 日勤（〇/□）の連続長を測る
+        // 日勤（〇）の連続長を測る
         const start = d;
         let run = 0;
         while (d < p.dates.length){
           const ds = App.Dates.dateStr(p.dates[d]);
           const mk = p.getAssign(r, ds);
-          if (mk === '〇' || mk === '□') { run++; d++; } else break;
+          if (mk === '〇') { run++; d++; } else break;
         }
         if (run > 0){
           // 日勤連続≦5
@@ -896,30 +873,19 @@ if (p.mark==='☆'){
         d = (run > 0) ? d : d + 1;
       }
     }
-    // 隣接禁止パターン「◆→〇」「◆→□」
+    // 隣接禁止パターン「◆→〇」
     for (let r = 0; r < p.employeeCount; r++){
       for (let d = 0; d < p.dates.length - 1; d++){
         const ds = App.Dates.dateStr(p.dates[d]);
         const dsN = App.Dates.dateStr(p.dates[d+1]);
         const mk  = p.getAssign(r, ds);
         const mkN = p.getAssign(r, dsN);
-        if (mk === '◆' && /^[〇○□]$/.test(mkN)) {
+        if (mk === '◆' && /^[〇○]$/.test(mkN)) {
           errors.push({ rowIndex:r, dayIndex:d, type:'SEQ_NF_DAY', expected:'(休 or 非日勤)', actual:`◆→${mkN}` });
         }
       }
     }
-    // 「遅出（□）」の翌日は勤務マーク禁止
-    for (let r = 0; r < p.employeeCount; r++){
-      for (let d = 0; d < p.dates.length - 1; d++){
-        const ds  = App.Dates.dateStr(p.dates[d]);
-        const dsN = App.Dates.dateStr(p.dates[d+1]);
-        const mk  = p.getAssign(r, ds);
-        const mkN = p.getAssign(r, dsN);
-        if (mk === '□' && mkN){
-          errors.push({ rowIndex:r, dayIndex:d+1, type:'LATE_NEXT_DAY_EMPTY', expected:'no mark', actual:mkN });
-        }
-      }
-    }
+
 
     // NG「◆→●」（☆★と同義のため禁止）
     for (let r = 0; r < p.employeeCount; r++){

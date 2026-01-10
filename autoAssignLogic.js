@@ -106,6 +106,19 @@
           if (wt !== 'night' && getAssign(r, pds) === '★') return false;
         }
       }
+      // ◆の翌日に許可：未割り当て、遅、◆のみ
+      // 禁止：〇、早、☆、★、●
+      if (mark === '〇' || mark === '早' || mark === '☆' || mark === '★' || mark === '●'){
+        const prev = dayIdx - 1;
+        if (prev >= 0){
+          const pds = dateStr(State.windowDates[prev]);
+          const prevMk = getAssign(r, pds);
+          if (prevMk === '◆'){
+            return false;
+          }
+        }
+      }
+
       return true;
     });
 
