@@ -120,8 +120,19 @@
     for (let i = holidayDayIdx - 1; i >= startDayIdx; i--){ if (ok(i)) return i; }
     return null;
   }
+  // ===== 祭日判定（過去を含む） =====
+  function isHolidayDsGlobal(ds){
+    const State = A.State;
+    const dateStr = A.dateStr;
+    const _inWindow = (ds) => {
+      return State.windowDates.some(dt => dateStr(dt) === ds);
+    };
+    return _inWindow(ds) ? State.holidaySet.has(ds) : !!holMap[ds];
+  }
+
   // === 公開API ===
   A.applyHolidayLeaveFlags = applyHolidayLeaveFlags;
   A.applyBackfillSubstituteFromPastHolidays = applyBackfillSubstituteFromPastHolidays;
   A.findSubstituteDayFor = findSubstituteDayFor;
+  A.isHolidayDsGlobal = isHolidayDsGlobal;
 })();

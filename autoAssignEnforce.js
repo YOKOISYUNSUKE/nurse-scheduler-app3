@@ -355,8 +355,38 @@
       }
     }
   }
+  // ===== 削除候補構築 =====
+  function buildRowsForMark(mark) {
+    const State = A.State;
+    const dateStr = A.dateStr;
+    const getAssign = A.getAssign;
+    const countDayShift4w = A.countDayShift4w;
+    
+    const ds = dateStr(State.windowDates[0]);
+    const rows = [];
+    for (let r = 0; r < State.employeeCount; r++) {
+      const mk = getAssign(r, ds);
+      if (mk !== mark) continue;
+      const emp = State.employeesAttr[r] || {};
+      const level = emp.level || 'B';
+      const day4w = countDayShift4w(r);
+      rows.push({
+        r,
+        isA: level === 'A',
+        day4w
+      });
+    }
+    rows.sort((a, b) => {
+      if (a.isA !== b.isA) return a.isA ? 1 : -1;
+      if (a.day4w !== b.day4w) return b.day4w - a.day4w;
+      return a.r - b.r;
+    });
+    return rows;
+  }
+
   // === 公開API ===
   A.reduceDayShiftTo = reduceDayShiftTo;
   A.enforceExactCount = enforceExactCount;
   A.enforceDayShiftFixedCounts = enforceDayShiftFixedCounts;
+  A.buildRowsForMark = buildRowsForMark;
 })();
