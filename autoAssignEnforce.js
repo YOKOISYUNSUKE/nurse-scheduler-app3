@@ -235,29 +235,6 @@
       if (!removed) break;
     }
   }
-  // ===== 削除候補構築 =====
-  function buildRowsForMark(mark){
-    const State = A.State;
-    const dateStr = A.dateStr;
-    const getAssign = A.getAssign;
-    const countDayShift4w = A.countDayShift4w;
-    const ds = dateStr(State.windowDates[0]);
-    const rows = [];
-    for (let r = 0; r < State.employeeCount; r++){
-      const mk = getAssign(r, ds);
-      if (mk !== mark) continue;
-      const emp = State.employeesAttr[r] || {};
-      const level = emp.level || 'B';
-      const day4w = countDayShift4w(r);
-      rows.push({ r, isA: level === 'A', day4w });
-    }
-    rows.sort((a, b) => {
-      if (a.isA !== b.isA) return a.isA ? 1 : -1;
-      if (a.day4w !== b.day4w) return b.day4w - a.day4w;
-      return a.r - b.r;
-    });
-    return rows;
-  }
 
   /**
    * 日勤人数および早出・遅出人数が固定値に達しているか確認し、
@@ -304,23 +281,38 @@
       totalDay = A.countDayStats(dayIdx).day;
     }
 
+    // ===== 改善: 早・遅の回数をカウントするヘルパー関数 =====
+    const countSpecificShift4w = (r, mark) => {
+        let count = 0;
+        const startIdx = State.range4wStart;
+        const endIdx = State.range4wStart + 27;
+        for (let i = startIdx; i <= endIdx && i < State.windowDates.length; i++) {
+            const ds2 = dateStr(State.windowDates[i]);
+            if (getAssign(r, ds2) === mark) count++;
+        }
+        return count;
+    };
+
     // ===== Step1: 早・遅が多すぎる場合は〇に落として調整 =====
     if (earlyTarget !== null && earlyCount > earlyTarget){
       const rows = [];
       for (let r = 0; r < State.employeeCount; r++){
-        const mk = getAssign(r, ds);
-        if (mk === '早'){
-          const isA = (State.employeesAttr[r]?.level) === 'A';
-          const isNightOnly = (State.employeesAttr[r]?.workType) === 'night';
-          const locked = isLocked(r, ds);
-          rows.push({ r, isA, isNightOnly, locked });
+        if (getAssign(r, ds) === '早'){
+          rows.push({
+            r,
+            isA: (State.employeesAttr[r]?.level) === 'A',
+            isNightOnly: (State.employeesAttr[r]?.workType) === 'night',
+            locked: isLocked(r, ds),
+            earlyCount4w: countSpecificShift4w(r, '早') // 早の回数を追加
+          });
         }
       }
+      // 改善: 早の回数が多い人から優先的に〇に戻す
       rows.sort((a,b) => {
-        if (a.locked !== b.locked) return (a.locked ? 1 : -1);
-        if (a.isNightOnly !== b.isNightOnly) return (a.isNightOnly ? 1 : -1);
-        if (a.isA !== b.isA) return (a.isA ? 1 : -1);
-        return 0;
+        if (a.locked !== b.locked) return a.locked ? 1 : -1;
+        if (a.isNightOnly !== b.isNightOnly) return a.isNightOnly ? 1 : -1;
+        if (a.isA !== b.isA) return a.isA ? 1 : -1; // B優先
+        return b.earlyCount4w - a.earlyCount4w; // 早が多い人優先
       });
       for (const row of rows){
         if (earlyCount <= earlyTarget) break;
@@ -332,19 +324,22 @@
     if (lateTarget !== null && lateCount > lateTarget){
       const rows = [];
       for (let r = 0; r < State.employeeCount; r++){
-        const mk = getAssign(r, ds);
-        if (mk === '遅'){
-          const isA = (State.employeesAttr[r]?.level) === 'A';
-          const isNightOnly = (State.employeesAttr[r]?.workType) === 'night';
-          const locked = isLocked(r, ds);
-          rows.push({ r, isA, isNightOnly, locked });
+        if (getAssign(r, ds) === '遅'){
+           rows.push({
+            r,
+            isA: (State.employeesAttr[r]?.level) === 'A',
+            isNightOnly: (State.employeesAttr[r]?.workType) === 'night',
+            locked: isLocked(r, ds),
+            lateCount4w: countSpecificShift4w(r, '遅') // 遅の回数を追加
+          });
         }
       }
+      // 改善: 遅の回数が多い人から優先的に〇に戻す
       rows.sort((a,b) => {
-        if (a.locked !== b.locked) return (a.locked ? 1 : -1);
-        if (a.isNightOnly !== b.isNightOnly) return (a.isNightOnly ? 1 : -1);
-        if (a.isA !== b.isA) return (a.isA ? 1 : -1);
-        return 0;
+        if (a.locked !== b.locked) return a.locked ? 1 : -1;
+        if (a.isNightOnly !== b.isNightOnly) return a.isNightOnly ? 1 : -1;
+        if (a.isA !== b.isA) return a.isA ? 1 : -1; // B優先
+        return b.lateCount4w - a.lateCount4w; // 遅が多い人優先
       });
       for (const row of rows){
         if (lateCount <= lateTarget) break;
@@ -358,26 +353,23 @@
     if (earlyTarget !== null && earlyCount < earlyTarget){
       let guard = State.employeeCount * 2;
       while (earlyCount < earlyTarget && guard-- > 0){
-        let best = null;
+        let candidates = [];
         for (let r = 0; r < State.employeeCount; r++){
-          const mk = getAssign(r, ds);
-          if (mk !== '〇') continue;
+          if (getAssign(r, ds) !== '〇') continue;
           if (!A.canAssignEarlyShiftForNormalize(r, dayIdx)) continue;
-          const emp = State.employeesAttr[r] || {};
-          const level = emp.level || 'B';
-          const day4w = A.countDayShift4w(r);
-          const cand = { r, isA: level === 'A', day4w };
-          if (!best){
-            best = cand;
-          } else if (best.isA !== cand.isA){
-            // B を優先して早にする
-            if (best.isA && !cand.isA) best = cand;
-          } else if (cand.day4w < best.day4w){
-            // 日勤が少ない人を優先
-            best = cand;
-          }
+          candidates.push({
+              r,
+              isA: (State.employeesAttr[r]?.level) === 'A',
+              earlyCount4w: countSpecificShift4w(r, '早')
+          });
         }
-        if (!best) break;
+        if (candidates.length === 0) break;
+        // 改善: 早が少ない人を優先
+        candidates.sort((a, b) => {
+            if (a.isA !== b.isA) return a.isA ? 1 : -1; // B優先
+            return a.earlyCount4w - b.earlyCount4w; // 早が少ない人優先
+        });
+        const best = candidates[0];
         setAssign(best.r, ds, '早');
         earlyCount++;
       }
@@ -386,24 +378,23 @@
     if (lateTarget !== null && lateCount < lateTarget){
       let guard = State.employeeCount * 2;
       while (lateCount < lateTarget && guard-- > 0){
-        let best = null;
+        let candidates = [];
         for (let r = 0; r < State.employeeCount; r++){
-          const mk = getAssign(r, ds);
-          if (mk !== '〇') continue;
+          if (getAssign(r, ds) !== '〇') continue;
           if (!A.canAssignLateShiftForNormalize(r, dayIdx)) continue;
-          const emp = State.employeesAttr[r] || {};
-          const level = emp.level || 'B';
-          const day4w = A.countDayShift4w(r);
-          const cand = { r, isA: level === 'A', day4w };
-          if (!best){
-            best = cand;
-          } else if (best.isA !== cand.isA){
-            if (best.isA && !cand.isA) best = cand;
-          } else if (cand.day4w < best.day4w){
-            best = cand;
-          }
+          candidates.push({
+              r,
+              isA: (State.employeesAttr[r]?.level) === 'A',
+              lateCount4w: countSpecificShift4w(r, '遅')
+          });
         }
-        if (!best) break;
+        if (candidates.length === 0) break;
+        // 改善: 遅が少ない人を優先
+        candidates.sort((a, b) => {
+            if (a.isA !== b.isA) return a.isA ? 1 : -1; // B優先
+            return a.lateCount4w - b.lateCount4w; // 遅が少ない人優先
+        });
+        const best = candidates[0];
         setAssign(best.r, ds, '遅');
         lateCount++;
       }
