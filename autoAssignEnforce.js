@@ -164,10 +164,12 @@
       }
       if (removed) continue;
       // 3. A職員も含めて削除（最低1名のAは残す／夜勤専従は除外）
-      const aCount = nfRows.filter(x => x.isA).length;
-      for (let i = nfRows.length - 1; i >= 0; i--){
-        if (!nfRows[i].isLocked && !nfRows[i].isNightOnly && (!nfRows[i].isA || aCount > 1)){
-          clearAssign(nfRows[i].r, ds);
+const aCount = nfRows.filter(x => x.isA).length;
+for (let i = nfRows.length - 1; i >= 0; i--){
+  if (!nfRows[i].isLocked && !nfRows[i].isNightOnly){
+    // A職員の場合：aCount > 1 の場合のみ削除可能（最低1名は保護）
+    if (nfRows[i].isA && aCount <= 1) continue;  // ← A職員が1名の場合、スキップして保護
+    clearAssign(nfRows[i].r, ds);
           if (nfRows[i].mark === '☆' && dayIdx + 1 < State.windowDates.length){
             const nextDs = dateStr(State.windowDates[dayIdx + 1]);
             if (getAssign(nfRows[i].r, nextDs) === '★'){

@@ -278,6 +278,16 @@
       // 固定人数の厳格化
       A.enforceDayShiftFixedCounts(d);
     }
+// 改善：日勤割り当て後、夜勤帯のA職員確保を再確認
+// 日勤割り当て時に夜勤帯のA職員が削除される可能性があるため、最終確認を実施
+for (let d = startDayIdx; d <= endDayIdx; d++){
+  const ds = dateStr(State.windowDates[d]);
+  const FIXED_NF = targetNFFor(ds);
+  const FIXED_NS = targetNSFor(ds);
+  A.enforceExactCount(d, FIXED_NF, FIXED_NS);  // ← 最終確認で夜勤帯のA職員を確保
+}
+
+
     // 最終的な連休最低確保
     if (typeof A.ensureRenkyuMin2 === 'function'){
       A.ensureRenkyuMin2(startDayIdx, endDayIdx);
