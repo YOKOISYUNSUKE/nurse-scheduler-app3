@@ -105,71 +105,39 @@
     if (typeof updateFooterCounts === 'function') updateFooterCounts();
   }
   /**
-   * 夜勤帯（NF/NS）の人数を厳格化します。
-   * NF 帯（☆+◆）と NS 帯（★+●）それぞれの目標人数に合わせて削除します。
+   * 指定日の NF（準夜）および NS（深夜）の人数を厳格に調整します。
    */
   function enforceExactCount(dayIdx, targetNF, targetNS){
     const State = A.State;
     const dateStr = A.dateStr;
     const getAssign = A.getAssign;
     const clearAssign = A.clearAssign;
-    const isLocked = A.isLocked;
-    const updateFooterCounts = A.updateFooterCounts;
     const addDays = A.addDays;
+    const isLocked = A.isLocked;
     const ds = dateStr(State.windowDates[dayIdx]);
-    // NF 帯調整
+    // NF帯（☆＋◆）の調整
     const nfRows = [];
     for (let r = 0; r < State.employeeCount; r++){
       const mk = getAssign(r, ds);
       if (mk === '☆' || mk === '◆'){
         nfRows.push({
-          r,
-          mark: mk,
+          r, mark: mk,
           isA: (State.employeesAttr[r]?.level) === 'A',
           isNightOnly: (State.employeesAttr[r]?.workType) === 'night',
           isLocked: isLocked(r, ds),
           hasNextLock: (mk === '☆' && dayIdx + 1 < State.windowDates.length)
-            ? isLocked(r, dateStr(State.windowDates[dayIdx + 1])) : false
+            ? isLocked(r, dateStr(State.windowDates[dayIdx + 1]))
+            : false
         });
       }
     }
     const countRemovableNF = () => nfRows.filter(x => !x.isNightOnly).length;
-    const last28ForNF = (r) => {
-      let c = 0;
-      const end = State.windowDates[State.range4wStart + 27];
-      for (let i = 0; i < 28; i++){
-        const dt = addDays(end, -27 + i);
-        const ds2 = dateStr(dt);
-        const mk2 = window.globalGetAssign ? window.globalGetAssign(r, ds2) : getAssign(r, ds2);
-        if (mk2 === '☆' || mk2 === '◆') c++;
-      }
-      return c;
-    };
-    const avgByWorkTypeNF = {};
-    ['two','three'].forEach(wt => {
-      let sum = 0, n = 0;
-      for (const x of nfRows){
-        const wt0 = (State.employeesAttr[x.r]?.workType) || 'three';
-        if (wt0 === wt){ sum += last28ForNF(x.r); n++; }
-      }
-      avgByWorkTypeNF[wt] = n ? (sum / n) : 0;
-    });
-    nfRows.forEach(x => {
-      const wt0 = (State.employeesAttr[x.r]?.workType) || 'three';
-      x.last28nf = last28ForNF(x.r);
-      x.relNF = x.last28nf - (avgByWorkTypeNF[wt0] || 0);
-    });
-    nfRows.sort((a,b) => {
-      if (a.isNightOnly !== b.isNightOnly) return (a.isNightOnly ? 1 : -1);
-      if (a.isA !== b.isA) return (a.isA ? 1 : -1);
-      if (a.isLocked !== b.isLocked) return (a.isLocked ? 1 : -1);
-      const rdiff = b.relNF - a.relNF;
-      if (rdiff !== 0) return rdiff;
-      if (b.last28nf !== a.last28nf) return b.last28nf - a.last28nf;
-      return (Math.random() > 0.5) ? 1 : -1;
-    });
+    // NF帯の削除候補をシャッフル
+    nfRows.sort(() => Math.random() - 0.5);
+    // NF帯の超過分を削除
     while (nfRows.length > targetNF && countRemovableNF() > 0){
       let removed = false;
+      // 1. ロックされていない非Aの◆から削除（夜勤専従は除外）
       for (let i = nfRows.length - 1; i >= 0; i--){
         if (!nfRows[i].isLocked && !nfRows[i].isA && !nfRows[i].isNightOnly && nfRows[i].mark === '◆'){
           clearAssign(nfRows[i].r, ds);
@@ -179,6 +147,7 @@
         }
       }
       if (removed) continue;
+      // 2. ロックされていない非Aの☆から削除（翌日も削除／夜勤専従は除外）
       for (let i = nfRows.length - 1; i >= 0; i--){
         if (!nfRows[i].isLocked && !nfRows[i].hasNextLock && !nfRows[i].isA && !nfRows[i].isNightOnly && nfRows[i].mark === '☆'){
           clearAssign(nfRows[i].r, ds);
@@ -194,6 +163,7 @@
         }
       }
       if (removed) continue;
+      // 3. A職員も含めて削除（最低1名のAは残す／夜勤専従は除外）
       const aCount = nfRows.filter(x => x.isA).length;
       for (let i = nfRows.length - 1; i >= 0; i--){
         if (!nfRows[i].isLocked && !nfRows[i].isNightOnly && (!nfRows[i].isA || aCount > 1)){
@@ -211,26 +181,28 @@
       }
       if (!removed) break;
     }
-    // NS 帯調整
+    // NS帯（★＋●）の調整
     const nsRows = [];
     for (let r = 0; r < State.employeeCount; r++){
       const mk = getAssign(r, ds);
       if (mk === '★' || mk === '●'){
         nsRows.push({
-          r,
-          mark: mk,
+          r, mark: mk,
           isA: (State.employeesAttr[r]?.level) === 'A',
           isNightOnly: (State.employeesAttr[r]?.workType) === 'night',
           isLocked: isLocked(r, ds),
           hasPrevStar: (mk === '★' && dayIdx > 0)
-            ? getAssign(r, dateStr(State.windowDates[dayIdx - 1])) === '☆' : false
+            ? getAssign(r, dateStr(State.windowDates[dayIdx - 1])) === '☆'
+            : false
         });
       }
     }
     const countRemovableNS = () => nsRows.filter(x => !x.isNightOnly).length;
     nsRows.sort(() => Math.random() - 0.5);
+    // NS帯の超過分を削除
     while (nsRows.length > targetNS && countRemovableNS() > 0){
       let removed = false;
+      // 1. ロックされていない非Aの●から削除（夜勤専従は除外）
       for (let i = nsRows.length - 1; i >= 0; i--){
         if (!nsRows[i].isLocked && !nsRows[i].isA && !nsRows[i].isNightOnly && nsRows[i].mark === '●'){
           clearAssign(nsRows[i].r, ds);
@@ -240,6 +212,7 @@
         }
       }
       if (removed) continue;
+      // 2. ロックされていない非Aの★から削除（前日の☆も確認／夜勤専従は除外）
       for (let i = nsRows.length - 1; i >= 0; i--){
         if (!nsRows[i].isLocked && !nsRows[i].isA && !nsRows[i].isNightOnly && nsRows[i].mark === '★' && !nsRows[i].hasPrevStar){
           clearAssign(nsRows[i].r, ds);
@@ -249,9 +222,10 @@
         }
       }
       if (removed) continue;
-      const aCountNs = nsRows.filter(x => x.isA).length;
+      // 3. A職員も含めて削除（最低1名のAは残す／夜勤専従は除外）
+      const aCount = nsRows.filter(x => x.isA).length;
       for (let i = nsRows.length - 1; i >= 0; i--){
-        if (!nsRows[i].isLocked && !nsRows[i].isNightOnly && (!nsRows[i].isA || aCountNs > 1)){
+        if (!nsRows[i].isLocked && !nsRows[i].isNightOnly && (!nsRows[i].isA || aCount > 1)){
           clearAssign(nsRows[i].r, ds);
           nsRows.splice(i, 1);
           removed = true;
@@ -260,15 +234,40 @@
       }
       if (!removed) break;
     }
-    if (typeof updateFooterCounts === 'function') updateFooterCounts();
   }
+  // ===== 削除候補構築 =====
+  function buildRowsForMark(mark){
+    const State = A.State;
+    const dateStr = A.dateStr;
+    const getAssign = A.getAssign;
+    const countDayShift4w = A.countDayShift4w;
+    const ds = dateStr(State.windowDates[0]);
+    const rows = [];
+    for (let r = 0; r < State.employeeCount; r++){
+      const mk = getAssign(r, ds);
+      if (mk !== mark) continue;
+      const emp = State.employeesAttr[r] || {};
+      const level = emp.level || 'B';
+      const day4w = countDayShift4w(r);
+      rows.push({ r, isA: level === 'A', day4w });
+    }
+    rows.sort((a, b) => {
+      if (a.isA !== b.isA) return a.isA ? 1 : -1;
+      if (a.day4w !== b.day4w) return b.day4w - a.day4w;
+      return a.r - b.r;
+    });
+    return rows;
+  }
+
   /**
-   * 日勤人数および早出・遅出人数が固定値に達しているか確認し、超過している場合は削減します。
+   * 日勤人数および早出・遅出人数が固定値に達しているか確認し、
+   * 超過している場合は削減、不足している場合は〇から振り分けます。
    */
   function enforceDayShiftFixedCounts(dayIdx){
     const State = A.State;
     const dateStr = A.dateStr;
     const getAssign = A.getAssign;
+    const setAssign = A.setAssign;
     const clearAssign = A.clearAssign;
     const isLocked = A.isLocked;
     const dt = State.windowDates[dayIdx];
@@ -304,7 +303,8 @@
       reduceDayShiftTo(dayIdx, targetDay);
       totalDay = A.countDayStats(dayIdx).day;
     }
-    // 早出の削減
+
+    // ===== Step1: 早・遅が多すぎる場合は〇に落として調整 =====
     if (earlyTarget !== null && earlyCount > earlyTarget){
       const rows = [];
       for (let r = 0; r < State.employeeCount; r++){
@@ -325,11 +325,10 @@
       for (const row of rows){
         if (earlyCount <= earlyTarget) break;
         if (row.locked) continue;
-        clearAssign(row.r, ds);
+        setAssign(row.r, ds, '〇');
         earlyCount--;
       }
     }
-    // 遅出の削減
     if (lateTarget !== null && lateCount > lateTarget){
       const rows = [];
       for (let r = 0; r < State.employeeCount; r++){
@@ -350,43 +349,69 @@
       for (const row of rows){
         if (lateCount <= lateTarget) break;
         if (row.locked) continue;
-        clearAssign(row.r, ds);
+        setAssign(row.r, ds, '〇');
         lateCount--;
       }
     }
-  }
-  // ===== 削除候補構築 =====
-  function buildRowsForMark(mark) {
-    const State = A.State;
-    const dateStr = A.dateStr;
-    const getAssign = A.getAssign;
-    const countDayShift4w = A.countDayShift4w;
-    
-    const ds = dateStr(State.windowDates[0]);
-    const rows = [];
-    for (let r = 0; r < State.employeeCount; r++) {
-      const mk = getAssign(r, ds);
-      if (mk !== mark) continue;
-      const emp = State.employeesAttr[r] || {};
-      const level = emp.level || 'B';
-      const day4w = countDayShift4w(r);
-      rows.push({
-        r,
-        isA: level === 'A',
-        day4w
-      });
+
+    // ===== Step2: 早・遅が不足している場合は〇から振り分ける =====
+    if (earlyTarget !== null && earlyCount < earlyTarget){
+      let guard = State.employeeCount * 2;
+      while (earlyCount < earlyTarget && guard-- > 0){
+        let best = null;
+        for (let r = 0; r < State.employeeCount; r++){
+          const mk = getAssign(r, ds);
+          if (mk !== '〇') continue;
+          if (!A.canAssignEarlyShiftForNormalize(r, dayIdx)) continue;
+          const emp = State.employeesAttr[r] || {};
+          const level = emp.level || 'B';
+          const day4w = A.countDayShift4w(r);
+          const cand = { r, isA: level === 'A', day4w };
+          if (!best){
+            best = cand;
+          } else if (best.isA !== cand.isA){
+            // B を優先して早にする
+            if (best.isA && !cand.isA) best = cand;
+          } else if (cand.day4w < best.day4w){
+            // 日勤が少ない人を優先
+            best = cand;
+          }
+        }
+        if (!best) break;
+        setAssign(best.r, ds, '早');
+        earlyCount++;
+      }
     }
-    rows.sort((a, b) => {
-      if (a.isA !== b.isA) return a.isA ? 1 : -1;
-      if (a.day4w !== b.day4w) return b.day4w - a.day4w;
-      return a.r - b.r;
-    });
-    return rows;
+
+    if (lateTarget !== null && lateCount < lateTarget){
+      let guard = State.employeeCount * 2;
+      while (lateCount < lateTarget && guard-- > 0){
+        let best = null;
+        for (let r = 0; r < State.employeeCount; r++){
+          const mk = getAssign(r, ds);
+          if (mk !== '〇') continue;
+          if (!A.canAssignLateShiftForNormalize(r, dayIdx)) continue;
+          const emp = State.employeesAttr[r] || {};
+          const level = emp.level || 'B';
+          const day4w = A.countDayShift4w(r);
+          const cand = { r, isA: level === 'A', day4w };
+          if (!best){
+            best = cand;
+          } else if (best.isA !== cand.isA){
+            if (best.isA && !cand.isA) best = cand;
+          } else if (cand.day4w < best.day4w){
+            best = cand;
+          }
+        }
+        if (!best) break;
+        setAssign(best.r, ds, '遅');
+        lateCount++;
+      }
+    }
   }
 
   // === 公開API ===
   A.reduceDayShiftTo = reduceDayShiftTo;
   A.enforceExactCount = enforceExactCount;
   A.enforceDayShiftFixedCounts = enforceDayShiftFixedCounts;
-  A.buildRowsForMark = buildRowsForMark;
 })();

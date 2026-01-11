@@ -1,7 +1,7 @@
 // sw.js - Service Worker
 // 修正版：app.js分割に対応、キャッシュ戦略最適化
 
-const VERSION = 'v2026-01.11.3';
+const VERSION = 'v2026-01.11.4';
 
 // ここは必須：未定義だとSWが起動直後に落ちます
 const ENTRY_HTML = './index.html';
