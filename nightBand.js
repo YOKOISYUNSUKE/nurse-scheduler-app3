@@ -223,11 +223,46 @@ if (mark === '◆' || mark === '●'){
     return score;
   }
 
+  // 三部制（◆/●）の「平均との差」ペナルティ（偏りを縮める）
+  // - 対象：mark が ◆/● かつ workType==='three' のみ
+  // - 方式：偏差^2 に比例して減点（大きく偏るほど強く不利）
+  function threeShiftDeviationPenalty(ctx, mark, r, startIdx, endIdx){
+    if (mark !== '◆' && mark !== '●') return 0;
+
+    const attrR = ctx.getEmpAttr(r) || { workType:'three' };
+    if ((attrR.workType || 'three') !== 'three') return 0;
+
+    // 三部制メンバーの平均との差（4週間ウィンドウ内）
+    let sum = 0, n = 0;
+    for (let i = 0; i < ctx.employeeCount; i++){
+      const wt = (ctx.getEmpAttr(i)?.workType) || 'three';
+      if (wt !== 'three') continue;
+      const c = (mark === '◆')
+        ? countNfForEmp(ctx, i, startIdx, endIdx)
+        : countNsForEmp(ctx, i, startIdx, endIdx);
+      sum += c;
+      n++;
+    }
+    if (n <= 1) return 0;
+
+    const avg = sum / n;
+    const mine = (mark === '◆')
+      ? countNfForEmp(ctx, r, startIdx, endIdx)
+      : countNsForEmp(ctx, r, startIdx, endIdx);
+
+    const dev = mine - avg;
+
+    // 重み：1回の偏りで「数点〜十数点」、2回以上で明確に効く程度（baseの20刻みと整合）
+    const FAIR3_W = 10;
+    return - (dev * dev) * FAIR3_W;
+  }
+
   // 乱数（線形合同法）とシード設定
   let _seed = 1;
 
   let _randAmp = 0.49;                   // ← 既定の振れ幅（従来値互換）
   function setSeed(v){ _seed = (v>>>0) || 1; }
+
   function setRandAmp(a){                // ← 外部から振れ幅を変更
     const x = Number(a);
     _randAmp = Number.isFinite(x) && x >= 0 ? x : _randAmp;
@@ -353,22 +388,27 @@ out = out
       }
       return c;
     };
-    // ★修正：土日祈日公平化の重みを強化（Aボーナスと同程度）
+    // 土日祈日公平化の重みを強化（Aボーナスと同程度）
     const FAIR_W = 5.0;
     const fair = isWH(dayIdx) ? (- whCount28(r) * FAIR_W) : 0;
+
+    // 三部制（◆/●）の「平均との差」ペナルティ
+    const fair3 = threeShiftDeviationPenalty(ctx, mark, r, startIdx, endIdx);
 
     // 二部制／三部制の夜勤間隔をなるべく均一化するスコア（夜勤専従は影響なし）
     const spacing = nightSpacingScore(ctx, dayIdx, mark, r);
 
     const pen  = acNightPenalty(ctx, dayIdx, mark, r);
     const jitter = (_rand() - 0.5) * _randAmp;
-    // ★追加：A属性にボーナスを付与（各帯に必須のため優先度を上げる）
+
+    // A属性にボーナスを付与（各帯に必須のため優先度を上げる）
     const attr = ctx.getEmpAttr(r) || { level:'B', workType:'three' };
     const aBonus = (attr.level === 'A') ? 50 : 0;
-    return { r, score: base + riskBoost + fair + spacing + pen + aBonus + jitter };
+    return { r, score: base + riskBoost + fair + fair3 + spacing + pen + aBonus + jitter };
   })
 
   .filter(x => x.score !== -Infinity);
+
 
   // スコアに応じた「重み付きランダム順」（ソフトマックス風）に並べ替え
   out = _softmaxOrderByScore(out);
@@ -378,8 +418,6 @@ out = out
   // 勤務形態の優先度は維持（夜勤専従をグループ先頭のまま）
   out = _orderByWorkType(ctx, out, mark);
 
-  // ★削除：公平ローテは土日祈日公平化と競合するため削除
-  // （スコアソートで公平性が確保される）
 
   return out;
 }
